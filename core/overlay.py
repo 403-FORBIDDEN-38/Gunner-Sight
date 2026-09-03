@@ -259,6 +259,7 @@ class OverlayRenderer:
         # 连接状态变化信号（细粒度：倍率/弹种变化才更新准星，避免全量刷新）
         self.state.magnification_changed.connect(self._on_state_changed)
         self.state.ammo_type_changed.connect(self._on_state_changed)
+        self.state.overlay_settings_changed.connect(self._on_state_changed)
         self.state.overlay_toggled.connect(self._on_overlay_toggled)
 
         # 初始化
@@ -277,10 +278,9 @@ class OverlayRenderer:
 
     def _update_effective_overlay(self):
         """根据当前载具/弹种/倍率更新缩放偏移（二选一判断在 config 层）"""
-        state = self.state.get_state()
-        vehicle = state.get("vehicle")
-        ammo = state.get("ammo_type")
-        mag_idx = state.get("magnification_index", 0)
+        vehicle = self.state.current_vehicle
+        ammo = self.state.current_ammo_type
+        mag_idx = self.state.current_magnification_index
         if not vehicle or not ammo:
             return
         effective = self.config.get_effective_overlay(vehicle, ammo, mag_idx)

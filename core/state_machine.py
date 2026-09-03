@@ -15,6 +15,7 @@ class StateMachine(QObject):
     # 状态变化信号（细粒度：仅发射实际变化的信号，避免冗余全量刷新）
     ammo_type_changed = pyqtSignal(str)  # 弹种变化 (新弹种名)
     magnification_changed = pyqtSignal(int)  # 倍率变化 (新倍率索引)
+    overlay_settings_changed = pyqtSignal()  # Overlay缩放偏移配置变化（不改变状态，仅触发刷新）
     overlay_toggled = pyqtSignal(bool)  # Overlay显示状态变化
 
     def __init__(self, config_manager, parent=None):
@@ -104,7 +105,7 @@ class StateMachine(QObject):
 
     def refresh_overlay(self):
         """强制刷新 Overlay（缩放偏移配置变化时调用，不改变状态）"""
-        self.magnification_changed.emit(self.current_magnification_index)
+        self.overlay_settings_changed.emit()
 
     def toggle_overlay(self):
         """切换Overlay显示/隐藏"""

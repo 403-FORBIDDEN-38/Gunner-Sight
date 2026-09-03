@@ -1,291 +1,126 @@
-# 当前轮任务：载具级缩放偏移功能
+# 当前轮审查意见：载具级缩放偏移功能修复
 
-## 一、需求背景
+## 功能完成状态
 
-用户有一批规格不一的炮镜图片，每个载具需要的缩放比与偏移量各不相同。当前仅有全局一套缩放偏移，无法快捷切换。
+载具级缩放偏移功能三步已全部完成（配置层+逻辑层、UI层、测试），32个测试全部通过。但存在1个崩溃级bug和若干UI/流程问题，需修复后才能验收。
 
-**核心需求**：每个载具有独立的一套缩放偏移配置；每个倍率可独立选择使用"全局"还是"载具"的缩放偏移；二选一，不叠加；可切回，保存于配置。
+## 审查发现
 
-## 二、UI 布局调整
+### F1（发布必修）：overlay.py 调用不存在的方法，切换倍率崩溃
 
-### 当前右列结构
+**位置**：`core/overlay.py` 第280行
 
+**问题**：`_update_effective_overlay` 方法中调用 `self.state.get_state()`，但 StateMachine 没有 `get_state()` 方法。StateMachine 提供的是三个 property：`current_vehicle`、`current_ammo_type`、`current_magnification_index`。
+
+**崩溃信息**：
 ```
-右列 (right_panel)
-├── 弹种列表 (ammo_group, stretch=1)
-│   ├── 列表
-│   └── [添加] [重命名] [删除]
-└── 倍率列表 (mag_group, stretch=2)
-    ├── 列表
-    ├── [添加] [删除]
-    ├── 倍率名称: [输入框]
-    ├── 准星图片: [显示] [选择按钮]
-    └── (无载具缩放偏移设置)
+AttributeError: 'StateMachine' object has no attribute 'get_state'
 ```
 
-### 调整后右列结构
+**触发条件**：任何触发 `_on_state_changed` 的操作（切换倍率、切换弹种、切换载具、refresh_overlay）都会崩溃。
 
-```
-右列 (right_panel)
-├── 弹种列表 (ammo_group, stretch=1)
-│   ├── 列表
-│   └── [添加] [重命名] [删除]          ← 不变
-├── 倍率列表 (mag_group, stretch=2)
-│   ├── 列表（每项显示：名称 — 准星 — [全局/载具]）
-│   ├── [添加] [重命名] [删除]          ← 加重命名按钮，去名称输入框
-│   ├── 准星图片: [显示] [选择按钮]      ← 保留
-│   └── 缩放偏移模式: (●全局) (载具)     ← 新增：当前倍率的开关
-└── 载具缩放偏移 (vehicle_overlay_group, stretch=1)  ← 新增
-    ├── 标题：载具缩放偏移 — [当前载具名]
-    ├── 缩放: [滑块 1%-1000%]  数值: [100]%
-    ├── X偏移: [输入框]  Y偏移: [输入框]
-    ├── [重置为默认]
-    └── 说明文字：倍率选"载具"时使用此配置
-```
+**修复要求**：
+- 删除 `state = self.state.get_state()` 及后续的 `state.get(...)` 调用
+- 改用 `self.state.current_vehicle`、`self.state.current_ammo_type`、`self.state.current_magnification_index`
+- 修复后验证：切换倍率不崩溃，缩放偏移正确切换
 
-### 布局决策
+### U1（应做）：缩放偏移模式开关从单选按钮改为点击切换
 
-- **载具缩放偏移放在倍率列表下面**：操作流连贯（设完立刻切倍率开关）、语义关联强（唯一消费者是倍率开关）、右列本来就是"当前载具详情"
-- **倍率重命名改成弹窗**：和弹种列表保持一致（添加/重命名/删除三按钮），去掉名称输入框，腾出空间给缩放偏移模式开关
+**位置**：`gui/tabs/vehicle_config_tab.py` 第118-129行
 
-## 三、配置数据结构
+**问题**：当前用 QRadioButton + QButtonGroup 实现全局/载具切换。用户明确不需要第三种配置，单选按钮组语义过重（暗示有多个选项），且占用空间。
 
-### 载具配置新增 overlay 字段
+**修复要求**：
+- 去掉 `mode_global_radio`、`mode_vehicle_radio`、`mode_group`
+- 改用一个 QPushButton，文字动态显示当前模式：
+  - 当前全局时显示："缩放偏移：全局（点击切换为载具）"
+  - 当前载具时显示："缩放偏移：载具（点击切换为全局）"
+- 点击按钮在全局/载具间切换，切换后更新配置、列表项文本、实时预览
+- 按钮可设置不同样式区分两种模式（如全局时灰色，载具时蓝色），但非强制
 
-```json
-{
-  "name": "M1A2",
-  "tags": [],
-  "ammo_types": {},
-  "overlay": {
-    "scale": 100.0,
-    "offset_x": 0,
-    "offset_y": 0
-  }
-}
-```
+### U2（应做）：去掉"重置为默认"按钮
 
-### 倍率配置新增 use_vehicle_overlay 字段
+**位置**：`gui/tabs/vehicle_config_tab.py` 第159行、第203行、第577-583行
 
-```json
-{
-  "label": "12X",
-  "crosshair": "M1 12X.png",
-  "use_vehicle_overlay": false
-}
-```
+**问题**：用户认为载具偏移缩放是低频改动，重置为默认无必要，去掉可简化UI。
 
-### 默认值与兼容性
+**修复要求**：
+- 去掉 `vo_reset_btn` 控件及其布局
+- 去掉 `_on_reset_vehicle_overlay` 方法
+- 去掉 `vo_reset_btn.clicked.connect` 信号连接
+- config_manager 的 `reset_vehicle_overlay` 方法保留（API完整性，测试仍覆盖），只是UI不再调用
 
-- 旧配置无这两个字段时，`_merge_config` 递归合并自动补全：
-  - 载具 overlay 默认 `{scale: 100.0, offset_x: 0, offset_y: 0}`
-  - 倍率 use_vehicle_overlay 默认 `false`（用全局）
-- **不需要写数据迁移逻辑**，复用现有 `_merge_config` 机制
-- 老用户升级后所有倍率默认全局，行为和当前完全一致，无感升级
+### O1（小问题）：_update_overlay_preview 有冗余变量
 
-## 四、config_manager 新增方法
+**位置**：`gui/tabs/vehicle_config_tab.py` 第597行
 
-### 载具缩放偏移读写（3个方法）
+**问题**：`effective = self.config.get_effective_overlay(vehicle, ammo, idx)` 计算了但从未使用。下一行直接调用 `self.state.refresh_overlay()`，refresh_overlay 会触发 `_on_state_changed`，在那里重新计算 effective_overlay。
 
-| 方法 | 作用 |
-|---|---|
-| `get_vehicle_overlay(vehicle_name) -> dict` | 返回载具 overlay 配置 `{scale, offset_x, offset_y}`，不存在时返回默认值 |
-| `set_vehicle_overlay(vehicle_name, scale, offset_x, offset_y)` | 设置载具 overlay 配置，防抖保存 |
-| `reset_vehicle_overlay(vehicle_name)` | 重置为默认值 `{scale: 100.0, offset_x: 0, offset_y: 0}` |
+**修复要求**：删除第597行的冗余变量计算。
 
-### 倍率开关读写（2个方法）
+### O2（建议，可选）：refresh_overlay 信号语义不清
 
-| 方法 | 作用 |
-|---|---|
-| `get_magnification_overlay_mode(vehicle, ammo, index) -> bool` | 返回该倍率 use_vehicle_overlay 值（true=载具，false=全局） |
-| `set_magnification_overlay_mode(vehicle, ammo, index, use_vehicle: bool)` | 设置该倍率开关，防抖保存 |
+**位置**：`core/state_machine.py` 第105-107行
 
-### 核心方法：effective_overlay（1个方法，关键）
+**问题**：`refresh_overlay()` 通过发射 `magnification_changed` 信号来触发 overlay 刷新，但倍率实际上没有变化。语义上不够清晰。
 
-```
-get_effective_overlay(vehicle, ammo, index) -> dict
-  → 读取该倍率的 use_vehicle_overlay
-  → 如果 true：返回 get_vehicle_overlay(vehicle)
-  → 如果 false：返回全局缩放偏移 {scale: get_global_scale(), offset_x: get_global_offset_x(), offset_y: get_global_offset_y()}
-```
+**修复要求（可选）**：
+- 新增一个专用信号 `overlay_settings_changed = pyqtSignal()`
+- `refresh_overlay()` 改为发射 `overlay_settings_changed`
+- overlay.py 中连接 `overlay_settings_changed` 到 `_on_state_changed`（或单独的处理方法）
+- 此为代码质量优化，不影响功能，可做可不做。如果做，确保 `magnification_changed` 的原有连接不受影响
 
-**硬性要求**："二选一"判断逻辑只在这个方法中做一次。overlay 渲染、UI 预览都调用此方法，不允许在其他地方重复判断。这是代码质量的关键：单一职责，判断逻辑集中。
+## 流程要求
 
-## 五、overlay 渲染逻辑修改
+### P1：执行结果必须写入 docs/status.md
 
-### OverlayRenderer._on_state_changed 修改
+每次完成功能或修复后，执行 Agent 必须更新 `docs/status.md`，记录：
+- 当前版本
+- 功能完成状态
+- 测试结果
+- 待修复问题
 
-当前 `_on_state_changed`（倍率/弹种变化时触发）只更新准星图片。
+不允许只在对话里汇报而不更新项目文档。
 
-改成做两件事：
-1. 更新准星图片（已有，不变）
-2. **更新缩放偏移**（新增）：调用 `config.get_effective_overlay(当前载具, 当前弹种, 当前倍率)`，把返回的 scale/offset_x/offset_y 设给 overlay 窗口
+## 验收标准
 
-### 载具切换
-
-当前 `set_vehicle` 发射 `ammo_type_changed` 和 `magnification_changed` 信号，会触发 `_on_state_changed`，所以载具切换时缩放偏移自动更新——**不需要额外改信号连接**。
-
-### paintEvent 完全不用改
-
-缩放计算逻辑不变，只是输入数值来源从"永远读全局"变成"读 effective_overlay 返回值"。
-
-### 缓存不用改
-
-- `_pixmap_cache`：准星图片缓存，不受影响
-- `_scaled_cache`：key 包含缩放后尺寸，缩放变了尺寸自然变了，缓存 key 自然不同
-
-## 六、UI 实现细节
-
-### 6.1 倍率列表项显示格式
-
-当前：`倍率名称 — 准星图片名`（或"未绑定"）
-
-调整后：`倍率名称 — 准星图片名 — [全局]` 或 `倍率名称 — 准星图片名 — [载具]`
-
-### 6.2 倍率按钮行
-
-当前：`[添加] [删除]`
-
-调整后：`[添加] [重命名] [删除]`
-
-- 重命名用 QInputDialog 弹窗，和弹种重命名完全一致
-- 去掉 `mag_label_edit` 输入框及相关逻辑（`_on_mag_label_changed`、mag_detail_layout 中的名称行）
-
-### 6.3 倍率详情区域
-
-当前：
-```
-倍率名称: [输入框]
-准星图片: [显示标签]
-          [选择准星图片按钮]
-```
-
-调整后：
-```
-准星图片: [显示标签]
-          [选择准星图片按钮]
-缩放偏移模式: (● 全局)  (  载具  )
-```
-
-- 去掉倍率名称输入框
-- 准星图片绑定保留
-- 新增缩放偏移模式单选按钮（QRadioButton 一组两个），切换时实时更新 overlay 预览
-
-### 6.4 载具缩放偏移区域（新增）
-
-放在右列最下面，独立 QGroupBox：
-
-```
-┌─ 载具缩放偏移 — M1A2 ──────────────┐
-│ 缩放: [───●──────────]  100 %       │
-│ X偏移: [  0  ]   Y偏移: [  0  ]     │
-│ [重置为默认]                           │
-│ 倍率选"载具"时使用此配置               │
-└──────────────────────────────────────┘
-```
-
-控件：
-- **标题**：动态显示当前选中载具名，切换载具时更新
-- **缩放滑块**：范围 1%-1000%，旁边实时显示数值，拖动时实时更新 overlay 预览（当前倍率开关选"载具"时）
-- **X偏移 / Y偏移**：数值输入框，范围 -500 到 +500 像素，修改时实时更新预览
-- **重置按钮**：点击后恢复默认值（100% / 0 / 0）
-- **说明文字**：灰色小字
-
-### 6.5 实时预览联动
-
-以下操作发生时，如果当前倍率开关选了"载具"，overlay 窗口实时更新：
-- 修改载具缩放偏移的滑块/输入框
-- 切换载具
-- 切换倍率开关（全局↔载具）
-
-实现：这些操作的信号都连接到一个 `_update_overlay_preview` 方法，调用 `config.get_effective_overlay(当前载具, 当前弹种, 当前倍率)`，设给 overlay。
-
-## 七、实现顺序
-
-分三步，每步可独立验证，完成一步汇报一步：
-
-### 第一步：配置层 + 逻辑层
-
-1. config_manager 加 6 个方法（载具overlay读写3个 + 倍率开关2个 + effective_overlay 1个）
-2. OverlayRenderer._on_state_changed 加缩放偏移更新
-3. 验证：手动改 config.json 里的载具 overlay 和倍率 use_vehicle_overlay，启动程序切换倍率，确认缩放偏移正确切换
-4. 跑现有测试（15例），确认无回归
-5. git commit
-
-### 第二步：UI 层
-
-1. 倍率按钮行加重命名，去掉名称输入框
-2. 倍率详情加缩放偏移模式开关
-3. 右列加载体缩放偏移区域
-4. 倍率列表项显示加 [全局/载具] 标识
-5. 实时预览联动
-6. 验证：UI 操作正常，切换载具/弹种/倍率时所有控件正确刷新
-7. git commit
-
-### 第三步：测试 + 边界验证
-
-1. 给 config_manager 新方法加测试（载具overlay读写、倍率开关、effective_overlay 二选一逻辑）
-2. 边界验证：载具overlay不存在时返回默认、倍率索引越界时不崩溃、切换载具时UI正确刷新
-3. 跑全部测试，确认通过
-4. git commit
-
-## 八、性能评估
-
-**零额外性能开销**：
-
-| 操作 | 开销 | 说明 |
-|---|---|---|
-| 倍率切换时多读配置字段 | <0.1ms | 字典读取 |
-| paintEvent 缩放计算 | 不变 | 逻辑相同，输入来源不同 |
-| 准星图片缓存 | 不变 | 不受影响 |
-| 缩放后图片缓存 | 不变 | key 含尺寸，缩放变了自然 miss |
-| 配置保存 | 不变 | 走现有防抖机制 |
-| UI 控件刷新 | 低频 | 只在用户操作时刷新 |
-
-## 九、验收标准
+修复完成后，按以下清单验收：
 
 ### 功能验收
-- [ ] 每个载具有独立的缩放偏移配置，切换载具时配置正确切换
-- [ ] 每个倍率有独立的全局/载具开关，默认全局
+- [ ] 切换倍率不崩溃（F1修复验证）
+- [ ] 切换弹种不崩溃
+- [ ] 切换载具不崩溃
 - [ ] 倍率选"全局"时，overlay 使用全局缩放偏移
 - [ ] 倍率选"载具"时，overlay 使用当前载具的缩放偏移
 - [ ] 二选一，不叠加
 - [ ] 载具缩放偏移修改时实时预览（当前倍率选载具时）
-- [ ] 倍率开关切换时实时预览
+- [ ] 缩放偏移模式按钮点击切换全局/载具，文字动态更新
+- [ ] "重置为默认"按钮已移除
 
-### UI 验收
-- [ ] 倍率按钮行有"添加/重命名/删除"三个按钮，和弹种列表一致
-- [ ] 倍率名称输入框已移除，重命名用弹窗
-- [ ] 倍率列表项显示 [全局] 或 [载具] 标识
-- [ ] 右列最下方有载具缩放偏移区域，含缩放滑块、X/Y偏移、重置按钮
-- [ ] 载具缩放偏移区域标题显示当前载具名
-- [ ] 说明文字清晰
-
-### 兼容性验收
-- [ ] 旧配置升级后行为和当前一致
-- [ ] 所有倍率默认全局，老用户无感升级
-- [ ] 现有15个测试全部通过
-- [ ] 关闭流程无异常
+### 测试验收
+- [ ] 现有32个测试全部通过（15原有 + 17新增）
+- [ ] 如新增了 overlay_settings_changed 信号，确保相关测试通过
 
 ### 代码质量验收
-- [ ] "二选一"判断逻辑只在 get_effective_overlay 一个方法中，无重复判断
-- [ ] 载具overlay默认值有单一工厂方法，不散落多处
+- [ ] overlay.py 不再调用 get_state()
+- [ ] _update_overlay_preview 无冗余变量
 - [ ] 无审查编号写入代码注释
-- [ ] 高频路径（倍率切换、paintEvent）无全量刷新，无新增IO
+- [ ] docs/status.md 已更新
 
-## 十、交付格式
+## 交付格式
 
-每完成一步，按以下格式汇报：
+修复完成后按以下格式汇报：
 
 ```
-【第X步】完成状态
-- 做了什么：（一句话）
-- 验收结果：PASS / FAIL / UNKNOWN
-- 证据：（git commit hash / 命令输出关键行 / 文件路径）
+【载具缩放偏移修复】完成状态
+- 修复了哪些问题：（F1/U1/U2/O1/O2逐项说明）
+- 验收结果：PASS / FAIL
+- 证据：（git commit hash / pytest输出 / 崩溃验证截图）
+- docs/status.md 是否已更新：是/否
 - 遇到的问题：（无则写"无"）
 ```
 
 全部完成后输出最终汇总：
-- git log --oneline 全部提交列表
-- pytest tests/ -v 输出最后5行
+- git log --oneline 修复相关提交
+- pytest tests/ -v 最后5行
 - 验收清单逐项勾选结果
