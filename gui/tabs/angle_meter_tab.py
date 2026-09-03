@@ -110,15 +110,9 @@ class AngleMeterTab(QWidget):
         self._up_pressed_time = 0.0
         self._down_pressed_time = 0.0
         self._global_calibrating = False
+        self._data_loaded = False
         self._build_ui()
-        self._load_hotkeys()
-        self._refresh_profile_list()
-        # 根据配置初始化
-        if self.config.is_angle_meter_enabled():
-            self._init_engine()
-            self._set_controls_enabled(True)
-        else:
-            self._set_controls_enabled(False)
+        self._load_hotkeys()  # 热键注册必须在__init__（启动时可用）
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -889,11 +883,18 @@ class AngleMeterTab(QWidget):
 
     # === 生命周期 ===
     def showEvent(self, event):
+        """P1-1: 首次显示时加载数据"""
         super().showEvent(event)
-        if self.config.is_angle_meter_enabled() and self.tracker is None:
-            self._init_engine()
-        elif self.config.is_angle_meter_enabled():
+        if not self._data_loaded:
             self._refresh_profile_list()
+            if self.config.is_angle_meter_enabled():
+                self._init_engine()
+                self._set_controls_enabled(True)
+            else:
+                self._set_controls_enabled(False)
+            self._data_loaded = True
+        elif self.config.is_angle_meter_enabled() and self.tracker is None:
+            self._init_engine()
 
     def shutdown(self):
         self._shutdown_engine()
