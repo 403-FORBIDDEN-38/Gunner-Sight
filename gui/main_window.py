@@ -79,8 +79,6 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(f"""
             QWidget {{ background-color: {bg}; color: {text}; font-size: 14px; }}
             QMainWindow {{ background-color: {bg}; }}
-            QPushButton, QCheckBox, QComboBox, QSlider {{ focus: none; }}
-            QSpinBox, QDoubleSpinBox {{ focus: clickfocus; }}
             QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QAbstractItemView {{
                 background-color: {ctrl}; color: {text};
                 border: 1px solid {border}; border-radius: 2px; padding: 4px 6px;
@@ -374,6 +372,23 @@ class MainWindow(QMainWindow):
         """根据当前页面索引显示/隐藏上下翻页按钮"""
         self.prev_page_btn.setVisible(index > 0)
         self.next_page_btn.setVisible(index < len(self._nav_pages) - 1)
+
+    def _disable_control_focus(self, widget=None):
+        """设置控件焦点策略：按钮/复选框/下拉框/滑块不抢焦点，SpinBox可点击输入"""
+        if widget is None:
+            widget = self
+        for child in widget.findChildren(QPushButton):
+            child.setFocusPolicy(Qt.NoFocus)
+        for child in widget.findChildren(QCheckBox):
+            child.setFocusPolicy(Qt.NoFocus)
+        for child in widget.findChildren(QComboBox):
+            child.setFocusPolicy(Qt.NoFocus)
+        for child in widget.findChildren(QSlider):
+            child.setFocusPolicy(Qt.NoFocus)
+        for child in widget.findChildren(QSpinBox):
+            child.setFocusPolicy(Qt.ClickFocus)
+        for child in widget.findChildren(QDoubleSpinBox):
+            child.setFocusPolicy(Qt.ClickFocus)
 
     # ==================== 信号连接 ====================
 
