@@ -145,3 +145,10 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - P0-2: Overlay延迟创建 - OverlayRenderer.__init__不创建窗口(self.overlay=None)，_ensure_overlay()懒加载创建并同步状态；所有操作overlay的方法前调用_ensure_overlay或检查None；main.py窗口显示后100ms异步预创建
 - 预期效果: MainWindow创建从984ms降到约150-200ms，Overlay初始化从271ms降到约10ms，启动总耗时从1473ms降到约400-500ms
 - 版本: V0.0140300064
+
+### 启动性能修复（已完成）
+- 删除main_window.py启动时主动创建RangefinderTab的代码(self._ensure_tab(3).refresh())
+- 改为main.py window.show()后QTimer.singleShot(0, lambda: window._ensure_tab(3).refresh())异步创建
+- 任务二检查: _connect_signals无意外创建tab，Overlay预创建(QTimer.singleShot(100))已存在
+- 预期: MainWindow创建919ms->200-300ms，启动总耗时1374ms->400-500ms
+- 版本: V0.0140300065

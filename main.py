@@ -232,6 +232,9 @@ def _main():
     # P0-2: Overlay窗口延迟预创建（窗口显示后100ms异步创建，不阻塞启动）
     QTimer.singleShot(100, overlay._ensure_overlay)
 
+    # 启动性能修复：RangefinderTab窗口显示后异步创建（不阻塞启动）
+    QTimer.singleShot(0, lambda: window._ensure_tab(3).refresh())
+
     # 窗口显示后再初始化热键（keyboard 库导入+注册约 500ms，不阻塞窗口出现）
     def _init_hotkey_timed():
         _th = time.perf_counter()
