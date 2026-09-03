@@ -1,7 +1,7 @@
 # GunnerSight 项目状态
 
 ## 版本
-V0.0140300056（角度仪功能修复与UI优化完成）
+V0.0140300057（角度仪第二轮修复+空房子原则实施完成）
 
 ## 测试
 - tests/test_config.py: 15 passed
@@ -16,6 +16,7 @@ V0.0140300056（角度仪功能修复与UI优化完成）
 - 第四轮状态一致性修复 U5/U5.1/U5.2: 完成
 - 角度仪热键微调+校准体系重构: 完成
 - 角度仪功能修复与UI优化(B1-B3/F1/U1-U4): 完成
+- 角度仪第二轮修复+空房子原则实施(P1-P3/B4/U5): 完成
 
 ## 已完成功能详情
 
@@ -33,7 +34,7 @@ V0.0140300056（角度仪功能修复与UI优化完成）
 - 重校全局后自动重新生成所有载具快校
 - 兼容性迁移——旧 calibration 标记为 full
 
-### 角度仪功能修复与UI优化（当前轮）
+### 角度仪功能修复与UI优化（已完成）
 - B1: reset_to_zero() 修复 angle_to_delta(0.0) 和 emit(0.0) 未调用导致的崩溃
 - B2: _ensure_angle_meter_defaults 去掉空 profiles 自动恢复；delete_angle_meter_profile 允许删除最后一个；get_current_angle_meter_profile 默认值改为空字符串
 - B3: 微调热键加状态检查（只在 ACTIVE/PAUSED 状态注入），避免 IDLE 状态累积无效增量
@@ -42,6 +43,16 @@ V0.0140300056（角度仪功能修复与UI优化完成）
 - U2: 开始/取消校准合并为 cal_toggle_btn，文字根据校准状态切换
 - U3: 热键绑定区域改为两列网格布局（左列：开始/停止、暂离、校准确认；右列：上移、下移）
 - U4: 去掉"清除当前方案"按钮及 _on_cal_clear 方法
+
+### 角度仪第二轮修复+空房子理念落地（已完成）
+- 核心理念：GS 本体是空房子，删掉外部 cfg 后代码里不应有任何硬编码用户数据
+- P1: 删除 AngleCalibration.FACTORY 出厂校准曲线，保留 GLOBAL_TARGETS；AngleCalibration 要求必须传入 points；未做全局校准时提示"请先做全局校准"，快速校准不可用
+- P2: _default_angle_meter_segment profiles 为空字典；_ensure 不自动创建默认配置；get_angle_meter_profile_for_vehicle 找不到返回空字符串；UI 允许删除所有配置
+- P3: 默认热键全部为空字符串（用户自行绑定）
+- B4: 鼠标硬件增量修复 — RawInputReader 加 WA_NativeWindow 确保原生窗口接收 WM_INPUT；定时器从 0ms 改为 16ms（0ms 占满事件循环导致 nativeEvent 无法处理）
+- U5: 下拉框第一项改为"点击选择校准方案"；状态标签改为"当前方案已校准/未校准"；范围变更/校准取消后统一显示"当前方案未校准"
+- B4（发布必修）：鼠标硬件增量失效排查与修复
+- U5（UI优化）：校准方案下拉框文字改为"点击选择校准方案"，右侧状态标签改为"当前方案已校准/未校准"
 
 ## 审查修复记录
 ### 第一轮（已完成）

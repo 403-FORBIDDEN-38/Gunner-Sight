@@ -38,10 +38,10 @@ def _default_angle_meter_profile() -> Dict:
 
 
 def _default_angle_meter_segment() -> Dict:
-    """R1: angle_meter 配置段默认值单一工厂"""
+    """angle_meter 配置段默认值单一工厂（空房子原则：profiles 为空，用户自行创建）"""
     return {
         "enabled": False, "current_profile": "",
-        "profiles": {"默认配置": _default_angle_meter_profile()},
+        "profiles": {},
         "hotkeys": {
             "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
             "pause": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
@@ -1104,11 +1104,11 @@ class ConfigManager:
         self.request_save()
 
     def get_angle_meter_profile_for_vehicle(self, vehicle: str) -> str:
-        """根据载具名找到关联的配置名，找不到返回默认配置"""
+        """根据载具名找到关联的配置名，找不到返回空字符串（空房子原则）"""
         for pname, pdata in self.get_angle_meter_profiles().items():
             if vehicle in pdata.get("linked_vehicles", []):
                 return pname
-        return "默认配置"
+        return ""
 
     def get_angle_meter_profile_linked_vehicles(self, name: str) -> list:
         """返回角度仪配置关联的载具列表"""
@@ -1131,7 +1131,7 @@ class ConfigManager:
         return self._config.get("angle_meter_global_calibration", {}).get("calibrated", False)
 
     def get_global_calibration_points(self):
-        """返回用户全局校准7点数组，未校准返回None（用出厂FACTORY）"""
+        """返回用户全局校准7点数组，未校准返回None（空房子原则：无出厂兜底）"""
         gc = self._config.get("angle_meter_global_calibration", {})
         if gc.get("calibrated") and gc.get("points"):
             return gc["points"]
