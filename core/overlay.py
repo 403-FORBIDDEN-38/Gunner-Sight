@@ -271,8 +271,21 @@ class OverlayRenderer:
 
 
     def _on_state_changed(self):
-        """状态变化处理"""
+        """状态变化处理：更新准星图片 + 缩放偏移"""
         self._update_crosshair()
+        self._update_effective_overlay()
+
+    def _update_effective_overlay(self):
+        """根据当前载具/弹种/倍率更新缩放偏移（二选一判断在 config 层）"""
+        state = self.state.get_state()
+        vehicle = state.get("vehicle")
+        ammo = state.get("ammo_type")
+        mag_idx = state.get("magnification_index", 0)
+        if not vehicle or not ammo:
+            return
+        effective = self.config.get_effective_overlay(vehicle, ammo, mag_idx)
+        self.overlay.set_scale(effective["scale"])
+        self.overlay.set_offset(effective["offset_x"], effective["offset_y"])
 
     def _on_overlay_toggled(self, visible: bool):
         """Overlay显示状态变化"""

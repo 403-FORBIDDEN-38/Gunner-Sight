@@ -308,6 +308,70 @@ class ConfigManager:
         """获取指定载具配置"""
         return self._config["vehicles"].get(name)
 
+    # === 载具缩放偏移 ===
+
+    def get_vehicle_overlay(self, vehicle_name: str) -> Dict:
+        """获取载具缩放偏移配置，不存在时返回默认值"""
+        vehicle = self._config["vehicles"].get(vehicle_name)
+        if vehicle and "overlay" in vehicle:
+            return vehicle["overlay"]
+        return self._default_vehicle_overlay()
+
+    def set_vehicle_overlay(self, vehicle_name: str, scale: float, offset_x: int, offset_y: int):
+        """设置载具缩放偏移配置，防抖保存"""
+        vehicle = self._config["vehicles"].get(vehicle_name)
+        if not vehicle:
+            return
+        vehicle["overlay"] = {
+            "scale": max(1.0, min(1000.0, float(scale))),
+            "offset_x": int(offset_x),
+            "offset_y": int(offset_y)
+        }
+        self.request_save()
+
+    def reset_vehicle_overlay(self, vehicle_name: str):
+        """重置载具缩放偏移为默认值"""
+        vehicle = self._config["vehicles"].get(vehicle_name)
+        if not vehicle:
+            return
+        vehicle["overlay"] = self._default_vehicle_overlay()
+        self.request_save()
+
+    # === 倍率缩放偏移开关 ===
+
+    def get_magnification_overlay_mode(self, vehicle_name: str, ammo_name: str, index: int) -> bool:
+        """获取倍率缩放偏移模式（true=载具，false=全局）"""
+        mags = self.get_magnifications(vehicle_name, ammo_name)
+        if 0 <= index < len(mags):
+            return mags[index].get("use_vehicle_overlay", False)
+        return False
+
+    def set_magnification_overlay_mode(self, vehicle_name: str, ammo_name: str, index: int, use_vehicle: bool):
+        """设置倍率缩放偏移模式，防抖保存"""
+        mags = self.get_magnifications(vehicle_name, ammo_name)
+        if 0 <= index < len(mags):
+            mags[index]["use_vehicle_overlay"] = bool(use_vehicle)
+            self.request_save()
+
+    # === 核心：有效缩放偏移（二选一判断唯一入口） ===
+
+    def get_effective_overlay(self, vehicle_name: str, ammo_name: str, index: int) -> Dict:
+        """获取当前倍率的有效缩放偏移配置。
+        二选一判断逻辑只在此方法中做一次，overlay 渲染和 UI 预览都调用此方法。"""
+        use_vehicle = self.get_magnification_overlay_mode(vehicle_name, ammo_name, index)
+        if use_vehicle:
+            return self.get_vehicle_overlay(vehicle_name)
+        return {
+            "scale": self.get_global_scale(),
+            "offset_x": self.get_global_offset_x(),
+            "offset_y": self.get_global_offset_y()
+        }
+
+    @staticmethod
+    def _default_vehicle_overlay() -> Dict:
+        """载具缩放偏移默认值（单一工厂方法，不散落多处）"""
+        return {"scale": 100.0, "offset_x": 0, "offset_y": 0}
+
     def add_vehicle(self, name: str) -> bool:
         """添加新载具"""
         if name in self._config["vehicles"]:
@@ -315,7 +379,8 @@ class ConfigManager:
         self._config["vehicles"][name] = {
             "name": name,
             "tags": [],
-            "ammo_types": {}
+            "ammo_types": {},
+            "overlay": self._default_vehicle_overlay()
         }
         self.request_save()
         return True
