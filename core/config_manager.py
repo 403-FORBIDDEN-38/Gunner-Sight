@@ -1042,14 +1042,12 @@ class ConfigManager:
         print("[ConfigManager] 配置迁移: 弹种热键已改为按载具维度存储")
 
     def _ensure_angle_meter_defaults(self):
-        """D4: 确保 angle_meter 配置段存在（旧 config.json 可能没有）。
+        """确保 angle_meter 配置段存在（旧 config.json 可能没有）。
         仅在内存中补全默认值，不触发写盘；用户首次修改时才会持久化。
-        R1: 默认值统一走 _default_angle_meter_segment / _default_angle_meter_profile 工厂。"""
+        只在 angle_meter 段不存在时创建默认 segment，用户删除所有配置是合法行为，不自动恢复。"""
         am = self._config.get("angle_meter")
         if am is None:
             self._config["angle_meter"] = _default_angle_meter_segment()
-        elif not am.get("profiles"):
-            am["profiles"] = {"默认配置": _default_angle_meter_profile()}
 
     def is_angle_meter_enabled(self) -> bool:
         return self._config.get("angle_meter", {}).get("enabled", False)
@@ -1087,14 +1085,19 @@ class ConfigManager:
 
     def delete_angle_meter_profile(self, name: str):
         profiles = self.get_angle_meter_profiles()
-        if name in profiles and len(profiles) > 1:
+        if name in profiles:
             del profiles[name]
             if self.get_current_angle_meter_profile() == name:
-                self.set_current_angle_meter_profile(next(iter(profiles)))
+                # 删除后如果还有配置，选第一个；否则清空当前选择
+                remaining = list(profiles.keys())
+                if remaining:
+                    self.set_current_angle_meter_profile(remaining[0])
+                else:
+                    self._config.setdefault("angle_meter", {})["current_profile"] = ""
             self.request_save()
 
     def get_current_angle_meter_profile(self) -> str:
-        return self._config.get("angle_meter", {}).get("current_profile", "默认配置")
+        return self._config.get("angle_meter", {}).get("current_profile", "")
 
     def set_current_angle_meter_profile(self, name: str):
         self._config.setdefault("angle_meter", {})["current_profile"] = name

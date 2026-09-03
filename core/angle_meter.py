@@ -284,12 +284,12 @@ class AngleTracker(QObject):
         if self.state != self.STATE_ACTIVE:
             return
         cal = self.active_calibration
-        zero_delta = cal.angle_to_delta
+        zero_delta = cal.angle_to_delta(0.0)
         # 调整 cumulative 使当前角度=0
         current_abs = self._base_delta + self._cumulative_delta
         self._cumulative_delta += (zero_delta - current_abs)
         self.current_angle = 0.0
-        self.angle_changed.emit
+        self.angle_changed.emit(0.0)
         self.log.emit("[角度仪] 归零")
 
 
