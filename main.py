@@ -203,11 +203,7 @@ def _main():
         print("[Main] 未找到应用程序图标文件")
     print(f"[性能] 图标加载 耗时={(time.perf_counter()-_t1)*1000:.0f}ms")
 
-    # 加载自定义字体（英文 Norwester + 中文 Source Han Sans）
-    _t2 = time.perf_counter()
-    load_custom_fonts(app)
-    print(f"[性能] 字体加载 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
-
+    # 字体加载延迟到窗口显示后（P0-1：避免阻塞窗口出现）
     # 初始化各模块
     _t3 = time.perf_counter()
     config = ConfigManager()
@@ -242,7 +238,13 @@ def _main():
     _t9 = time.perf_counter()
     window.show()
     print(f"[性能] 主窗口显示 耗时={(time.perf_counter()-_t9)*1000:.0f}ms")
-    print(f"[性能] 启动总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
+    print(f"[性能] 启动总耗时(不含字体)={(time.perf_counter()-_t0)*1000:.0f}ms")
+    # P0-1: 字体延迟加载，窗口先用系统默认字体显示
+    def _load_fonts_delayed():
+        _tf = time.perf_counter()
+        load_custom_fonts(app)
+        print(f"[性能] 字体加载(延迟) 耗时={(time.perf_counter()-_tf)*1000:.0f}ms")
+    QTimer.singleShot(0, _load_fonts_delayed)
 
     # 窗口显示后再初始化热键（keyboard 库导入+注册约 500ms，不阻塞窗口出现）
     from PyQt5.QtCore import QTimer
