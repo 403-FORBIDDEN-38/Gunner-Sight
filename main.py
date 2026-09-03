@@ -138,11 +138,15 @@ def main():
     _log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
     _log_file = open(os.path.join(_log_dir, "startup_log.txt"), "w", encoding="utf-8")
     class _Tee:
-        def __init__(self, *files): self.files = files
+        def __init__(self, *files): self.files = [f for f in files if f is not None]
         def write(self, obj):
-            for f in self.files: f.write(obj); f.flush()
+            for f in self.files:
+                try: f.write(obj); f.flush()
+                except Exception: pass
         def flush(self):
-            for f in self.files: f.flush()
+            for f in self.files:
+                try: f.flush()
+                except Exception: pass
     sys.stdout = _Tee(sys.stdout, _log_file)
     sys.stderr = _Tee(sys.stderr, _log_file)
     try:
