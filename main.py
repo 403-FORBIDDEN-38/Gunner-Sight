@@ -4,6 +4,7 @@ GunnerSight Overlay - 屏幕准星辅助软件
 """
 
 import sys
+import time
 import atexit
 import os
 import ctypes
@@ -174,6 +175,7 @@ def main():
 
 
 def _main():
+    _t0 = time.perf_counter()
     # 启动时释放任何残留的 BlockInput（上次异常退出可能导致输入锁定）
     try:
         from core.win32_utils import user32 as _u
@@ -190,23 +192,42 @@ def _main():
     app.setApplicationName("GunnerSight Overlay")
     app.setApplicationVersion(_APP_VERSION.lstrip("V"))  # 版本号唯一权威来源，与信息页一致
     app.setQuitOnLastWindowClosed(False)
+    print(f"[性能] QApplication创建 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
 
     # 设置应用程序图标（窗口左上角、任务栏等）
+    _t1 = time.perf_counter()
     icon_path = get_app_icon_path()
     if icon_path:
         app.setWindowIcon(QIcon(icon_path))
     else:
         print("[Main] 未找到应用程序图标文件")
+    print(f"[性能] 图标加载 耗时={(time.perf_counter()-_t1)*1000:.0f}ms")
 
     # 加载自定义字体（英文 Norwester + 中文 Source Han Sans）
+    _t2 = time.perf_counter()
     load_custom_fonts(app)
+    print(f"[性能] 字体加载 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
 
     # 初始化各模块
+    _t3 = time.perf_counter()
     config = ConfigManager()
+    print(f"[性能] ConfigManager初始化(配置加载) 耗时={(time.perf_counter()-_t3)*1000:.0f}ms")
+
+    _t4 = time.perf_counter()
     state = StateMachine(config)
+    print(f"[性能] StateMachine初始化 耗时={(time.perf_counter()-_t4)*1000:.0f}ms")
+
+    _t5 = time.perf_counter()
     resources = ResourceManager()
+    print(f"[性能] ResourceManager初始化 耗时={(time.perf_counter()-_t5)*1000:.0f}ms")
+
+    _t6 = time.perf_counter()
     overlay = OverlayRenderer(config, state)
+    print(f"[性能] OverlayRenderer初始化 耗时={(time.perf_counter()-_t6)*1000:.0f}ms")
+
+    _t7 = time.perf_counter()
     hotkey = HotkeyManager(config, state)
+    print(f"[性能] HotkeyManager初始化 耗时={(time.perf_counter()-_t7)*1000:.0f}ms")
 
     # 如果有默认载具，设置当前状态
     vehicles = config.get_vehicle_names()
@@ -214,12 +235,22 @@ def _main():
         state.set_vehicle(vehicles[0])
 
     # 创建主窗口
+    _t8 = time.perf_counter()
     window = MainWindow(config, state, overlay, hotkey, resources)
+    print(f"[性能] MainWindow创建(UI创建) 耗时={(time.perf_counter()-_t8)*1000:.0f}ms")
+
+    _t9 = time.perf_counter()
     window.show()
+    print(f"[性能] 主窗口显示 耗时={(time.perf_counter()-_t9)*1000:.0f}ms")
+    print(f"[性能] 启动总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
 
     # 窗口显示后再初始化热键（keyboard 库导入+注册约 500ms，不阻塞窗口出现）
     from PyQt5.QtCore import QTimer
-    QTimer.singleShot(0, hotkey.initialize)
+    def _init_hotkey_timed():
+        _th = time.perf_counter()
+        hotkey.initialize()
+        print(f"[性能] 热键注册 耗时={(time.perf_counter()-_th)*1000:.0f}ms")
+    QTimer.singleShot(0, _init_hotkey_timed)
 
     # 运行
     sys.exit(app.exec_())

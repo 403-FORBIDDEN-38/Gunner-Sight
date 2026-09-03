@@ -426,6 +426,7 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
+        _t0 = time.perf_counter()
         # 先立即隐藏所有窗口（用户感知到程序立即关闭）
         self.hide()
         if self.rangefinder_tab.rangefinder_overlay:
@@ -434,12 +435,24 @@ class MainWindow(QMainWindow):
             self.rangefinder_tab.rangefinder_overlay2.hide()
         if self.overlay:
             self.overlay.hide()
+        print(f"[性能] 关闭-窗口隐藏 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
         # 后台执行清理（停止线程、钩子、释放资源）
+        _t1 = time.perf_counter()
         self.rangefinder_tab.shutdown()
+        print(f"[性能] 关闭-数显模块清理 耗时={(time.perf_counter()-_t1)*1000:.0f}ms")
+        _t2 = time.perf_counter()
         self.angle_meter_tab.shutdown()
+        print(f"[性能] 关闭-角度仪清理(RawInput注销) 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
+        _t3 = time.perf_counter()
         self.squad_macro_tab.shutdown()
+        print(f"[性能] 关闭-建队宏清理 耗时={(time.perf_counter()-_t3)*1000:.0f}ms")
+        _t4 = time.perf_counter()
         self.hotkey.shutdown()
+        print(f"[性能] 关闭-热键注销 耗时={(time.perf_counter()-_t4)*1000:.0f}ms")
         # 保存配置
+        _t5 = time.perf_counter()
         self.config.save_config()
+        print(f"[性能] 关闭-配置保存 耗时={(time.perf_counter()-_t5)*1000:.0f}ms")
+        print(f"[性能] 关闭总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
         event.accept()
         QApplication.instance().quit()

@@ -688,11 +688,12 @@ class AngleMeterTab(QWidget):
             name = self.config.get_current_angle_meter_profile()
             if name:
                 scheme = self.cal_scheme_combo.currentIndex()
-                if scheme == 1:  # 快速校准
-                    # 保存min_delta/max_delta用于重校全局后重新生成
+                if scheme == 1:  # 快速校准(3点)
+                    # 保存min/mid/max_delta用于重校全局后重新生成
                     min_d = cal.min_delta
+                    mid_d = cal.points[3][0]  # 7点曲线中间点
                     max_d = cal.max_delta
-                    self.config.set_angle_meter_quick_calibration(name, cal.to_list(), min_d, max_d)
+                    self.config.set_angle_meter_quick_calibration(name, cal.to_list(), min_d, mid_d, max_d)
                 elif scheme == 2:  # 单独校准
                     self.config.set_angle_meter_full_calibration(name, cal.to_list())
                 if self.tracker:
@@ -809,14 +810,15 @@ class AngleMeterTab(QWidget):
 
     # === 热键微调（长按连续注入）===
     def _on_up_pressed(self):
-        """上移微调按下：SendInput 模拟鼠标上移，启动定时器，0.8秒后加速。
+        """上移微调按下：SendInput 模拟鼠标上移。
+        三档：点按(单次) / 短长按(1.0-1.5s,步长1,50ms) / 长长按(>1.5s,步长2,30ms)。
         任何状态下都触发（使用中/校准中），SendInput 使游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
             return
         self._up_pressed = True
         self._up_pressed_time = time.time()
         self._up_accel = False
-        _simulate_mouse_move(-1)
+        _simulate_mouse_move(-1)  # 点按立即触发一次
         if self._up_timer:
             self._up_timer.setInterval(50)
             self._up_timer.start()
@@ -825,11 +827,20 @@ class AngleMeterTab(QWidget):
         if not self.raw or not self._up_pressed or self.tracker is None:
             return
         held = time.time() - self._up_pressed_time
-        if held > 0.8 and not self._up_accel:
-            self._up_accel = True
-            self._up_timer.setInterval(30)
-        step = 2 if self._up_accel else 1
-        _simulate_mouse_move(-step)
+        if held < 1.0:
+            return  # 点按阶段：等释放，不连续触发
+        if held < 1.5:
+            # 短长按：步长1，间隔50ms
+            if self._up_accel:
+                self._up_accel = False
+                self._up_timer.setInterval(50)
+            _simulate_mouse_move(-1)
+        else:
+            # 长长按：步长2，间隔30ms
+            if not self._up_accel:
+                self._up_accel = True
+                self._up_timer.setInterval(30)
+            _simulate_mouse_move(-2)
 
     def _on_up_released(self):
         self._up_pressed = False
@@ -838,14 +849,15 @@ class AngleMeterTab(QWidget):
             self._up_timer.stop()
 
     def _on_down_pressed(self):
-        """下移微调按下：SendInput 模拟鼠标下移，启动定时器，0.8秒后加速。
+        """下移微调按下：SendInput 模拟鼠标下移。
+        三档：点按(单次) / 短长按(1.0-1.5s,步长1,50ms) / 长长按(>1.5s,步长2,30ms)。
         任何状态下都触发（使用中/校准中），SendInput 使游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
             return
         self._down_pressed = True
         self._down_pressed_time = time.time()
         self._down_accel = False
-        _simulate_mouse_move(1)
+        _simulate_mouse_move(1)  # 点按立即触发一次
         if self._down_timer:
             self._down_timer.setInterval(50)
             self._down_timer.start()
@@ -854,11 +866,20 @@ class AngleMeterTab(QWidget):
         if not self.raw or not self._down_pressed or self.tracker is None:
             return
         held = time.time() - self._down_pressed_time
-        if held > 0.8 and not self._down_accel:
-            self._down_accel = True
-            self._down_timer.setInterval(30)
-        step = 2 if self._down_accel else 1
-        _simulate_mouse_move(step)
+        if held < 1.0:
+            return  # 点按阶段：等释放，不连续触发
+        if held < 1.5:
+            # 短长按：步长1，间隔50ms
+            if self._down_accel:
+                self._down_accel = False
+                self._down_timer.setInterval(50)
+            _simulate_mouse_move(1)
+        else:
+            # 长长按：步长2，间隔30ms
+            if not self._down_accel:
+                self._down_accel = True
+                self._down_timer.setInterval(30)
+            _simulate_mouse_move(2)
 
     def _on_down_released(self):
         self._down_pressed = False
