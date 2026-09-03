@@ -12,6 +12,9 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
+# 配置版本号：迁移函数只在版本变化时执行，避免每次启动重复遍历
+CURRENT_CONFIG_VERSION = 3
+
 
 def get_app_base_dir() -> Path:
     """获取应用基础目录（兼容开发环境和打包环境）
@@ -81,18 +84,24 @@ class ConfigManager:
         # 加载配置
         self.load_config()
 
-        # 数据迁移：旧版倍率准星存绝对路径，统一为文件名
-        self._migrate_crosshair_paths()
-        # 数据迁移：旧版弹种热键用 key/trigger 单键格式，统一为 key1/trigger1/key2/trigger2
-        self._migrate_ammo_hotkeys()
-        # 数据迁移：旧版 "xcj" 配置段 → 新版 "rangefinder" 段（批次2 全局改名）
-        self._migrate_xcj_to_rangefinder()
-        # 数据迁移：角度仪热键旧单键格式 → 新双键格式
-        self._migrate_angle_meter_hotkeys()
-        # 数据迁移：角度仪旧calibration字段→full_calibration
-        self._migrate_angle_meter_calibration()
-        # 数据迁移：弹种热键从全局改为按载具维度
-        self._migrate_ammo_hotkeys_vehicle_scope()
+        # P0-2: 配置版本号判断，只在版本变化时执行迁移
+        cfg_ver = self._config.get("config_version", 0)
+        if cfg_ver < CURRENT_CONFIG_VERSION:
+            # 数据迁移：旧版倍率准星存绝对路径，统一为文件名
+            self._migrate_crosshair_paths()
+            # 数据迁移：旧版弹种热键用 key/trigger 单键格式，统一为 key1/trigger1/key2/trigger2
+            self._migrate_ammo_hotkeys()
+            # 数据迁移：旧版 "xcj" 配置段 → 新版 "rangefinder" 段（批次2 全局改名）
+            self._migrate_xcj_to_rangefinder()
+            # 数据迁移：角度仪热键旧单键格式 → 新双键格式
+            self._migrate_angle_meter_hotkeys()
+            # 数据迁移：角度仪旧calibration字段→full_calibration
+            self._migrate_angle_meter_calibration()
+            # 数据迁移：弹种热键从全局改为按载具维度
+            self._migrate_ammo_hotkeys_vehicle_scope()
+            # 迁移完成后更新版本号
+            self._config["config_version"] = CURRENT_CONFIG_VERSION
+            self.request_save()
         # 确保 angle_meter 段存在（旧 config.json 可能没有此段），内存中补全，不写盘
         self._ensure_angle_meter_defaults()
 
@@ -100,6 +109,7 @@ class ConfigManager:
         """最小骨架配置（仅用于 config.json 丢失/损坏时的最后安全回退）"""
         return {
             "version": "1.0",
+            "config_version": CURRENT_CONFIG_VERSION,
             "global_settings": {"scale": 100.0, "offset_x": 0, "offset_y": 0, "overlay_visible": True},
             "hotkeys": {
                 "toggle_overlay": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},

@@ -101,17 +101,12 @@ class HotkeyManager(QObject):
         self._mouse_hotkeys.clear()
 
     def _unregister_all_keyboard_hotkeys(self):
-        """注销所有键盘热键"""
-        try:
-            if self._keyboard_global_hook:
-                keyboard.unhook(self._keyboard_global_hook)
-                self._keyboard_global_hook = None
-        except Exception:
-            pass
+        """注销所有键盘热键（P0-3：直接unhook_all，不重复操作）"""
         try:
             keyboard.unhook_all()
         except Exception:
             pass
+        self._keyboard_global_hook = None
         self._keyboard_hotkeys.clear()
 
     def _register_all_hotkeys(self):
