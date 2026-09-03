@@ -13,7 +13,7 @@ import threading
 from PyQt5.QtCore import QObject, pyqtSignal
 
 # 独立的 user32 DLL 实例，避免全局 windll 的线程安全问题
-from core.win32_utils import user32 as _user32  # 统一 Win32 入口
+from core.win32_utils import user32 as _user32, kernel32  # 统一 Win32 入口
 
 # 严格设置函数参数类型和返回类型（64位安全）
 _user32.SetWindowsHookExW.argtypes = [
@@ -187,7 +187,7 @@ class MouseHook(QObject):
                 None, 0
             )
             if not self._hook:
-                error_code = ctypes.windll.kernel32.GetLastError()
+                error_code = kernel32.GetLastError()
                 print(f"[MouseHook] 钩子设置失败，错误码: {error_code}")
                 self._running = False
                 return

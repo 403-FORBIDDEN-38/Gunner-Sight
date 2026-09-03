@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from core.config_manager import ConfigManager
 from core.state_machine import StateMachine
 from core.hotkey_manager import HotkeyManager
-from gui.widgets import HotkeyPairWidget
+from gui.hotkey_widgets import HotkeyPairWidget
 
 
 class HotkeyTab(QWidget):

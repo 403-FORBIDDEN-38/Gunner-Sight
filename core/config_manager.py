@@ -275,12 +275,19 @@ class ConfigManager:
                 self._save_timer.cancel()
                 self._save_timer = None
             try:
-                with open(self.config_file, 'w', encoding='utf-8') as f:
-                    json.dump(self._config, f, indent=4, ensure_ascii=False)
-                return True
+                # 锁内序列化（保证遍历过程中_config不被主线程修改）
+                data = json.dumps(self._config, indent=4, ensure_ascii=False)
             except Exception as e:
-                print(f"保存配置失败: {e}")
+                print(f"序列化配置失败: {e}")
                 return False
+        # 锁外写入文件（IO不阻塞主线程修改配置）
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                f.write(data)
+            return True
+        except Exception as e:
+            print(f"保存配置失败: {e}")
+            return False
 
     def request_save(self):
         """请求保存配置（防抖：500ms 内无新修改才写盘，避免滑块拖动等高频操作反复IO）"""
@@ -294,10 +301,17 @@ class ConfigManager:
         with self._save_lock:
             self._save_timer = None
             try:
-                with open(self.config_file, 'w', encoding='utf-8') as f:
-                    json.dump(self._config, f, indent=4, ensure_ascii=False)
+                # 锁内序列化（保证遍历过程中_config不被主线程修改）
+                data = json.dumps(self._config, indent=4, ensure_ascii=False)
             except Exception as e:
-                print(f"保存配置失败: {e}")
+                print(f"序列化配置失败: {e}")
+                return
+        # 锁外写入文件（IO不阻塞主线程修改配置）
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                f.write(data)
+        except Exception as e:
+            print(f"保存配置失败: {e}")
 
     # ==================== 全局设置 ====================
 

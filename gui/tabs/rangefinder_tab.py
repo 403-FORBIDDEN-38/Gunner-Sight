@@ -12,7 +12,8 @@ from PyQt5.QtGui import QPixmap, QImage
 
 from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
-from gui.widgets import HotkeyPairWidget, VehicleFilterWidget, RegionSelector, PointPicker, OptimizedListWidget
+from gui.widgets import VehicleFilterWidget, RegionSelector, PointPicker, OptimizedListWidget
+from gui.hotkey_widgets import HotkeyPairWidget
 
 # 时间常量（魔法数字命名化，注释取值依据）
 MEASURE_DELAY_MS = 150        # 测距启动延迟：热键触发后等待 UI 切换/BlockInput 状态稳定再截图

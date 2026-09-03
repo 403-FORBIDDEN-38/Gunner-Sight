@@ -8,7 +8,8 @@ from PyQt5.QtWidgets import QApplication
 
 from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
-from gui.widgets import HotkeyLineEdit, VehicleFilterWidget
+from gui.widgets import VehicleFilterWidget
+from gui.hotkey_widgets import HotkeyLineEdit
 
 
 class SquadMacroTab(QWidget):
