@@ -298,8 +298,8 @@ class AngleMeterTab(QWidget):
         self.toggle_use_btn.clicked.connect(self._on_toggle_use)
         self.pause_btn.clicked.connect(self._on_pause)
 
-        # 焦点禁用
-        for w in [self.enable_check, self.profile_search, self.min_spin, self.max_spin,
+        # 焦点禁用（SpinBox保留ClickFocus以支持键盘输入和滚轮调节）
+        for w in [self.enable_check, self.profile_search,
                   self.add_profile_btn, self.rename_profile_btn, self.delete_profile_btn,
                   self.global_cal_btn, self.cal_toggle_btn,
                   self.cal_scheme_combo,
@@ -307,6 +307,9 @@ class AngleMeterTab(QWidget):
                   self.hk_toggle, self.hk_pause, self.hk_calibrate, self.hk_reset,
                   self.hk_up, self.hk_down]:
             w.setFocusPolicy(Qt.NoFocus)
+        # BUG-3: 俯仰范围输入框需要可输入+可滚轮，设为ClickFocus
+        self.min_spin.setFocusPolicy(Qt.ClickFocus)
+        self.max_spin.setFocusPolicy(Qt.ClickFocus)
 
     # === 启用/禁用 ===
         scroll.setWidget(content)

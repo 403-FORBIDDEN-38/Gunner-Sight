@@ -201,3 +201,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: _Tee.__init__过滤None文件描述符，write/flush加try-except保护
 - commit: 9996a47c
 - 打包: onedir + 签名，发布版 GunnerSight_Release 已合并更新
+
+### V0.0140300073 - 角度仪BUG修复
+- BUG-1: 关联载具后不立即刷新。根因: _on_linked_vehicle_changed修改linked_vehicles后未调用_refresh_profile_list。修复: 末尾添加_refresh_profile_list()调用。
+- BUG-2: 配置列表标签筛选下拉框无法展开/无功能。根因: profile_tag_filter是未完成功能(无信号连接、无标签填充、无筛选逻辑)。修复: 参照rangefinder_tab完整实现——addItem带data、currentIndexChanged连接_refresh_profile_list、_refresh_profile_list中动态填充标签+按标签筛选。
+- CFG校准数据: 已保留(全局校准7点 + 2个载具配置各7点quick校准)，未覆盖未重置。
+- 测试: 32 passed
+- commit: 129e101e
+- 打包: onedir + 签名，发布版 GunnerSight_Release 已更新
