@@ -24,6 +24,8 @@ class OverviewTab(QWidget):
         self.hotkey = hotkey
         self.resources = resources
         self.overlay = overlay
+        self._vf_created = False
+        self._pending_vf_signals = None  # 优化4: 延迟连接的信号回调
         self._build_ui()
 
     def _build_ui(self):
@@ -37,12 +39,14 @@ class OverviewTab(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        # 载具选择
+        # 载具选择（优化4: VehicleFilterWidget延迟创建，先占位）
         quick_group = QGroupBox("载具选择")
         quick_layout = QVBoxLayout(quick_group)
-        self.quick_vf = VehicleFilterWidget(mode="select")
-        self.quick_vf.setMinimumHeight(300)
-        quick_layout.addWidget(self.quick_vf)
+        self._vf_container = QWidget()
+        self._vf_container.setMinimumHeight(300)
+        vf_container_layout = QVBoxLayout(self._vf_container)
+        vf_container_layout.setContentsMargins(0, 0, 0, 0)
+        quick_layout.addWidget(self._vf_container)
         quick_ammo_row = QHBoxLayout()
         quick_ammo_row.addWidget(QLabel("弹种:"))
         self.quick_ammo_combo = QComboBox()
@@ -152,15 +156,33 @@ class OverviewTab(QWidget):
         else:
             self.config.set_global_offset_y(value)
 
+    def _ensure_vehicle_filter(self):
+        """优化4: 首次调用时创建VehicleFilterWidget并连接延迟信号"""
+        if self._vf_created:
+            return
+        self.quick_vf = VehicleFilterWidget(mode="select")
+        self.quick_vf.setMinimumHeight(300)
+        self._vf_container.layout().addWidget(self.quick_vf)
+        self._vf_created = True
+        if self._pending_vf_signals:
+            on_vehicle_changed, on_ammo_changed, on_preview_scale = self._pending_vf_signals
+            self.quick_vf.vehicle_selected.connect(on_vehicle_changed)
+            self.quick_vf.filter_changed.connect(self.refresh_vehicle_list)
+            self._pending_vf_signals = None
+
     def connect_signals(self, on_vehicle_changed, on_ammo_changed, on_preview_scale):
         """连接跨 tab 信号（由 main_window 调用）"""
-        self.quick_vf.vehicle_selected.connect(on_vehicle_changed)
-        self.quick_vf.filter_changed.connect(self.refresh_vehicle_list)
+        # 优化4: VehicleFilterWidget可能未创建，先保存回调
+        self._pending_vf_signals = (on_vehicle_changed, on_ammo_changed, on_preview_scale)
+        if self._vf_created:
+            self.quick_vf.vehicle_selected.connect(on_vehicle_changed)
+            self.quick_vf.filter_changed.connect(self.refresh_vehicle_list)
         self.quick_ammo_combo.currentTextChanged.connect(on_ammo_changed)
         self.quick_mag_btn.clicked.connect(self.state.cycle_magnification)
         self.preview_scale_slider.valueChanged.connect(on_preview_scale)
 
     def refresh_vehicle_list(self):
+        self._ensure_vehicle_filter()
         self.quick_vf.set_tags(self.config.get_all_tags())
         search, tag = self.quick_vf.get_filter()
         names = self.config.get_vehicle_names_filtered(search, tag)
@@ -221,4 +243,10 @@ class OverviewTab(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        self.refresh_preview()
+        # 优化3: 准星预览异步加载，不阻塞窗口首次绘制
+        if not hasattr(self, '_preview_loaded') or not self._preview_loaded:
+            self._preview_loaded = True
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, self.refresh_preview)
+        # 优化4: VehicleFilterWidget延迟创建
+        self._ensure_vehicle_filter()

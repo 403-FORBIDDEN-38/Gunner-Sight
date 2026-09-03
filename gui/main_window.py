@@ -52,14 +52,23 @@ class MainWindow(QMainWindow):
         self._scrolling = False  # 预留：防止信号循环
         self._create_ui()
         self._connect_signals()
-        self._apply_theme(self._current_theme)  # P0-2: 只调一次（内部会调_setup_style）
+        # QSS和第一个tab均延迟到window.show()后，不阻塞启动
 
         # P0-3: OverviewTab数据延迟加载（main.py中QTimer.singleShot异步refresh）
         # RangefinderTab也改为窗口显示后异步创建，避免阻塞启动
 
     # ==================== 主题 ====================
 
-    def _setup_style(self, theme="dark"):
+    def _setup_minimal_style(self, theme="dark"):
+        """优化1: 极简QSS，确保窗口出现时不是白色，避免完整QSS解析阻塞启动"""
+        if theme == "light":
+            bg = "#F5F5F5"; text = "#222222"
+        else:
+            bg = "#202020"; text = "#E0E0E0"
+        self.setStyleSheet(f"QWidget {{ background-color: {bg}; color: {text}; }} QMainWindow {{ background-color: {bg}; }}")
+
+    def _setup_full_style(self, theme="dark"):
+        """优化1: 完整QSS，窗口显示后异步应用"""
         if theme == "light":
             bg = "#F5F5F5"; ctrl = "#FFFFFF"; border = "#D0D0D0"
             hover = "#E8E8E8"; text = "#222222"; subtext = "#666666"; dis_text = "#AAAAAA"
@@ -70,6 +79,8 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(f"""
             QWidget {{ background-color: {bg}; color: {text}; font-size: 14px; }}
             QMainWindow {{ background-color: {bg}; }}
+            QPushButton, QCheckBox, QComboBox, QSlider {{ focus: none; }}
+            QSpinBox, QDoubleSpinBox {{ focus: clickfocus; }}
             QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QAbstractItemView {{
                 background-color: {ctrl}; color: {text};
                 border: 1px solid {border}; border-radius: 2px; padding: 4px 6px;
@@ -161,7 +172,7 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self, theme):
         self._current_theme = theme
-        self._setup_style(theme)
+        self._setup_full_style(theme)
         self.theme_btn.setText("浅色" if theme == "light" else "深色")
 
     def _toggle_theme(self):
@@ -278,15 +289,19 @@ class MainWindow(QMainWindow):
         for name in self._nav_pages:
             self.nav_list.addItem(name)
 
-        # 只创建第一个tab
-        self._ensure_tab(0)
-
-        # 初始化：选中第一页（触发 _on_nav_changed 切换 tab_stack + 更新翻页按钮）
-        self.nav_list.setCurrentRow(0)
+        # 第一个tab延迟到window.show()后创建（_init_first_tab），避免阻塞启动
+        self._first_tab_initialized = False
 
         # 禁用焦点防空格误触
-        self._disable_control_focus()
         QApplication.instance().installEventFilter(self)
+
+    def _init_first_tab(self):
+        """延迟创建第一个tab并选中（window.show后调用）"""
+        if self._first_tab_initialized:
+            return
+        self._first_tab_initialized = True
+        self._ensure_tab(0)
+        self.nav_list.setCurrentRow(0)
 
     def _ensure_tab(self, index):
         """P1-2: 懒加载创建tab，创建后连接该tab特有的信号。加异常保护。"""
@@ -359,22 +374,6 @@ class MainWindow(QMainWindow):
         """根据当前页面索引显示/隐藏上下翻页按钮"""
         self.prev_page_btn.setVisible(index > 0)
         self.next_page_btn.setVisible(index < len(self._nav_pages) - 1)
-
-    def _disable_control_focus(self, widget=None):
-        if widget is None:
-            widget = self
-        for child in widget.findChildren(QPushButton):
-            child.setFocusPolicy(Qt.NoFocus)
-        for child in widget.findChildren(QCheckBox):
-            child.setFocusPolicy(Qt.NoFocus)
-        for child in widget.findChildren(QComboBox):
-            child.setFocusPolicy(Qt.NoFocus)
-        for child in widget.findChildren(QSlider):
-            child.setFocusPolicy(Qt.NoFocus)
-        for child in widget.findChildren(QSpinBox):
-            child.setFocusPolicy(Qt.ClickFocus)
-        for child in widget.findChildren(QDoubleSpinBox):
-            child.setFocusPolicy(Qt.ClickFocus)
 
     # ==================== 信号连接 ====================
 
