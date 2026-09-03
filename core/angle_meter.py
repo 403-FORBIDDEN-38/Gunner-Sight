@@ -65,12 +65,7 @@ class RawInputReader(QWidget):
         self.setAttribute(Qt.WA_DontShowOnScreen)
         self.setAttribute(Qt.WA_NativeWindow)  # 确保原生窗口创建，接收 WM_INPUT
         self._delta_y = 0
-        self._injected_delta_y = 0
         self._registered = False
-
-    def inject_delta_y(self, value):
-        """热键注入垂直增量（上移负值，下移正值，和硬件增量一致）"""
-        self._injected_delta_y += value
 
     def register(self):
         # 确保原生窗口已创建（winId() 会强制创建）
@@ -110,10 +105,9 @@ class RawInputReader(QWidget):
                     self._delta_y += raw.mouse.lLastY
 
     def consume_delta_y(self):
-        """读取并清空垂直增量（硬件+热键注入合并）。上移返回负值，下移返回正值。"""
-        v = self._delta_y + self._injected_delta_y
+        """读取并清空垂直增量。上移返回负值，下移返回正值。"""
+        v = self._delta_y
         self._delta_y = 0
-        self._injected_delta_y = 0
         return v
 
 
