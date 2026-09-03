@@ -110,14 +110,21 @@ class VehicleConfigTab(QWidget):
         mag_btn_layout.addWidget(self.rename_mag_btn)
         mag_btn_layout.addWidget(self.remove_mag_btn)
         mag_layout.addLayout(mag_btn_layout)
-        mag_detail_layout = QFormLayout()
+        mag_detail_layout = QVBoxLayout()
+        # 准星图片行
+        crosshair_row = QHBoxLayout()
+        crosshair_row.addWidget(QLabel("准星图片:"))
         self.mag_crosshair_label = QLabel("未绑定")
+        self.mag_crosshair_label.setWordWrap(True)
+        crosshair_row.addWidget(self.mag_crosshair_label)
+        crosshair_row.addStretch()
+        mag_detail_layout.addLayout(crosshair_row)
+        # 选择按钮
         self.mag_bind_btn = QPushButton("选择准星图片")
-        mag_detail_layout.addRow("准星图片:", self.mag_crosshair_label)
-        mag_detail_layout.addRow("", self.mag_bind_btn)
+        mag_detail_layout.addWidget(self.mag_bind_btn)
         # 缩放偏移模式勾选框
         self.overlay_mode_check = QCheckBox("该倍率使用载具缩放配置")
-        mag_detail_layout.addRow("", self.overlay_mode_check)
+        mag_detail_layout.addWidget(self.overlay_mode_check)
         mag_layout.addLayout(mag_detail_layout)
         right_layout.addWidget(mag_group, 2)
 
@@ -130,10 +137,13 @@ class VehicleConfigTab(QWidget):
         self.vo_scale_slider = QSlider(Qt.Horizontal)
         self.vo_scale_slider.setRange(1, 1000)
         self.vo_scale_slider.setValue(100)
-        self.vo_scale_value = QLabel("100%")
-        self.vo_scale_value.setMinimumWidth(50)
+        self.vo_scale_spin = QSpinBox()
+        self.vo_scale_spin.setRange(1, 1000)
+        self.vo_scale_spin.setSuffix("%")
+        self.vo_scale_spin.setValue(100)
+        self.vo_scale_spin.setFixedWidth(80)
         scale_layout.addWidget(self.vo_scale_slider, 1)
-        scale_layout.addWidget(self.vo_scale_value)
+        scale_layout.addWidget(self.vo_scale_spin)
         vo_layout.addLayout(scale_layout)
         # X/Y 偏移
         offset_layout = QHBoxLayout()
@@ -185,7 +195,8 @@ class VehicleConfigTab(QWidget):
         self.mag_bind_btn.clicked.connect(self._on_bind_crosshair)
         self.overlay_mode_check.stateChanged.connect(self._on_overlay_mode_changed)
         # 载具缩放偏移
-        self.vo_scale_slider.valueChanged.connect(self._on_vehicle_scale_changed)
+        self.vo_scale_slider.valueChanged.connect(self._on_vehicle_scale_slider_changed)
+        self.vo_scale_spin.valueChanged.connect(self._on_vehicle_scale_spin_changed)
         self.vo_offset_x.valueChanged.connect(self._on_vehicle_offset_changed)
         self.vo_offset_y.valueChanged.connect(self._on_vehicle_offset_changed)
 
@@ -530,23 +541,40 @@ class VehicleConfigTab(QWidget):
             self.vehicle_overlay_group.setTitle(f"载具缩放偏移 — {vehicle}")
             overlay = self.config.get_vehicle_overlay(vehicle)
             self.vo_scale_slider.blockSignals(True)
+            self.vo_scale_spin.blockSignals(True)
             self.vo_offset_x.blockSignals(True)
             self.vo_offset_y.blockSignals(True)
             self.vo_scale_slider.setValue(int(overlay["scale"]))
-            self.vo_scale_value.setText(f"{int(overlay['scale'])}%")
+            self.vo_scale_spin.setValue(int(overlay["scale"]))
             self.vo_offset_x.setValue(overlay["offset_x"])
             self.vo_offset_y.setValue(overlay["offset_y"])
             self.vo_scale_slider.blockSignals(False)
+            self.vo_scale_spin.blockSignals(False)
             self.vo_offset_x.blockSignals(False)
             self.vo_offset_y.blockSignals(False)
         else:
             self.vehicle_overlay_group.setTitle("载具缩放偏移")
 
-    def _on_vehicle_scale_changed(self, value):
+    def _on_vehicle_scale_slider_changed(self, value):
+        """滑块变化：同步 spin + 保存配置 + 预览"""
         vehicle = self._get_selected_vehicle()
         if not vehicle:
             return
-        self.vo_scale_value.setText(f"{value}%")
+        self.vo_scale_spin.blockSignals(True)
+        self.vo_scale_spin.setValue(value)
+        self.vo_scale_spin.blockSignals(False)
+        overlay = self.config.get_vehicle_overlay(vehicle)
+        self.config.set_vehicle_overlay(vehicle, value, overlay["offset_x"], overlay["offset_y"])
+        self._update_overlay_preview()
+
+    def _on_vehicle_scale_spin_changed(self, value):
+        """数值输入框变化：同步滑块 + 保存配置 + 预览"""
+        vehicle = self._get_selected_vehicle()
+        if not vehicle:
+            return
+        self.vo_scale_slider.blockSignals(True)
+        self.vo_scale_slider.setValue(value)
+        self.vo_scale_slider.blockSignals(False)
         overlay = self.config.get_vehicle_overlay(vehicle)
         self.config.set_vehicle_overlay(vehicle, value, overlay["offset_x"], overlay["offset_y"])
         self._update_overlay_preview()
