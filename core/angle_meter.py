@@ -64,7 +64,12 @@ class RawInputReader(QWidget):
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_DontShowOnScreen)
         self._delta_y = 0
+        self._injected_delta_y = 0
         self._registered = False
+
+    def inject_delta_y(self, value):
+        """热键注入垂直增量（上移负值，下移正值，和硬件增量一致）"""
+        self._injected_delta_y += value
 
     def register(self):
         dev = _RAWINPUTDEVICE()
@@ -102,9 +107,10 @@ class RawInputReader(QWidget):
                     self._delta_y += raw.mouse.lLastY
 
     def consume_delta_y(self):
-        """读取并清空垂直增量。上移返回负值，下移返回正值。"""
-        v = self._delta_y
+        """读取并清空垂直增量（硬件+热键注入合并）。上移返回负值，下移返回正值。"""
+        v = self._delta_y + self._injected_delta_y
         self._delta_y = 0
+        self._injected_delta_y = 0
         return v
 
 
@@ -396,17 +402,33 @@ class Calibrator(QObject):
             self._finish(cal)
 
     def _generate_from_endpoints(self, min_delta, max_delta):
-        """用全局校准曲线的相对角度位置，缩放到载具的总增量"""
+        """用全局校准曲线反查增量相对位置，复刻非线性形状到载具范围"""
         vehicle_total = max_delta - min_delta
-        global_min = self.global_cal.points[0][1]
-        global_max = self.global_cal.points[-1][1]
-        global_range = global_max - global_min
+        global_min_delta = self.global_cal.min_delta
+        global_max_delta = self.global_cal.max_delta
+        global_delta_range = global_max_delta - global_min_delta
+        if global_delta_range == 0:
+            # 兜底：线性插值
+            generated = []
+            for i in range(AngleCalibration.NUM_POINTS):
+                rel = i / (AngleCalibration.NUM_POINTS - 1)
+                veh_angle = self._min_angle + rel * (self._max_angle - self._min_angle)
+                veh_delta = min_delta + rel * vehicle_total
+                generated.append((round(veh_delta, 1), round(veh_angle, 1)))
+            return AngleCalibration(generated)
         generated = []
+        global_min_angle = self.global_cal.min_angle
+        global_max_angle = self.global_cal.max_angle
         for i in range(AngleCalibration.NUM_POINTS):
             global_angle = self.global_cal.points[i][1]
-            rel = (global_angle - global_min) / global_range
-            veh_angle = self._min_angle + rel * (self._max_angle - self._min_angle)
+            # 关键：用全局曲线反查该角度对应的真实增量（捕捉非线性）
+            global_delta_at_angle = self.global_cal.angle_to_delta(global_angle)
+            # 该增量在全局增量范围内的相对位置
+            rel = (global_delta_at_angle - global_min_delta) / global_delta_range
+            # 映射到载具增量范围
             veh_delta = min_delta + rel * vehicle_total
+            # 角度映射到载具范围（用角度比例）
+            veh_angle = self._min_angle + (global_angle - global_min_angle) / (global_max_angle - global_min_angle) * (self._max_angle - self._min_angle)
             generated.append((round(veh_delta, 1), round(veh_angle, 1)))
         return AngleCalibration(generated)
 
