@@ -102,6 +102,10 @@ class StateMachine(QObject):
         if new_index != old_index:
             self.magnification_changed.emit(new_index)
 
+    def refresh_overlay(self):
+        """强制刷新 Overlay（缩放偏移配置变化时调用，不改变状态）"""
+        self.magnification_changed.emit(self.current_magnification_index)
+
     def toggle_overlay(self):
         """切换Overlay显示/隐藏"""
         self._overlay_visible = not self._overlay_visible

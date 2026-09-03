@@ -595,8 +595,8 @@ class VehicleConfigTab(QWidget):
         if not use_vehicle:
             return
         effective = self.config.get_effective_overlay(vehicle, ammo, idx)
-        # 通过 state_machine 触发 overlay 更新
-        self.state.set_magnification_index(self.state.get_state().get("magnification_index", 0))
+        # 通过 state_machine 强制刷新 overlay（不改变状态）
+        self.state.refresh_overlay()
 
     def _on_bind_crosshair(self):
         from PyQt5.QtWidgets import QFileDialog
