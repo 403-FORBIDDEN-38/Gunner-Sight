@@ -9,7 +9,7 @@ from PyQt5.QtCore import Qt, QTimer
 
 from core.resource_manager import ResourceManager
 
-APP_VERSION = "V0.0140300068"
+APP_VERSION = "V0.0140300069"
 
 
 class InfoTab(QWidget):

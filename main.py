@@ -234,6 +234,9 @@ def _main():
         _di3 = time.perf_counter()
         window._setup_full_style(window._current_theme)
         print(f'[性能] 完整QSS 耗时={(time.perf_counter()-_di3)*1000:.0f}ms')
+        _di4 = time.perf_counter()
+        window._disable_control_focus()
+        print(f'[性能] 焦点策略 耗时={(time.perf_counter()-_di4)*1000:.0f}ms')
         window.overview_tab.refresh()
     QTimer.singleShot(0, _delayed_init)
 

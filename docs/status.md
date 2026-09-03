@@ -179,3 +179,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 额外优化: 第一个tab(OverviewTab)延迟创建到window.show后，MainWindow创建790ms->3ms
 - 实测: MainWindow创建3ms，第一个tab创建14ms，完整QSS 64ms
 - 版本: V0.0140300068
+
+### 修复 Unknown property focus 报错（已完成）
+- 根因: Qt QSS不支持focus属性，优化2中错误添加了focus:none/focus:clickfocus
+- 修复: 从QSS移除focus属性，恢复_disable_control_focus方法，改为异步执行（window.show后）
+- 实测: 焦点策略仅2ms，无Unknown property focus输出
+- 版本: V0.0140300069
