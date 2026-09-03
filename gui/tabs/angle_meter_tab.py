@@ -1,5 +1,6 @@
 """角度仪页：配置列表+关联载具、校准、使用、角度overlay。常闭零消耗。"""
 
+import ctypes
 from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame, QGridLayout,
     QGroupBox, QLabel, QCheckBox, QDoubleSpinBox, QPushButton,
@@ -13,6 +14,31 @@ from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
 from core.angle_meter import RawInputReader, AngleTracker, Calibrator, AngleCalibration
 from gui.widgets import HotkeyLineEdit, VehicleFilterWidget, OptimizedListWidget
+
+
+# SendInput 结构定义（模拟真实鼠标相对移动，使游戏炮管和角度仪示数同步）
+class _MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long), ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+class _INPUT(ctypes.Structure):
+    class _INPUT_UNION(ctypes.Union):
+        _fields_ = [("mi", _MOUSEINPUT)]
+    _anonymous_ = ("_input",)
+    _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT_UNION)]
+
+def _simulate_mouse_move(dy):
+    """模拟鼠标相对移动。dy: 上移负值，下移正值（和 Raw Input 一致）。
+    SendInput 插入的鼠标事件会被 Raw Input 捕获，使游戏和角度仪同步。"""
+    inp = _INPUT()
+    inp.type = 0  # INPUT_MOUSE
+    inp.mi.dx = 0
+    inp.mi.dy = dy
+    inp.mi.dwFlags = 0x0001  # MOUSEEVENTF_MOVE
+    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
 
 class AngleOverlay(QWidget):
@@ -780,15 +806,15 @@ class AngleMeterTab(QWidget):
 
     # === 热键微调（长按连续注入）===
     def _on_up_pressed(self):
-        """上移微调按下：立即注入1，启动定时器，0.5秒后加速。
-        根源：只在使用中(ACTIVE/PAUSED)注入，避免IDLE状态累积无效增量。"""
+        """上移微调按下：SendInput 模拟鼠标上移，启动定时器，0.5秒后加速。
+        根源：模拟真实鼠标移动，游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
             return
         if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         self._up_pressed = True
         self._up_accel = False
-        self.raw.inject_delta_y(-1)
+        _simulate_mouse_move(-1)
         if self._up_timer:
             self._up_timer.setInterval(50)
             self._up_timer.start()
@@ -805,7 +831,7 @@ class AngleMeterTab(QWidget):
         if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         step = 5 if self._up_accel else 1
-        self.raw.inject_delta_y(-step)
+        _simulate_mouse_move(-step)
 
     def _on_up_released(self):
         self._up_pressed = False
@@ -814,15 +840,15 @@ class AngleMeterTab(QWidget):
             self._up_timer.stop()
 
     def _on_down_pressed(self):
-        """下移微调按下：立即注入1，启动定时器，0.5秒后加速。
-        根源：只在使用中(ACTIVE/PAUSED)注入，避免IDLE状态累积无效增量。"""
+        """下移微调按下：SendInput 模拟鼠标下移，启动定时器，0.5秒后加速。
+        根源：模拟真实鼠标移动，游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
             return
         if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         self._down_pressed = True
         self._down_accel = False
-        self.raw.inject_delta_y(1)
+        _simulate_mouse_move(1)
         if self._down_timer:
             self._down_timer.setInterval(50)
             self._down_timer.start()
@@ -839,7 +865,7 @@ class AngleMeterTab(QWidget):
         if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         step = 5 if self._down_accel else 1
-        self.raw.inject_delta_y(step)
+        _simulate_mouse_move(step)
 
     def _on_down_released(self):
         self._down_pressed = False

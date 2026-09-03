@@ -101,7 +101,7 @@ class ConfigManager:
             "version": "1.0",
             "global_settings": {"scale": 100.0, "offset_x": 0, "offset_y": 0, "overlay_visible": True},
             "hotkeys": {
-                "toggle_overlay": {"key1": "f1", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+                "toggle_overlay": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
                 "cycle_magnification": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
                 "invert_colors": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
                 "reset_magnification": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
