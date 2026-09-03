@@ -382,6 +382,8 @@ class VehicleConfigTab(QWidget):
     # === 弹种 ===
     def _refresh_ammo_list(self):
         vehicle = self._get_selected_vehicle()
+        # 记录当前选中的弹种，重建后恢复
+        previously_selected = self._get_selected_ammo()
         self.ammo_list.blockSignals(True)
         self.ammo_list.clear()
         if vehicle:
@@ -390,6 +392,12 @@ class VehicleConfigTab(QWidget):
                 item.setData(Qt.UserRole, ammo)
                 self.ammo_list.addItem(item)
         self.ammo_list.blockSignals(False)
+        # 恢复之前选中的弹种（在 blockSignals(False) 之后，确保触发 currentItemChanged 刷新倍率）
+        if previously_selected:
+            for i in range(self.ammo_list.count()):
+                if self.ammo_list.item(i).data(Qt.UserRole) == previously_selected:
+                    self.ammo_list.setCurrentRow(i)
+                    break
 
     def _on_ammo_selected(self, current, _previous):
         self._refresh_mag_list()
@@ -434,6 +442,11 @@ class VehicleConfigTab(QWidget):
     def _refresh_mag_list(self, select_idx=None):
         vehicle = self._get_selected_vehicle()
         ammo = self._get_selected_ammo()
+        # 记录当前选中的倍率索引，重建后恢复（优先使用传入的 select_idx）
+        previously_selected_idx = None
+        item = self.mag_list.currentItem()
+        if item:
+            previously_selected_idx = item.data(Qt.UserRole)
         self.mag_list.blockSignals(True)
         self.mag_list.clear()
         if vehicle and ammo:
@@ -446,8 +459,10 @@ class VehicleConfigTab(QWidget):
                 item = QListWidgetItem(display)
                 item.setData(Qt.UserRole, i)
                 self.mag_list.addItem(item)
-        if select_idx is not None and 0 <= select_idx < self.mag_list.count():
-            self.mag_list.setCurrentRow(select_idx)
+        # 优先使用传入的 select_idx，没有则用自动恢复的 previously_selected_idx
+        target_idx = select_idx if select_idx is not None else previously_selected_idx
+        if target_idx is not None and 0 <= target_idx < self.mag_list.count():
+            self.mag_list.setCurrentRow(target_idx)
         self.mag_list.blockSignals(False)
         self._update_mag_detail()
 
