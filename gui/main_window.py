@@ -293,18 +293,15 @@ class MainWindow(QMainWindow):
         if index not in self._tab_cache:
             try:
                 widget = self._tab_factories[index]()
+                self._tab_cache[index] = widget
+                self.tab_stack.insertWidget(index, widget)
+                self._connect_tab_signals(index, widget)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 widget = QLabel(f"页面加载失败: {e}")
-            self._tab_cache[index] = widget
-            self.tab_stack.insertWidget(index, widget)
-            if hasattr(widget, 'connect_signals') or index in (0, 1, 2, 3, 5, 6):
-                try:
-                    self._connect_tab_signals(index, widget)
-                except Exception:
-                    import traceback
-                    traceback.print_exc()
+                self._tab_cache[index] = widget
+                self.tab_stack.insertWidget(index, widget)
         return self._tab_cache[index]
 
     # P0-1: property懒加载，兼容 self.rangefinder_tab 等属性访问

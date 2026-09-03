@@ -161,3 +161,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - P1-2: tab创建加异常保护 - _ensure_tab中try-except包裹widget创建，失败时显示错误提示
 - 预期: MainWindow创建908ms->150-250ms，启动总耗时1315ms->300-450ms
 - 版本: V0.0140300066
+
+### 建队宏页面崩溃修复（已完成）
+- 根因: squad_macro_tab._build_ui中setChecked触发_on_enable_changed→hotkey.reload_hotkeys()，__init__阶段热键未初始化导致崩溃
+- 修复: enable_cb/interval_spin/locked_cb初始值设置用blockSignals包裹，避免__init__阶段触发信号
+- 修复: _ensure_tab异常保护逻辑修正，widget创建失败时不尝试连接信号
+- 版本: V0.0140300067
