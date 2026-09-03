@@ -7,7 +7,7 @@ GS 接入方式:
     raw = RawInputReader()
     raw.register()
     tracker = AngleTracker(raw)
-    calibrator = Calibrator(raw, AngleCalibration.FACTORY)
+    calibrator = Calibrator(raw, global_cal)  # global_cal 由用户全局校准提供
 
     # 设置当前载具配置（由 GS ConfigManager 提供）
     tracker.set_vehicle_config(min_angle=-20, max_angle=30, calibration=None)
@@ -63,6 +63,7 @@ class RawInputReader(QWidget):
         super().__init__()
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_DontShowOnScreen)
+        self.setAttribute(Qt.WA_NativeWindow)  # 确保原生窗口创建，接收 WM_INPUT
         self._delta_y = 0
         self._injected_delta_y = 0
         self._registered = False
@@ -72,11 +73,13 @@ class RawInputReader(QWidget):
         self._injected_delta_y += value
 
     def register(self):
+        # 确保原生窗口已创建（winId() 会强制创建）
+        hwnd = int(self.winId())
         dev = _RAWINPUTDEVICE()
         dev.usUsagePage = 1
         dev.usUsage = 2
         dev.dwFlags = 0x00000100  # RIDEV_INPUTSINK
-        dev.hwndTarget = int(self.winId())
+        dev.hwndTarget = hwnd
         ok = user32.RegisterRawInputDevices(
             ctypes.byref(dev), 1, ctypes.sizeof(dev))
         self._registered = bool(ok)
@@ -120,18 +123,13 @@ class RawInputReader(QWidget):
 class AngleCalibration:
     """不可变校准曲线：增量→角度的分段线性映射。"""
     NUM_POINTS = 7
-    # 出厂全局校准（用户实测，偶数小数位）
-    FACTORY = ((0.0, -80.0), (153.0, -53.2), (305.0, -26.6), (457.0, 0.0),
-               (609.0, 26.6), (761.0, 53.2), (923.0, 80.0))
-    # 全局校准目标角度
+    # 全局校准目标角度（功能参数，非用户数据）
     GLOBAL_TARGETS = [-80.0, -53.2, -26.6, 0.0, 26.6, 53.2, 80.0]
 
-    def __init__(self, points=None):
-        if points is None:
-            points = self.FACTORY
+    def __init__(self, points):
+        if points is None or len(points) < 2:
+            raise ValueError("校准曲线必须提供至少2点（空房子原则：无出厂兜底）")
         self._points = tuple((float(d), float(a)) for d, a in points)
-        if len(self._points) < 2:
-            raise ValueError("校准曲线至少需要2点")
 
     @property
     def points(self):
@@ -189,7 +187,7 @@ class AngleCalibration:
     @classmethod
     def from_list(cls, lst):
         if not lst or len(lst) < 2:
-            return cls()
+            return None
         return cls([(float(p[0]), float(p[1])) for p in lst])
 
 
@@ -239,12 +237,15 @@ class AngleTracker(QObject):
 
     @property
     def active_calibration(self):
-        return self._calibration if self._calibration else AngleCalibration()
+        return self._calibration  # 可能为 None（空房子原则：无出厂兜底）
 
     def start(self):
         if self.state != self.STATE_IDLE:
             return
         cal = self.active_calibration
+        if cal is None:
+            self.log.emit("[角度仪] 错误：无校准曲线，请先做全局校准或载具校准")
+            return
         # 确定基准增量：载具最低角对应的绝对增量
         if self._calibration is None:
             # 使用全局校准：载具范围是全局的子区间
@@ -284,6 +285,8 @@ class AngleTracker(QObject):
         if self.state != self.STATE_ACTIVE:
             return
         cal = self.active_calibration
+        if cal is None:
+            return
         zero_delta = cal.angle_to_delta(0.0)
         # 调整 cumulative 使当前角度=0
         current_abs = self._base_delta + self._cumulative_delta
@@ -309,7 +312,10 @@ class AngleTracker(QObject):
         elif abs_delta >= self._max_abs:
             self._cumulative_delta = self._max_abs - self._base_delta
             abs_delta = self._max_abs
-        angle = self.active_calibration.delta_to_angle(abs_delta)
+        cal = self.active_calibration
+        if cal is None:
+            return
+        angle = cal.delta_to_angle(abs_delta)
         if abs(angle - self.current_angle) > 0.01:
             self.current_angle = angle
             self.angle_changed.emit(angle)
@@ -336,7 +342,7 @@ class Calibrator(QObject):
     def __init__(self, raw_reader, global_cal=None):
         super().__init__()
         self.raw = raw_reader
-        self.global_cal = global_cal if global_cal else AngleCalibration()
+        self.global_cal = global_cal  # 可能为 None（用户未做全局校准时）
         self._mode = None
         self._step = 0
         self._min_angle = -80.0
@@ -402,8 +408,18 @@ class Calibrator(QObject):
             self._finish(cal)
 
     def _generate_from_endpoints(self, min_delta, max_delta):
-        """用全局校准曲线反查增量相对位置，复刻非线性形状到载具范围"""
+        """用全局校准曲线反查增量相对位置，复刻非线性形状到载具范围。
+        无全局校准时退化为线性插值。"""
         vehicle_total = max_delta - min_delta
+        if self.global_cal is None:
+            # 无全局校准：线性插值兜底
+            generated = []
+            for i in range(AngleCalibration.NUM_POINTS):
+                rel = i / (AngleCalibration.NUM_POINTS - 1)
+                veh_angle = self._min_angle + rel * (self._max_angle - self._min_angle)
+                veh_delta = min_delta + rel * vehicle_total
+                generated.append((round(veh_delta, 1), round(veh_angle, 1)))
+            return AngleCalibration(generated)
         global_min_delta = self.global_cal.min_delta
         global_max_delta = self.global_cal.max_delta
         global_delta_range = global_max_delta - global_min_delta
