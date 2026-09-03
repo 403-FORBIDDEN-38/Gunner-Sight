@@ -144,7 +144,7 @@ class HotkeyManager(QObject):
                     if key:
                         self._register_hotkey(key, trigger, self._on_toggle_ui, f"toggle_ui_{slot}")
 
-            # 19.3: 只注册当前载具的弹种热键（按载具维度存储）
+            # 只注册当前载具的弹种热键（按载具维度存储）
             current_vehicle = self.config.get_current_state().get("vehicle")
             if current_vehicle:
                 ammo_hotkeys = self.config.get_all_hotkeys().get("ammo_types", {}).get(current_vehicle, {})
@@ -183,7 +183,7 @@ class HotkeyManager(QObject):
                 ]
                 for action, callback in am_actions:
                     hk = am_hks.get(action, {})
-                    # A3: 统一双键结构，角度仪只用 key1（单键绑定）
+                    # 统一双键结构，角度仪只用 key1（单键绑定）
                     key = hk.get("key1", "")
                     trigger = hk.get("trigger1", "keydown")
                     if key:

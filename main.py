@@ -34,7 +34,7 @@ def _request_admin():
             if len(sys.argv) > 1:
                 params += " " + " ".join(f'"{a}"' for a in sys.argv[1:])
             ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, script_dir, 1)
-        # D7: ShellExecuteW 返回值 <=32 表示失败（含用户拒绝 UAC），给明确提示
+        # ShellExecuteW 返回值 <=32 表示失败（含用户拒绝 UAC），给明确提示
         if ret <= 32:
             print("[Main] 需要管理员权限才能运行（BlockInput / UI 自动化），用户拒绝或提权失败，程序退出")
     except Exception as e:
@@ -160,7 +160,7 @@ def main():
     try:
         _main()
     except Exception:
-        # D2 加固：崩溃日志必须落到可写目录。
+        # 崩溃日志必须落到可写目录。
         # frozen 时直接取 exe 同级（不依赖 config 目录是否已建，首次启动崩溃也能落盘）；
         # 开发环境取脚本同级。
         if getattr(sys, 'frozen', False):

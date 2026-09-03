@@ -4,7 +4,7 @@
 """
 import time
 import ctypes
-from core.win32_utils import user32  # T3: 统一 Win32 入口
+from core.win32_utils import user32  # 统一 Win32 入口
 import threading
 
 _user32 = user32
@@ -34,13 +34,13 @@ def _press(vk, delay=0.015):
 def _paste():
     """Ctrl+V 粘贴"""
     _key_down(VK_CONTROL)
-    time.sleep(0.01)
+    time.sleep
     _press(VK_V, 0.01)
-    time.sleep(0.01)
+    time.sleep
     _key_up(VK_CONTROL)
 
 
-# T6: 模块级 WNDENUMPROC 回调类型，避免每次 find_game_window 调用时重复创建
+# 模块级 WNDENUMPROC 回调类型，避免每次 find_game_window 调用时重复创建
 WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
 
@@ -68,7 +68,7 @@ def activate_window(hwnd):
         return False
     try:
         _user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-        time.sleep(0.05)
+        time.sleep
         _user32.SetForegroundWindow(hwnd)
         return True
     except Exception:
@@ -78,9 +78,9 @@ def activate_window(hwnd):
 def alt_tab():
     """模拟 Alt+Tab 切换到下一个窗口"""
     _key_down(0x12)  # VK_MENU (Alt)
-    time.sleep(0.02)
+    time.sleep
     _press(0x09, 0.02)  # Tab
-    time.sleep(0.02)
+    time.sleep
     _key_up(0x12)
 
 
@@ -128,15 +128,15 @@ class SquadMacro:
             # 1. ~ 唤出控制台
             if self._stop_event.is_set(): return
             _press(VK_OEM3, 0.02)
-            if self._stop_event.wait(0.15): return
+            if self._stop_event.wait: return
             # 2. ~ 展开控制台
             if self._stop_event.is_set(): return
             _press(VK_OEM3, 0.02)
-            if self._stop_event.wait(0.15): return
+            if self._stop_event.wait: return
             # 3. 粘贴命令（剪贴板已由调用者在主线程设置）
-            if self._stop_event.wait(0.05): return
+            if self._stop_event.wait: return
             _paste()
-            if self._stop_event.wait(0.05): return
+            if self._stop_event.wait: return
             # 4. 第一次回车提交
             if self._stop_event.is_set(): return
             _press(VK_RETURN, 0.015)
@@ -145,7 +145,7 @@ class SquadMacro:
             # 5. 循环 ↑ 回车（等待地图加载后建队成功）
             while not self._stop_event.is_set():
                 _press(VK_UP, 0.015)
-                if self._stop_event.wait(0.05): break
+                if self._stop_event.wait: break
                 _press(VK_RETURN, 0.015)
                 if self._stop_event.wait(interval): break
         except Exception as e:

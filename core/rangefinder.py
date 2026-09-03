@@ -5,7 +5,7 @@ BlockInput 防止鼠标干扰，keybd_event 模拟按键
 """
 import time
 import ctypes
-from core.win32_utils import user32  # T3: 统一 Win32 入口
+from core.win32_utils import user32  # 统一 Win32 入口
 from ctypes import wintypes
 import threading
 from PIL import Image
@@ -81,13 +81,13 @@ def _execute_steps(steps, bx, by):
             vk = _VK_MAP.get(step.get("key", "").lower())
             if vk is not None:
                 _user32.keybd_event(vk, 0, 0, 0)
-                time.sleep(0.015)
+                time.sleep
                 _user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
         elif action == "click":
             _user32.SetCursorPos(int(bx), int(by))
-            time.sleep(0.01)
+            time.sleep
             _user32.mouse_event(0x0002, 0, 0, 0, 0)
-            time.sleep(0.015)
+            time.sleep
             _user32.mouse_event(0x0004, 0, 0, 0, 0)
 
 
@@ -138,9 +138,9 @@ class RangefinderEngine:
 
     def _click(self, x, y):
         _user32.SetCursorPos(int(x), int(y))
-        time.sleep(0.015)
+        time.sleep
         _user32.mouse_event(0x0002, 0, 0, 0, 0)
-        time.sleep(0.015)
+        time.sleep
         _user32.mouse_event(0x0004, 0, 0, 0, 0)
 
     def _press_key(self, key_name):
@@ -148,7 +148,7 @@ class RangefinderEngine:
         if vk is None:
             return
         _user32.keybd_event(vk, 0, 0, 0)
-        time.sleep(0.015)
+        time.sleep
         _user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
     def _run_steps(self, steps):
@@ -188,7 +188,7 @@ class RangefinderEngine:
                 if not self._abort:
                     self.toggle_ui()  # 显示UI
                 if not self._abort:
-                    time.sleep(0.01)  # 动作间容错
+                    time.sleep  # 动作间容错
                 if not self._abort:
                     captured1 = self.capture_roi()
                 # 第二区域（如果启用）
@@ -197,7 +197,7 @@ class RangefinderEngine:
                     if roi2.get("enabled", False):
                         captured2 = self.capture_roi(roi2)
                 if not self._abort:
-                    time.sleep(0.01)  # 动作间容错
+                    time.sleep  # 动作间容错
                 if not self._abort:
                     self.toggle_ui()  # 隐藏UI
             finally:

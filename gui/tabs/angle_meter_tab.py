@@ -581,13 +581,13 @@ class AngleMeterTab(QWidget):
         hks = self.config.get_angle_meter_hotkeys()
         for action, widget in [("toggle", self.hk_toggle), ("pause", self.hk_pause),
                                ("calibrate", self.hk_calibrate), ("reset", self.hk_reset)]:
-            # A3: 统一双键结构，角度仪 UI 只用 key1（单键绑定）
+            # 统一双键结构，角度仪 UI 只用 key1（单键绑定）
             key = hks.get(action, {}).get("key1", "")
             widget._key = key
             widget.setText(HotkeyManager.get_key_name(key) if key else "")
 
     def _on_hotkey_captured(self, action, key):
-        # A3: 统一双键结构，角度仪只用 slot=1（单键绑定）
+        # 统一双键结构，角度仪只用 slot=1（单键绑定）
         self.config.set_angle_meter_hotkey(action, key, "keydown", slot=1)
         self.hotkey.reload_hotkeys()
 

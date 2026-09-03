@@ -75,11 +75,11 @@ class ConfigManager:
         self._migrate_ammo_hotkeys()
         # 数据迁移：旧版 "xcj" 配置段 → 新版 "rangefinder" 段（批次2 全局改名）
         self._migrate_xcj_to_rangefinder()
-        # 数据迁移：角度仪热键旧单键格式 → 新双键格式（批次2 A3）
+        # 数据迁移：角度仪热键旧单键格式 → 新双键格式
         self._migrate_angle_meter_hotkeys()
-        # 数据迁移：弹种热键从全局改为按载具维度（19.3）
+        # 数据迁移：弹种热键从全局改为按载具维度
         self._migrate_ammo_hotkeys_vehicle_scope()
-        # D4: 确保 angle_meter 段存在（旧 config.json 可能没有此段），内存中补全，不写盘
+        # 确保 angle_meter 段存在（旧 config.json 可能没有此段），内存中补全，不写盘
         self._ensure_angle_meter_defaults()
 
     def _get_minimal_skeleton(self) -> Dict:
@@ -156,7 +156,7 @@ class ConfigManager:
             self.request_save()
             print("[ConfigManager] 配置迁移: xcj → rangefinder 段已迁移")
         elif old_seg is not None and new_seg is not None:
-            # 16.1: 新段 profiles 为空且旧段有数据 → 搬入旧段数据（禁止无脑删旧）
+            # 新段 profiles 为空且旧段有数据 → 搬入旧段数据（禁止无脑删旧）
             if not new_seg.get("profiles") and old_seg.get("profiles"):
                 new_seg["profiles"] = old_seg["profiles"]
                 for k in ("enabled", "toggle_ui_enabled", "current_profile", "hotkeys"):
@@ -635,7 +635,7 @@ class ConfigManager:
             "magnifications": []
         }
 
-        # 19.3: 按当前载具内弹种序号预填（第N个弹种→数字N），超过9留空
+        # 按当前载具内弹种序号预填（第N个弹种→数字N），超过9留空
         v_hks = self._config.setdefault("hotkeys", {}).setdefault("ammo_types", {}).setdefault(vehicle_name, {})
         existing_count = len([k for k in v_hks if k != ammo_name])
         digit = str(existing_count + 1) if existing_count < 9 else ""
@@ -654,7 +654,7 @@ class ConfigManager:
             return False
 
         del vehicle["ammo_types"][ammo_name]
-        # 19.3: 同步删除该载具下的弹种热键
+        # 同步删除该载具下的弹种热键
         v_hks = self._config.get("hotkeys", {}).get("ammo_types", {}).get(vehicle_name, {})
         if ammo_name in v_hks:
             del v_hks[ammo_name]
@@ -682,7 +682,7 @@ class ConfigManager:
         ammo["name"] = new_name
         vehicle["ammo_types"][new_name] = ammo
 
-        # 19.3: 同步重命名该载具下的热键
+        # 同步重命名该载具下的热键
         v_hks = self._config.get("hotkeys", {}).get("ammo_types", {}).get(vehicle_name, {})
         if old_name in v_hks:
             v_hks[new_name] = v_hks.pop(old_name)
@@ -960,7 +960,7 @@ class ConfigManager:
     # --- 配置列表（武器站级，一个配置可关联多个载具）---
 
     def get_angle_meter_profiles(self) -> Dict[str, Dict]:
-        # D4: 纯读取，无写副作用。默认值由最小骨架 + _ensure_angle_meter_defaults() 在初始化时确保（内存中，不写盘）。
+        # 纯读取，无写副作用。默认值由最小骨架 + _ensure_angle_meter_defaults() 在初始化时确保（内存中，不写盘）。
         return self._config.get("angle_meter", {}).get("profiles", {})
 
     def get_angle_meter_profile(self, name: str) -> Dict:
@@ -1023,7 +1023,7 @@ class ConfigManager:
     # --- 热键（单键：toggle=开始/停止, pause=暂离, calibrate=校准确认, reset=归零）---
 
     def get_angle_meter_hotkeys(self) -> Dict:
-        # A3: 统一为双键结构（key1/trigger1/key2/trigger2），与全局热键一致；角度仪 UI 只用 key1
+        # 统一为双键结构（key1/trigger1/key2/trigger2），与全局热键一致；角度仪 UI 只用 key1
         return self._config.get("angle_meter", {}).get("hotkeys", {
             "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
             "pause": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
@@ -1032,7 +1032,7 @@ class ConfigManager:
         })
 
     def set_angle_meter_hotkey(self, action: str, key: str, trigger: str = "keydown", slot: int = 1):
-        # A3: 统一为双键结构，slot=1 或 2；角度仪 UI 只用 slot=1
+        # 统一为双键结构，slot=1 或 2；角度仪 UI 只用 slot=1
         hk = self._config.setdefault("angle_meter", {}).setdefault("hotkeys", {}).setdefault(action, {
             "key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"
         })

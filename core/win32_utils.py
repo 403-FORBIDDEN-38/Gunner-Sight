@@ -4,7 +4,7 @@ Win32 窗口工具函数
 import ctypes
 
 _user32 = ctypes.windll.user32
-user32 = _user32  # T3: 公共导出，所有模块统一从此处导入，禁止各自 ctypes.windll.user32 / WinDLL
+user32 = _user32  # 公共导出，所有模块统一从此处导入，禁止各自 ctypes.windll.user32 / WinDLL
 
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000

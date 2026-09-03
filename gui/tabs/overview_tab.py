@@ -78,7 +78,7 @@ class OverviewTab(QWidget):
         self.scale_slider.setValue(100)
         self.scale_spin = QDoubleSpinBox()
         self.scale_spin.setRange(1.0, 1000.0)
-        self.scale_spin.setValue(100.0)
+        self.scale_spin.setValue
         self.scale_spin.setSuffix(" %")
         self.scale_spin.setDecimals(1)
         self.scale_minus_btn = QPushButton("-"); self.scale_minus_btn.setFixedWidth(30)

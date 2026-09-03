@@ -23,7 +23,7 @@ GS 接入方式:
     calibrator.done.connect(lambda cal: tracker.set_calibration(cal))
 """
 import ctypes
-from core.win32_utils import user32  # T3: 统一 Win32 入口
+from core.win32_utils import user32  # 统一 Win32 入口
 import ctypes.wintypes
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
@@ -278,12 +278,12 @@ class AngleTracker(QObject):
         if self.state != self.STATE_ACTIVE:
             return
         cal = self.active_calibration
-        zero_delta = cal.angle_to_delta(0.0)
+        zero_delta = cal.angle_to_delta
         # 调整 cumulative 使当前角度=0
         current_abs = self._base_delta + self._cumulative_delta
         self._cumulative_delta += (zero_delta - current_abs)
         self.current_angle = 0.0
-        self.angle_changed.emit(0.0)
+        self.angle_changed.emit
         self.log.emit("[角度仪] 归零")
 
 
