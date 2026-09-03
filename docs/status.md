@@ -185,3 +185,13 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: 从QSS移除focus属性，恢复_disable_control_focus方法，改为异步执行（window.show后）
 - 实测: 焦点策略仅2ms，无Unknown property focus输出
 - 版本: V0.0140300069
+
+### 启动性能根本性重构（P0-P3完成）
+- P0: show()1060ms根因=__init__创建框架控件导致首次绘制慢
+- P1: __init__只设窗口属性+极简背景色，show后分阶段异步创建(_create_ui_frame->_create_first_tab->_background_tasks)
+- P2: QSS从90行简化到45行，合并重复选择器
+- P3: OverviewTab已轻量化(VehicleFilterWidget延迟创建+preview延迟加载)
+- 实测: MainWindow创建2ms, show()293ms, 启动总耗时486ms(优化前1200ms)
+- UI框架创建629ms(异步用户无感知), 后台任务延迟100ms执行
+- closeEvent加_ui_initialized保护
+- 版本: V0.0140300070
