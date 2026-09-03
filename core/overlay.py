@@ -253,8 +253,8 @@ class OverlayRenderer:
         self.config = config_manager
         self.state = state_machine
 
-        # 创建Overlay窗口
-        self.overlay = OverlayWindow()
+        # P0-2: Overlay窗口延迟创建，__init__只保存引用，不创建窗口
+        self.overlay = None
 
         # 连接状态变化信号（细粒度：倍率/弹种变化才更新准星，避免全量刷新）
         self.state.magnification_changed.connect(self._on_state_changed)
@@ -262,22 +262,27 @@ class OverlayRenderer:
         self.state.overlay_settings_changed.connect(self._on_state_changed)
         self.state.overlay_toggled.connect(self._on_overlay_toggled)
 
-        # 初始化
-        self._update_crosshair()
-        self._update_scale()
-        self._update_offset()
-
-        # 设置初始可见性
-        self.overlay.set_visible(self.state.overlay_visible)
+    def _ensure_overlay(self):
+        """P0-2: 懒加载创建Overlay窗口，创建后同步所有状态"""
+        if not self.overlay:
+            self.overlay = OverlayWindow()
+            self._update_crosshair()
+            self._update_scale()
+            self._update_offset()
+            self.overlay.set_visible(self.state.overlay_visible)
+        return self.overlay
 
 
     def _on_state_changed(self):
         """状态变化处理：更新准星图片 + 缩放偏移"""
+        self._ensure_overlay()
         self._update_crosshair()
         self._update_effective_overlay()
 
     def _update_effective_overlay(self):
         """根据当前载具/弹种/倍率更新缩放偏移（二选一判断在 config 层）"""
+        if not self.overlay:
+            return
         vehicle = self.state.current_vehicle
         ammo = self.state.current_ammo_type
         mag_idx = self.state.current_magnification_index
@@ -289,10 +294,13 @@ class OverlayRenderer:
 
     def _on_overlay_toggled(self, visible: bool):
         """Overlay显示状态变化"""
+        self._ensure_overlay()
         self.overlay.set_visible(visible)
 
     def _update_crosshair(self):
         """更新准星图片（路径去重：路径不变时跳过，避免载具切换时重复重绘）"""
+        if not self.overlay:
+            return
         crosshair_path = self.state.get_current_crosshair_path() or ""
         if crosshair_path == self.overlay.current_path:
             return
@@ -300,11 +308,15 @@ class OverlayRenderer:
 
     def _update_scale(self):
         """更新缩放比例"""
+        if not self.overlay:
+            return
         scale = self.config.get_global_scale()
         self.overlay.set_scale(scale)
 
     def _update_offset(self):
         """更新偏移量"""
+        if not self.overlay:
+            return
         offset_x = self.config.get_global_offset_x()
         offset_y = self.config.get_global_offset_y()
         self.overlay.set_offset(offset_x, offset_y)
@@ -312,11 +324,13 @@ class OverlayRenderer:
     def update_scale(self, scale: float):
         """更新全局缩放"""
         self.config.set_global_scale(scale)
+        self._ensure_overlay()
         self.overlay.set_scale(scale)
 
     def update_offset(self, offset_x: int, offset_y: int):
         """更新全局偏移（合并写盘，避免两次IO）"""
         self.config.set_global_offset(offset_x, offset_y)
+        self._ensure_overlay()
         self.overlay.set_offset(offset_x, offset_y)
 
     def show(self):
@@ -333,6 +347,7 @@ class OverlayRenderer:
 
     def refresh(self):
         """强制刷新Overlay"""
+        self._ensure_overlay()
         self._update_crosshair()
         self._update_scale()
         self._update_offset()
@@ -340,21 +355,25 @@ class OverlayRenderer:
 
     def toggle_invert_colors(self) -> bool:
         """切换准星反色，返回新状态"""
+        self._ensure_overlay()
         return self.overlay.toggle_invert_colors()
 
     def set_invert_colors(self, invert: bool):
         """设置准星反色"""
+        self._ensure_overlay()
         self.overlay.set_invert_colors(invert)
 
     @property
     def invert_colors(self) -> bool:
         """当前是否反色"""
+        self._ensure_overlay()
         return self.overlay.invert_colors
 
     def update_screen_geometry(self):
         """更新屏幕几何信息"""
+        self._ensure_overlay()
         self.overlay.update_screen_geometry()
 
     def get_overlay_widget(self) -> QWidget:
         """获取Overlay窗口部件"""
-        return self.overlay
+        return self._ensure_overlay()

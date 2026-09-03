@@ -55,9 +55,9 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._apply_theme(self._current_theme)
 
-        # 启动刷新：概览页 + 数显模块（数显热键需启动时注册，不依赖进入导航页）
+        # 启动刷新：概览页（第一个tab已创建）+ 数显模块（懒加载创建后刷新）
         self.overview_tab.refresh()
-        self.rangefinder_tab.refresh()
+        self._ensure_tab(3).refresh()  # rangefinder_tab: 数显热键需启动时注册
 
     # ==================== 主题 ====================
 
@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
         armor_btn = QPushButton("装甲与图鉴\n需科学上网")
         armor_btn.setObjectName("link_btn")
         armor_btn.setCursor(Qt.PointingHandCursor)
+        armor_btn.setFixedHeight(36)
         armor_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://squad-armor.com/vehicles")))
         nav_col_layout.addWidget(armor_btn)
 
@@ -259,30 +260,28 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(content_with_nav, 1)
         main_layout.addWidget(nav_container)
 
-        self._nav_pages = []
+        self._nav_pages = ["全局设置", "载具配置", "热键设置", "信息数显", "角度仪", "建队宏", "资源库", "信息"]
         self.nav_list.currentRowChanged.connect(self._on_nav_changed)
 
-        # 创建所有 tab
-        self.overview_tab = OverviewTab(config=self.config, state=self.state,
-                                        hotkey=self.hotkey, resources=self.resources,
-                                        overlay=self.overlay)
-        self.vehicle_tab = VehicleConfigTab(config=self.config, state=self.state,
-                                            resources=self.resources)
-        self.hotkey_tab = HotkeyTab(config=self.config, state=self.state, hotkey=self.hotkey)
-        self.rangefinder_tab = RangefinderTab(config=self.config, hotkey=self.hotkey)
-        self.angle_meter_tab = AngleMeterTab(config=self.config, hotkey=self.hotkey)
-        self.squad_macro_tab = SquadMacroTab(config=self.config, hotkey=self.hotkey)
-        self.resource_tab = ResourceTab(config=self.config, resources=self.resources)
-        self.info_tab = InfoTab(resources=self.resources)
+        # P0-1: Tab懒加载 - 工厂映射，首次访问时创建
+        self._tab_factories = {
+            0: lambda: OverviewTab(config=self.config, state=self.state, hotkey=self.hotkey, resources=self.resources, overlay=self.overlay),
+            1: lambda: VehicleConfigTab(config=self.config, state=self.state, resources=self.resources),
+            2: lambda: HotkeyTab(config=self.config, state=self.state, hotkey=self.hotkey),
+            3: lambda: RangefinderTab(config=self.config, hotkey=self.hotkey),
+            4: lambda: AngleMeterTab(config=self.config, hotkey=self.hotkey),
+            5: lambda: SquadMacroTab(config=self.config, hotkey=self.hotkey),
+            6: lambda: ResourceTab(config=self.config, resources=self.resources),
+            7: lambda: InfoTab(resources=self.resources),
+        }
+        self._tab_cache = {}  # index -> widget
 
-        self._add_page(self.overview_tab, "全局设置")
-        self._add_page(self.vehicle_tab, "载具配置")
-        self._add_page(self.hotkey_tab, "热键设置")
-        self._add_page(self.rangefinder_tab, "信息数显")
-        self._add_page(self.angle_meter_tab, "角度仪")
-        self._add_page(self.squad_macro_tab, "建队宏")
-        self._add_page(self.resource_tab, "资源库")
-        self._add_page(self.info_tab, "信息")
+        # nav_list添加所有导航项（用户能看到所有导航项）
+        for name in self._nav_pages:
+            self.nav_list.addItem(name)
+
+        # 只创建第一个tab
+        self._ensure_tab(0)
 
         # 初始化：选中第一页（触发 _on_nav_changed 切换 tab_stack + 更新翻页按钮）
         self.nav_list.setCurrentRow(0)
@@ -291,12 +290,50 @@ class MainWindow(QMainWindow):
         self._disable_control_focus()
         QApplication.instance().installEventFilter(self)
 
-    def _add_page(self, widget, name):
-        self._nav_pages.append(name)
-        self.tab_stack.addWidget(widget)
-        self.nav_list.addItem(name)
+    def _ensure_tab(self, index):
+        """P0-1: 懒加载创建tab，创建后连接该tab特有的信号"""
+        if index not in self._tab_cache:
+            widget = self._tab_factories[index]()
+            self._tab_cache[index] = widget
+            self.tab_stack.insertWidget(index, widget)
+            self._connect_tab_signals(index, widget)
+        return self._tab_cache[index]
+
+    # P0-1: property懒加载，兼容 self.rangefinder_tab 等属性访问
+    @property
+    def overview_tab(self):
+        return self._ensure_tab(0)
+
+    @property
+    def vehicle_tab(self):
+        return self._ensure_tab(1)
+
+    @property
+    def hotkey_tab(self):
+        return self._ensure_tab(2)
+
+    @property
+    def rangefinder_tab(self):
+        return self._ensure_tab(3)
+
+    @property
+    def angle_meter_tab(self):
+        return self._ensure_tab(4)
+
+    @property
+    def squad_macro_tab(self):
+        return self._ensure_tab(5)
+
+    @property
+    def resource_tab(self):
+        return self._ensure_tab(6)
+
+    @property
+    def info_tab(self):
+        return self._ensure_tab(7)
 
     def _on_nav_changed(self, index):
+        self._ensure_tab(index)
         self.tab_stack.setCurrentIndex(index)
         self._update_page_nav_buttons(index)
 
@@ -345,29 +382,32 @@ class MainWindow(QMainWindow):
         # 顶栏
         self.overlay_toggle_btn.toggled.connect(self._on_overlay_toggle)
 
-        # 概览页
-        self.overview_tab.connect_signals(
-            on_vehicle_changed=self._on_quick_vehicle_changed,
-            on_ammo_changed=self.state.set_ammo_type,
-            on_preview_scale=self._on_preview_scale)
-
-        # 热键页
-        self.hotkey_tab.connect_signals(on_global_hotkey_changed=self._on_global_hotkey_changed)
-
-        # 其他 tab
-        self.vehicle_tab.connect_signals()
-        self.vehicle_tab.data_changed.connect(self.overview_tab.refresh_vehicle_list)
-        self.resource_tab.connect_signals()
-
-        # 热键管理器信号
+        # 热键管理器全局信号（不依赖tab）
         self.hotkey.toggle_overlay_triggered.connect(self.state.toggle_overlay)
         self.hotkey.cycle_magnification_triggered.connect(self.state.cycle_magnification)
         self.hotkey.invert_colors_triggered.connect(self.overlay.toggle_invert_colors)
         self.hotkey.reset_magnification_triggered.connect(self.state.reset_magnification)
         self.hotkey.ammo_switch_triggered.connect(self.state.set_ammo_type)
-        self.hotkey.rangefinder_measure_triggered.connect(self.rangefinder_tab.on_measure_hotkey)
-        self.hotkey.toggle_ui_triggered.connect(self.rangefinder_tab.on_toggle_ui_hotkey)
-        self.hotkey.squad_macro_triggered.connect(self.squad_macro_tab.on_hotkey)
+
+    def _connect_tab_signals(self, index, widget):
+        """P0-1: tab创建时连接该tab特有的信号"""
+        if index == 0:  # overview
+            widget.connect_signals(
+                on_vehicle_changed=self._on_quick_vehicle_changed,
+                on_ammo_changed=self.state.set_ammo_type,
+                on_preview_scale=self._on_preview_scale)
+        elif index == 1:  # vehicle
+            widget.connect_signals()
+            widget.data_changed.connect(self.overview_tab.refresh_vehicle_list)
+        elif index == 2:  # hotkey
+            widget.connect_signals(on_global_hotkey_changed=self._on_global_hotkey_changed)
+        elif index == 3:  # rangefinder
+            self.hotkey.rangefinder_measure_triggered.connect(widget.on_measure_hotkey)
+            self.hotkey.toggle_ui_triggered.connect(widget.on_toggle_ui_hotkey)
+        elif index == 5:  # squad_macro
+            self.hotkey.squad_macro_triggered.connect(widget.on_hotkey)
+        elif index == 6:  # resource
+            widget.connect_signals()
 
     # ==================== 跨页回调 ====================
 
@@ -426,35 +466,56 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
+        import time
+        import traceback as _tb
         _t0 = time.perf_counter()
-        # 先立即隐藏所有窗口（用户感知到程序立即关闭）
-        self.hide()
-        if self.rangefinder_tab.rangefinder_overlay:
-            self.rangefinder_tab.rangefinder_overlay.hide()
-        if self.rangefinder_tab.rangefinder_overlay2:
-            self.rangefinder_tab.rangefinder_overlay2.hide()
-        if self.overlay:
-            self.overlay.hide()
-        print(f"[性能] 关闭-窗口隐藏 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
-        # 后台执行清理（停止线程、钩子、释放资源）
-        _t1 = time.perf_counter()
-        self.rangefinder_tab.shutdown()
-        print(f"[性能] 关闭-数显模块清理 耗时={(time.perf_counter()-_t1)*1000:.0f}ms")
-        _t2 = time.perf_counter()
-        self.angle_meter_tab.shutdown()
-        print(f"[性能] 关闭-角度仪清理(RawInput注销) 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
-        _t3 = time.perf_counter()
-        self.squad_macro_tab.shutdown()
-        print(f"[性能] 关闭-建队宏清理 耗时={(time.perf_counter()-_t3)*1000:.0f}ms")
-        _t4 = time.perf_counter()
-        self.hotkey.shutdown()
-        print(f"[性能] 关闭-热键注销 耗时={(time.perf_counter()-_t4)*1000:.0f}ms")
-        # 保存配置
-        _t5 = time.perf_counter()
-        self.config.save_config()
-        print(f"[性能] 关闭-配置保存 耗时={(time.perf_counter()-_t5)*1000:.0f}ms")
-        print(f"[性能] 关闭总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
-        # P0-4: 主动删除所有tab，减少Qt析构时间
-        self.tab_stack.deleteLater()
-        event.accept()
-        QApplication.instance().quit()
+        try:
+            # 先立即隐藏所有窗口
+            self.hide()
+            # P0-1: rangefinder_tab可能未创建
+            if 3 in self._tab_cache:
+                for _ov_attr in ("rangefinder_overlay", "rangefinder_overlay2"):
+                    try:
+                        _ov = getattr(self._tab_cache[3], _ov_attr, None)
+                        if _ov:
+                            _ov.hide()
+                    except Exception as e:
+                        print(f"[关闭异常] 隐藏{_ov_attr}: {e}")
+            try:
+                if self.overlay:
+                    self.overlay.hide()
+            except Exception as e:
+                print(f"[关闭异常] 隐藏overlay: {e}")
+            print(f"[性能] 关闭-窗口隐藏 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
+
+            # P0-1: 只对已创建的tab执行shutdown
+            _shutdown_map = {3: "数显模块", 4: "角度仪", 5: "建队宏"}
+            _shutdown_fns = []
+            for _idx, _name in _shutdown_map.items():
+                if _idx in self._tab_cache:
+                    _w = self._tab_cache[_idx]
+                    _shutdown_fns.append((_name, lambda w=_w: w.shutdown()))
+            _shutdown_fns.extend([
+                ("热键", lambda: self.hotkey.shutdown()),
+                ("配置保存", lambda: self.config.save_config()),
+            ])
+            for _name, _fn in _shutdown_fns:
+                _ts = time.perf_counter()
+                try:
+                    _fn()
+                    print(f"[性能] 关闭-{_name} 耗时={(time.perf_counter()-_ts)*1000:.0f}ms")
+                except Exception as e:
+                    print(f"[关闭异常] {_name}: {e}")
+                    _tb.print_exc()
+
+            print(f"[性能] 关闭总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
+        except Exception as e:
+            print(f"[关闭异常] closeEvent顶层: {e}")
+            _tb.print_exc()
+        finally:
+            try:
+                self.tab_stack.deleteLater()
+            except Exception:
+                pass
+            event.accept()
+            QApplication.instance().quit()
