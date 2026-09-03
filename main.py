@@ -9,6 +9,7 @@ import os
 import time
 import ctypes
 import traceback
+from core.win32_utils import shell32
 
 # 版本号唯一权威来源（info_tab.py），QApplication 与信息页共享同一值
 from gui.tabs.info_tab import APP_VERSION as _APP_VERSION
@@ -16,7 +17,7 @@ from gui.tabs.info_tab import APP_VERSION as _APP_VERSION
 # 请求管理员权限（BlockInput / UI 自动化需要）
 def _request_admin():
     try:
-        if ctypes.windll.shell32.IsUserAnAdmin():
+        if shell32.IsUserAnAdmin():
             return True
     except Exception:
         pass
@@ -26,7 +27,7 @@ def _request_admin():
             exe_path = sys.executable
             params = " ".join(f'"{a}"' for a in sys.argv[1:]) if len(sys.argv) > 1 else ""
             work_dir = os.path.dirname(exe_path)
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe_path, params, work_dir, 1)
+            ret = shell32.ShellExecuteW(None, "runas", exe_path, params, work_dir, 1)
         else:
             # 开发环境：用 python 运行 main.py
             script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +35,7 @@ def _request_admin():
             params = f'"{script_path}"'
             if len(sys.argv) > 1:
                 params += " " + " ".join(f'"{a}"' for a in sys.argv[1:])
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, script_dir, 1)
+            ret = shell32.ShellExecuteW(None, "runas", sys.executable, params, script_dir, 1)
         # ShellExecuteW 返回值 <=32 表示失败（含用户拒绝 UAC），给明确提示
         if ret <= 32:
             print("[Main] 需要管理员权限才能运行（BlockInput / UI 自动化），用户拒绝或提权失败，程序退出")

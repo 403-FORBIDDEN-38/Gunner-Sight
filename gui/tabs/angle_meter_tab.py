@@ -14,32 +14,16 @@ from PyQt5.QtGui import QFont, QColor
 from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
 from core.angle_meter import RawInputReader, AngleTracker, Calibrator, AngleCalibration
-from gui.widgets import HotkeyLineEdit, VehicleFilterWidget, OptimizedListWidget
+from gui.widgets import VehicleFilterWidget, OptimizedListWidget
+from gui.hotkey_widgets import HotkeyLineEdit
 
 
-# SendInput 结构定义（模拟真实鼠标相对移动，使游戏炮管和角度仪示数同步）
-class _MOUSEINPUT(ctypes.Structure):
-    _fields_ = [
-        ("dx", ctypes.c_long), ("dy", ctypes.c_long),
-        ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
-        ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
-    ]
-
-class _INPUT(ctypes.Structure):
-    class _INPUT_UNION(ctypes.Union):
-        _fields_ = [("mi", _MOUSEINPUT)]
-    _anonymous_ = ("_input",)
-    _fields_ = [("type", ctypes.c_ulong), ("_input", _INPUT_UNION)]
+from core.win32_utils import send_mouse_input
 
 def _simulate_mouse_move(dy):
     """模拟鼠标相对移动。dy: 上移负值，下移正值（和 Raw Input 一致）。
     SendInput 插入的鼠标事件会被 Raw Input 捕获，使游戏和角度仪同步。"""
-    inp = _INPUT()
-    inp.type = 0  # INPUT_MOUSE
-    inp.mi.dx = 0
-    inp.mi.dy = dy
-    inp.mi.dwFlags = 0x0001  # MOUSEEVENTF_MOVE
-    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+    send_mouse_input(dy)
 
 
 class AngleOverlay(QWidget):
