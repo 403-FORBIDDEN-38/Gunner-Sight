@@ -43,19 +43,17 @@ class MainWindow(QMainWindow):
         self.overlay = overlay
         self.hotkey = hotkey
         self.resources = resources
+        self._current_theme = self.config.get_theme()
+        self._scrolling = False
+        self._ui_initialized = False
+        self._first_tab_initialized = False
 
+        # P1: 只设窗口属性+极简背景色，不创建子控件（show后异步创建）
         self.setWindowTitle("GunnerSight Overlay - 屏幕准星辅助软件")
         self.resize(1100, 750)
         self.setMinimumSize(800, 600)
-
-        self._current_theme = self.config.get_theme()
-        self._scrolling = False  # 预留：防止信号循环
-        self._create_ui()
-        self._connect_signals()
-        # QSS和第一个tab均延迟到window.show()后，不阻塞启动
-
-        # P0-3: OverviewTab数据延迟加载（main.py中QTimer.singleShot异步refresh）
-        # RangefinderTab也改为窗口显示后异步创建，避免阻塞启动
+        _bg = "#202020" if self._current_theme == "dark" else "#F5F5F5"
+        self.setStyleSheet(f"QMainWindow {{ background-color: {_bg}; }}")
 
     # ==================== 主题 ====================
 
@@ -80,64 +78,41 @@ class MainWindow(QMainWindow):
             QWidget {{ background-color: {bg}; color: {text}; font-size: 14px; }}
             QMainWindow {{ background-color: {bg}; }}
             QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QAbstractItemView {{
-                background-color: {ctrl}; color: {text};
-                border: 1px solid {border}; border-radius: 2px; padding: 4px 6px;
+                background-color: {ctrl}; border: 1px solid {border}; border-radius: 2px; padding: 4px 6px;
             }}
-            QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover {{ border-color: #0030FF; }}
+            QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover,
             QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: #0030FF; }}
-            QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled, QAbstractItemView:disabled {{
-                color: {dis_text}; border-color: {ctrl};
-            }}
+            QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled {{ color: {dis_text}; border-color: {ctrl}; }}
             QAbstractItemView::item {{ padding: 5px; background-color: {ctrl}; }}
             QAbstractItemView::item:selected {{ background-color: #0030FF; color: #FFFFFF; }}
             QAbstractItemView::item:hover:!selected {{ background-color: {hover}; }}
-            QPushButton {{
-                background-color: {ctrl}; color: {text};
-                border: 1px solid {border}; border-radius: 2px; padding: 5px 12px;
-            }}
+            QPushButton {{ background-color: {ctrl}; border: 1px solid {border}; border-radius: 2px; padding: 5px 12px; }}
             QPushButton:hover {{ background-color: {hover}; border-color: #0030FF; }}
             QPushButton:pressed {{ background-color: #0030FF; color: #FFFFFF; }}
             QPushButton:disabled {{ color: {dis_text}; background-color: {bg}; }}
-            QGroupBox {{
-                border: 1px solid {border}; border-radius: 2px;
-                margin-top: 10px; padding-top: 6px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin; left: 8px; padding: 0 4px; color: {subtext}; font-size: 12px;
-            }}
+            QGroupBox {{ border: 1px solid {border}; border-radius: 2px; margin-top: 10px; padding-top: 6px; }}
+            QGroupBox::title {{ subcontrol-origin: margin; left: 8px; padding: 0 4px; color: {subtext}; font-size: 12px; }}
             QCheckBox {{ spacing: 6px; }}
-            QCheckBox::indicator {{
-                width: 14px; height: 14px; border: 1px solid {border}; border-radius: 2px; background-color: {ctrl};
-            }}
+            QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {border}; border-radius: 2px; background-color: {ctrl}; }}
             QCheckBox::indicator:checked {{ background-color: #0030FF; border-color: #0030FF; }}
-            QCheckBox:disabled {{ color: {dis_text}; }}
             QSlider::groove:horizontal {{ height: 4px; background: {border}; }}
-            QSlider::handle:horizontal {{
-                width: 12px; height: 12px; margin: -4px 0;
-                background: #0030FF; border-radius: 6px;
-            }}
+            QSlider::handle:horizontal {{ width: 12px; height: 12px; margin: -4px 0; background: #0030FF; border-radius: 6px; }}
             QSlider::sub-page:horizontal {{ background: #0030FF; }}
             QComboBox::drop-down {{ border: none; width: 20px; }}
-            QComboBox QAbstractItemView {{ border: 1px solid #0030FF; }}
-            QScrollBar:vertical {{ width: 10px; background: {bg}; }}
-            QScrollBar::handle:vertical {{ background: {border}; border-radius: 5px; min-height: 30px; }}
-            QScrollBar::handle:vertical:hover {{ background: {hover}; }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-            QScrollBar:horizontal {{ height: 10px; background: {bg}; }}
-            QScrollBar::handle:horizontal {{ background: {border}; border-radius: 5px; min-width: 30px; }}
-            QScrollBar::handle:horizontal:hover {{ background: {hover}; }}
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+            QScrollBar:vertical, QScrollBar:horizontal {{ background: {bg}; }}
+            QScrollBar:vertical {{ width: 10px; }}
+            QScrollBar:horizontal {{ height: 10px; }}
+            QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{ background: {border}; border-radius: 5px; }}
+            QScrollBar::handle:vertical {{ min-height: 30px; }}
+            QScrollBar::handle:horizontal {{ min-width: 30px; }}
+            QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{ background: {hover}; }}
+            QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
             QLabel {{ background-color: transparent; }}
             QListWidget#nav_list {{ border: none; background-color: {bg}; }}
             QListWidget#nav_list::item {{ padding: 8px 12px; background-color: {bg}; }}
             QListWidget#nav_list::item:selected {{ background-color: #0030FF; color: #FFFFFF; }}
             QListWidget#nav_list::item:hover:!selected {{ background-color: {ctrl}; }}
-            QFrame#angle_meter_sep, QFrame#rangefinder_sep {{
-                background-color: {border};
-                max-height: 1px; min-height: 1px;
-                border: none;
-            }}
-
+            QFrame#angle_meter_sep, QFrame#rangefinder_sep {{ background-color: {border}; max-height: 1px; min-height: 1px; border: none; }}
             QLabel#info_title {{ font-size: 24px; font-weight: bold; }}
             QLabel#hint_text {{ font-size: 12px; color: {subtext}; }}
             QLabel#cal_hint {{ font-size: 12px; color: #FFAA00; }}
@@ -146,26 +121,14 @@ class MainWindow(QMainWindow):
             QLabel#angle_display[state="active"] {{ color: #00FF00; }}
             QLabel#angle_display[state="paused"] {{ color: #FF6600; }}
             QLabel#angle_display[state="calibrating"] {{ color: #FFAA00; }}
-            QPushButton#link_btn {{
-                color: #0030FF; border: none; background: transparent;
-                padding: 2px 0px; text-align: left;
-            }}
+            QPushButton#link_btn {{ color: #0030FF; border: none; background: transparent; padding: 2px 0px; text-align: left; }}
             QPushButton#link_btn:hover {{ color: #3355FF; }}
-            QPushButton#primary_btn {{
-                background-color: #0030FF; color: #FFFFFF; border-color: #0030FF;
-            }}
+            QPushButton#primary_btn {{ background-color: #0030FF; color: #FFFFFF; border-color: #0030FF; }}
             QPushButton#primary_btn:hover {{ background-color: #0040FF; }}
             QPushButton#primary_btn:disabled {{ background-color: {border}; border-color: {border}; color: {dis_text}; }}
-            QPushButton#toggle_primary_btn:checked {{
-                background-color: #0030FF; color: #FFFFFF; border-color: #0030FF;
-            }}
+            QPushButton#toggle_primary_btn:checked {{ background-color: #0030FF; color: #FFFFFF; border-color: #0030FF; }}
             QPushButton#toggle_primary_btn:checked:hover {{ background-color: #0040FF; }}
-            QLabel#free_notice {{
-                font-size: 12px; color: #8A6D00;
-                background-color: rgba(255, 200, 0, 25);
-                border: 1px solid rgba(200, 160, 0, 60);
-                border-radius: 4px; padding: 10px;
-            }}
+            QLabel#free_notice {{ font-size: 12px; color: #8A6D00; background-color: rgba(255, 200, 0, 25); border: 1px solid rgba(200, 160, 0, 60); border-radius: 4px; padding: 10px; }}
         """)
 
     def _apply_theme(self, theme):
@@ -180,7 +143,13 @@ class MainWindow(QMainWindow):
 
     # ==================== UI 构建 ====================
 
-    def _create_ui(self):
+    def _create_ui_frame(self):
+        """P1: show后异步创建UI框架（顶栏+导航+tab_stack+翻页按钮+完整QSS+信号连接）"""
+        if self._ui_initialized:
+            return
+        self._ui_initialized = True
+        import time as _t_ui
+        _t0 = _t_ui.perf_counter()
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
@@ -292,6 +261,20 @@ class MainWindow(QMainWindow):
 
         # 禁用焦点防空格误触
         QApplication.instance().installEventFilter(self)
+        self._connect_signals()
+        # 完整QSS + 焦点策略
+        self._setup_full_style(self._current_theme)
+        self._disable_control_focus()
+        print(f"[性能] UI框架创建 耗时={(_t_ui.perf_counter()-_t0)*1000:.0f}ms")
+
+    def _create_first_tab(self):
+        """P1: 创建第一个tab并选中（UI框架创建后调用）"""
+        if self._first_tab_initialized:
+            return
+        self._first_tab_initialized = True
+        self._ensure_tab(0)
+        self.nav_list.setCurrentRow(0)
+        self.overview_tab.refresh()
 
     def _init_first_tab(self):
         """延迟创建第一个tab并选中（window.show后调用）"""
@@ -489,6 +472,10 @@ class MainWindow(QMainWindow):
         import traceback as _tb
         _t0 = time.perf_counter()
         try:
+            # P1: UI未初始化时直接关闭
+            if not self._ui_initialized:
+                event.accept()
+                return
             # 先立即隐藏所有窗口
             self.hide()
             # P0-1: rangefinder_tab可能未创建
