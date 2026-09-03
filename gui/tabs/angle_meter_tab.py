@@ -257,7 +257,8 @@ class AngleMeterTab(QWidget):
         self.profile_search.textChanged.connect(self._refresh_profile_list)
         search_row.addWidget(self.profile_search, 2)
         self.profile_tag_filter = QComboBox()
-        self.profile_tag_filter.addItem("全部标签")
+        self.profile_tag_filter.addItem("全部标签", None)
+        self.profile_tag_filter.currentIndexChanged.connect(self._refresh_profile_list)
         search_row.addWidget(self.profile_tag_filter, 1)
         list_v.addLayout(search_row)
         self.profile_list = OptimizedListWidget()
@@ -391,7 +392,22 @@ class AngleMeterTab(QWidget):
 
     # === 配置列表 ===
     def _refresh_profile_list(self):
+        # BUG-2: 填充标签筛选下拉框（保持当前选中）
+        if hasattr(self, 'profile_tag_filter'):
+            existing = [self.profile_tag_filter.itemData(i) for i in range(1, self.profile_tag_filter.count())]
+            all_tags = self.config.get_all_tags()
+            if existing != all_tags:
+                self.profile_tag_filter.blockSignals(True)
+                cur = self.profile_tag_filter.currentData()
+                self.profile_tag_filter.clear()
+                self.profile_tag_filter.addItem("全部标签", None)
+                for t in all_tags:
+                    self.profile_tag_filter.addItem(t, t)
+                idx = self.profile_tag_filter.findData(cur)
+                self.profile_tag_filter.setCurrentIndex(idx if idx >= 0 else 0)
+                self.profile_tag_filter.blockSignals(False)
         search = self.profile_search.text().lower() if hasattr(self, 'profile_search') else ""
+        tag = self.profile_tag_filter.currentData() if hasattr(self, 'profile_tag_filter') else None
         profiles = self.config.get_angle_meter_profiles()
         current = self.config.get_current_angle_meter_profile()
         self.profile_list.blockSignals(True)
@@ -402,6 +418,9 @@ class AngleMeterTab(QWidget):
                 continue
             vehicles = self.config.get_angle_meter_profile_linked_vehicles(name)
             tags_eff = self.config.get_angle_meter_profile_effective_tags(name)
+            # BUG-2: 标签筛选
+            if tag and tag not in tags_eff:
+                continue
             parts = []
             if vehicles:
                 parts.append(f"载具:{','.join(vehicles)}")
@@ -554,6 +573,7 @@ class AngleMeterTab(QWidget):
             linked.discard(vehicle_name)
         profile["linked_vehicles"] = sorted(linked)
         self.config.set_angle_meter_profile(name, profile)
+        self._refresh_profile_list()  # BUG-1: 关联载具后立即刷新列表显示
 
     def _apply_current_profile_to_tracker(self):
         if not self.tracker:

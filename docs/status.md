@@ -195,3 +195,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - UI框架创建629ms(异步用户无感知), 后台任务延迟100ms执行
 - closeEvent加_ui_initialized保护
 - 版本: V0.0140300070
+
+### V0.0140300072 - Tee NoneType 崩溃修复
+- 根因: console=False打包后sys.stdout为None，_Tee(None, _log_file)写入时None.write()崩溃
+- 修复: _Tee.__init__过滤None文件描述符，write/flush加try-except保护
+- commit: 9996a47c
+- 打包: onedir + 签名，发布版 GunnerSight_Release 已合并更新
