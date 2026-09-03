@@ -139,3 +139,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - P0-5: 快校文字 快速校准（2点）->快速校准（3点）
 - P0-6: 去掉思源黑体加载，只保留Norwester英文字体，中文自动回退系统字体
 - 版本: V0.0140300063
+
+### 任务一：启动性能彻底优化（已完成）
+- P0-1: Tab懒加载 - _create_ui只创建第一个tab，其余7个在首次点击导航时创建；_ensure_tab(index)懒加载+8个property兼容属性访问；_connect_tab_signals延迟连接tab特有信号；closeEvent只遍历已创建的tab
+- P0-2: Overlay延迟创建 - OverlayRenderer.__init__不创建窗口(self.overlay=None)，_ensure_overlay()懒加载创建并同步状态；所有操作overlay的方法前调用_ensure_overlay或检查None；main.py窗口显示后100ms异步预创建
+- 预期效果: MainWindow创建从984ms降到约150-200ms，Overlay初始化从271ms降到约10ms，启动总耗时从1473ms降到约400-500ms
+- 版本: V0.0140300064

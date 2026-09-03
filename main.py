@@ -118,7 +118,7 @@ def load_custom_fonts(app):
 
     if font_norwester:
         font = QFont()
-        font.setFamilies([font_norwester])
+        font.setFamilies([font_norwester, "Source Han Sans CN"])
         font.setPointSize(10)
         font.setStyleStrategy(QFont.PreferDefault)
         app.setFont(font)
@@ -228,6 +228,9 @@ def _main():
         load_custom_fonts(app)
         print(f"[性能] 字体加载(延迟) 耗时={(time.perf_counter()-_tf)*1000:.0f}ms")
     QTimer.singleShot(0, _load_fonts_delayed)
+
+    # P0-2: Overlay窗口延迟预创建（窗口显示后100ms异步创建，不阻塞启动）
+    QTimer.singleShot(100, overlay._ensure_overlay)
 
     # 窗口显示后再初始化热键（keyboard 库导入+注册约 500ms，不阻塞窗口出现）
     def _init_hotkey_timed():
