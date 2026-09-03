@@ -1,67 +1,89 @@
-# 当前轮审查意见：载具配置页状态一致性修复
+# 当前轮审查意见：载具配置页状态一致性修复（补充）
 
 ## 背景
 
-载具级缩放偏移功能及前三轮审查修复已完成（F1/U1/U2/O1/O2 + R1/R2/R3 + U3/U4），32个测试通过。用户实际使用中发现1个状态一致性 UX 缺陷。
+U5（载具选中状态恢复）已修复，但修复不完整：切回载具页时载具选中了，但弹种和倍率均未选中。根因是 `_on_vehicle_selected` 触发弹种/倍率列表重建，而这两个列表重建时没有恢复之前的选中状态。
 
 ## 审查发现
 
-### U5（发布必修）：切走再切回载具配置页时，载具选中状态丢失，与弹种/倍率选中状态不一致
+### U5.1（发布必修）：_refresh_ammo_list 重建后不恢复之前选中的弹种
 
-**位置**：`gui/tabs/vehicle_config_tab.py`
-- `showEvent`（第27-29行）→ 调用 `refresh()`
-- `refresh()`（第588-590行）→ 只重建标签列表和载具列表，不重建弹种/倍率列表
-- `_refresh_vehicle_list()`（第230-246行）→ 清空载具列表后不恢复之前选中的载具
+**位置**：`gui/tabs/vehicle_config_tab.py` `_refresh_ammo_list` 方法
 
-**问题描述**：
-1. 用户选中载具甲 → 弹种a → 倍率1，开始编辑
-2. 切走去其他页（全局设置、热键设置等）
-3. 切回载具配置页
-4. 结果：弹种a和倍率1依然有高亮选中状态，但载具列表处于未选择状态
-5. 用户以为能继续编辑，但所有编辑操作第一步 `_get_selected_vehicle()` 返回 None，直接 return，编辑静默失效，误以为程序出问题
+**当前实现**：
+```python
+def _refresh_ammo_list(self):
+    vehicle = self._get_selected_vehicle()
+    self.ammo_list.blockSignals(True)
+    self.ammo_list.clear()
+    if vehicle:
+        for ammo in self.config.get_ammo_types(vehicle):
+            item = QListWidgetItem(ammo)
+            item.setData(Qt.UserRole, ammo)
+            self.ammo_list.addItem(item)
+    self.ammo_list.blockSignals(False)
+```
 
-**根因**：
-- `showEvent` 触发 `refresh()`，`refresh()` 调用 `_refresh_vehicle_list()` 重建载具列表
-- `_refresh_vehicle_list()` 执行 `self.vehicle_list.clear()` 后重新填充，但**不恢复之前选中的载具**
-- 弹种列表和倍率列表没有被重建，保留了之前的选中状态
-- 结果：载具未选中 + 弹种/倍率选中 = 状态撕裂
+**问题**：清空列表后重新填充，但不恢复之前选中的弹种。载具选中恢复后，`_on_vehicle_selected` 调用此方法，弹种选中状态丢失。
 
 **修复要求**：
-在 `_refresh_vehicle_list()` 中恢复之前选中的载具：
+- 重建列表**前**，记录当前选中的弹种名：
+  ```python
+  previously_selected = self._get_selected_ammo()
+  ```
+- 重建列表（现有逻辑不变）
+- 重建后，如果 `previously_selected` 不为空且在新列表中存在，重新选中：
+  ```python
+  if previously_selected:
+      for i in range(self.ammo_list.count()):
+          if self.ammo_list.item(i).data(Qt.UserRole) == previously_selected:
+              self.ammo_list.setCurrentRow(i)
+              break
+  ```
+- 恢复选中必须在 `blockSignals(False)` 之后执行，否则 `currentItemChanged` 信号不触发，倍率列表不会刷新
+- 如果之前选中的弹种不在新列表中（比如载具变了，弹种列表完全不同），则不恢复，保持未选中——合理行为
 
-1. 重建列表**前**，记录当前选中的载具名：
-   ```python
-   previously_selected = self._get_selected_vehicle()
-   ```
-2. 重建列表（现有逻辑不变）
-3. 重建列表**后**，如果 `previously_selected` 不为空，在新列表中查找该载具，如果存在则重新选中：
-   ```python
-   if previously_selected:
-       for i in range(self.vehicle_list.count()):
-           if self.vehicle_list.item(i).data(Qt.UserRole) == previously_selected:
-               self.vehicle_list.setCurrentRow(i)
-               break
-   ```
-4. 选中后 `_on_vehicle_selected` 自动触发，弹种/倍率列表刷新，三者状态一致
-5. **边界处理**：如果之前选中的载具被标签过滤或搜索排除了（不在新列表中），则不恢复，保持未选中——这是合理行为，不需要提示
-6. 注意：`_refresh_vehicle_list` 中有 `blockSignals(True/False)`，恢复选中要在 `blockSignals(False)` 之后执行，否则 `currentItemChanged` 信号不会触发，弹种/倍率不会刷新
+### U5.2（发布必修）：_refresh_mag_list 重建后不恢复之前选中的倍率
 
-**验证场景**：
-- 选中载具甲 → 弹种a → 倍率1 → 切走 → 切回 → 载具甲仍选中，弹种a/倍率1仍选中，可继续编辑 ✓
-- 选中载具甲 → 切走 → 在其他页不做任何操作 → 切回 → 载具甲仍选中 ✓
-- 选中载具甲（标签"美军"过滤下） → 切走 → 切回时标签筛选变为"全部" → 载具甲仍在列表中，应恢复选中 ✓
-- 选中载具甲 → 切走 → 切回时搜索框输入了其他关键词过滤掉了载具甲 → 载具甲不在列表中，不恢复，保持未选中 ✓（合理行为）
+**位置**：`gui/tabs/vehicle_config_tab.py` `_refresh_mag_list` 方法
+
+**当前实现**：有 `select_idx` 参数，但 `_on_vehicle_selected` 调用时没传，所以没生效。方法内部也没有自动恢复之前选中的逻辑。
+
+**修复要求**：
+- 重建列表**前**，记录当前选中的倍率索引：
+  ```python
+  previously_selected_idx = None
+  item = self.mag_list.currentItem()
+  if item:
+      previously_selected_idx = item.data(Qt.UserRole)
+  ```
+- 重建列表（现有逻辑不变）
+- 重建后，如果 `previously_selected_idx` 不为空且在新列表范围内，重新选中：
+  ```python
+  if previously_selected_idx is not None and 0 <= previously_selected_idx < self.mag_list.count():
+      self.mag_list.setCurrentRow(previously_selected_idx)
+  ```
+- 恢复选中必须在 `blockSignals(False)` 之后执行
+- 注意：`_refresh_mag_list` 已有 `select_idx` 参数，优先使用传入的 `select_idx`（如果调用方显式指定了），没有传入时才用自动恢复的 `previously_selected_idx`。逻辑：
+  ```python
+  target_idx = select_idx if select_idx is not None else previously_selected_idx
+  if target_idx is not None and 0 <= target_idx < self.mag_list.count():
+      self.mag_list.setCurrentRow(target_idx)
+  ```
+- 如果之前选中的倍率索引超出新列表范围（比如弹种变了，倍率数量变少），则不恢复，保持未选中——合理行为
 
 ## 验收标准
 
 修复完成后按以下清单验收：
 
 ### 功能验收
-- [ ] 选中载具→弹种→倍率后切走再切回，载具仍选中，弹种/倍率仍选中，可继续编辑
-- [ ] 编辑操作（修改载具缩放偏移、切换倍率模式等）在切回后正常生效
-- [ ] 之前选中的载具被过滤/搜索排除时，不恢复，保持未选中（合理行为）
-- [ ] 第一次打开载具配置页（无之前选中）时，载具列表正常显示，不崩溃
-- [ ] 标签筛选、搜索功能正常，不受恢复选中逻辑影响
+- [ ] 选中载具甲→弹种a→倍率1 → 切走 → 切回 → 载具甲、弹种a、倍率1三者都仍选中，可继续编辑
+- [ ] 选中载具甲→弹种a→倍率2 → 切走 → 切回 → 三者都仍选中，倍率是2不是1
+- [ ] 切换载具（甲→乙）时，弹种列表正确刷新为乙的弹种，如果乙有弹种则默认选中第一个（或保持之前选中的如果存在），倍率列表对应刷新
+- [ ] 切换弹种（a→b）时，倍率列表正确刷新为b的倍率，如果b有倍率则默认选中第一个
+- [ ] 载具没有弹种时，弹种列表为空，倍率列表为空，不崩溃
+- [ ] 弹种没有倍率时，倍率列表为空，不崩溃
+- [ ] 第一次打开载具配置页（无之前选中）时，列表正常显示，不崩溃
 
 ### 测试验收
 - [ ] 现有32个测试全部通过
@@ -76,7 +98,7 @@
 修复完成后按以下格式汇报（不超过5行）：
 
 ```
-【载具配置页状态一致性修复】PASS/FAIL
+【载具配置页状态一致性补充修复】PASS/FAIL
 - commit: xxxxxxx
 - 测试: 32 passed
 - 详见 docs/status.md
