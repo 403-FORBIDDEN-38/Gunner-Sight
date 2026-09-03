@@ -30,6 +30,7 @@ def _default_angle_meter_profile() -> Dict:
         "calibration_type": "none",  # none/quick/full
         "quick_calibration": None,   # 快速校准生成的7点曲线
         "quick_min_delta": 0.0,      # 快速校准：用户实测最低角增量
+        "quick_mid_delta": None,     # 快速校准：用户实测中间角增量（None=旧2点配置，线性补全）
         "quick_max_delta": 0.0,      # 快速校准：用户实测最高角增量
         "full_calibration": None,    # 单独校准生成的7点曲线
         "calibration": None,         # 兼容旧字段，迁移后不再使用
@@ -216,6 +217,7 @@ class ConfigManager:
                     pdata["calibration_type"] = "none"
                 pdata.setdefault("quick_calibration", None)
                 pdata.setdefault("quick_min_delta", 0.0)
+                pdata.setdefault("quick_mid_delta", None)  # 旧2点配置为None，使用时线性补全
                 pdata.setdefault("quick_max_delta", 0.0)
                 pdata.setdefault("full_calibration", None)
                 changed = True
@@ -1156,32 +1158,48 @@ class ConfigManager:
             if pdata.get("calibration_type") != "quick":
                 continue
             min_d = pdata.get("quick_min_delta", 0)
+            mid_d = pdata.get("quick_mid_delta")  # 可能为None（旧2点配置）
             max_d = pdata.get("quick_max_delta", 0)
             if max_d <= min_d:
                 continue  # 无有效min_delta，保留旧曲线
-            # 用新全局曲线重新生成快校
+            # 用新全局曲线+三个端点重新生成快校
             pdata["quick_calibration"] = self._generate_quick_calibration(
                 global_cal, pdata.get("min_angle", -80), pdata.get("max_angle", 80),
-                min_d, max_d)
+                min_d, mid_d, max_d)
 
     @staticmethod
-    def _generate_quick_calibration(global_cal, min_angle, max_angle, min_delta, max_delta):
-        """用全局曲线反查增量相对位置，复刻非线性形状到载具范围"""
+    def _generate_quick_calibration(global_cal, min_angle, max_angle, min_delta, mid_delta, max_delta):
+        """3-point quick calibration: segmented mapping.
+        [min,mid] segment and [mid,max] segment, each uses global curve angle_to_delta.
+        mid_delta=None (old 2-point config) uses linear interpolation for mid point."""
         vehicle_total = max_delta - min_delta
-        global_min_delta = global_cal.min_delta
-        global_max_delta = global_cal.max_delta
-        global_delta_range = global_max_delta - global_min_delta
-        if global_delta_range == 0:
+        if vehicle_total == 0:
             return None
+        mid_angle = (min_angle + max_angle) / 2.0
+        if mid_delta is None:
+            mid_delta = (min_delta + max_delta) / 2.0
         generated = []
         for i in range(7):
-            global_angle = global_cal.points[i][1]
-            global_delta_at_angle = global_cal.angle_to_delta(global_angle)
-            rel = (global_delta_at_angle - global_min_delta) / global_delta_range
-            veh_delta = min_delta + rel * vehicle_total
-            global_min_angle = global_cal.min_angle
-            global_max_angle = global_cal.max_angle
-            veh_angle = min_angle + (global_angle - global_min_angle) / (global_max_angle - global_min_angle) * (max_angle - min_angle)
+            veh_angle = min_angle + i / 6 * (max_angle - min_angle)
+            if veh_angle <= mid_angle:
+                seg_min_d, seg_max_d = min_delta, mid_delta
+                seg_min_a, seg_max_a = min_angle, mid_angle
+            else:
+                seg_min_d, seg_max_d = mid_delta, max_delta
+                seg_min_a, seg_max_a = mid_angle, max_angle
+            seg_total = seg_max_d - seg_min_d
+            if seg_total == 0:
+                veh_delta = seg_min_d
+            else:
+                g_delta_at_angle = global_cal.angle_to_delta(veh_angle)
+                g_seg_min_d = global_cal.angle_to_delta(seg_min_a)
+                g_seg_max_d = global_cal.angle_to_delta(seg_max_a)
+                g_seg_range = g_seg_max_d - g_seg_min_d
+                if g_seg_range == 0:
+                    rel_in_seg = (veh_angle - seg_min_a) / (seg_max_a - seg_min_a) if seg_max_a != seg_min_a else 0
+                else:
+                    rel_in_seg = (g_delta_at_angle - g_seg_min_d) / g_seg_range
+                veh_delta = seg_min_d + rel_in_seg * seg_total
             generated.append([round(veh_delta, 1), round(veh_angle, 1)])
         return generated
 
@@ -1197,10 +1215,11 @@ class ConfigManager:
     def get_angle_meter_quick_calibration(self, name: str):
         return self.get_angle_meter_profile(name).get("quick_calibration")
 
-    def set_angle_meter_quick_calibration(self, name: str, points, min_delta=0.0, max_delta=0.0):
+    def set_angle_meter_quick_calibration(self, name: str, points, min_delta=0.0, mid_delta=None, max_delta=0.0):
         profile = self.get_angle_meter_profile(name)
         profile["quick_calibration"] = points
         profile["quick_min_delta"] = min_delta
+        profile["quick_mid_delta"] = mid_delta
         profile["quick_max_delta"] = max_delta
         profile["calibration_type"] = "quick"
         self.request_save()

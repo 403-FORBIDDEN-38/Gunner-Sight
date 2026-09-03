@@ -343,6 +343,7 @@ class Calibrator(QObject):
         self._max_angle = 80.0
         self._points = []
         self._quick_min_delta = 0.0
+        self._quick_mid_delta = 0.0
 
     @property
     def is_calibrating(self):
@@ -359,9 +360,9 @@ class Calibrator(QObject):
         self.raw.consume_delta_y()
 
         if mode == self.MODE_QUICK:
-            self.log.emit(f"[快速校准] 开始，范围 {min_angle}°~{max_angle}°（2点）")
-            self.progress.emit(0, 2)
-            self._emit_hint(0, 2, min_angle, "最低角")
+            self.log.emit(f"[快速校准] 开始，范围 {min_angle}°~{max_angle}°（3点）")
+            self.progress.emit(0, 3)
+            self._emit_hint(0, 3, min_angle, "最低角")
         else:
             self.log.emit(f"[7点校准] 开始，范围 {min_angle}°~{max_angle}°")
             self.progress.emit(0, 7)
@@ -385,35 +386,65 @@ class Calibrator(QObject):
 
     def _next_quick(self, delta_step):
         if self._step == 0:
+            # 第1点：最低角
             self._quick_min_delta = 0.0
             self._step = 1
-            self.progress.emit(1, 2)
+            self.progress.emit(1, 3)
             self.log.emit("[快速校准] 第1点已记录（最低角）")
-            self._emit_hint(1, 2, self._max_angle, "最高角")
+            mid_angle = (self._min_angle + self._max_angle) / 2.0
+            self._emit_hint(1, 3, mid_angle, "中间角")
+        elif self._step == 1:
+            # 第2点：中间角
+            self._quick_mid_delta = delta_step
+            self._step = 2
+            self.progress.emit(2, 3)
+            self.log.emit(f"[快速校准] 第2点已记录（中间角），增量={delta_step:.0f}")
+            self._emit_hint(2, 3, self._max_angle, "最高角")
         else:
-            max_delta = self._quick_min_delta + delta_step
-            self.log.emit(f"[快速校准] 第2点已记录（最高角），总增量={max_delta:.0f}")
+            # 第3点：最高角
+            max_delta = self._quick_mid_delta + delta_step
+            self.log.emit(f"[快速校准] 第3点已记录（最高角），总增量={max_delta:.0f}")
             if max_delta <= 0:
                 self.log.emit("[快速校准] 失败：总增量为0，请确保从最低角移动到最高角")
                 self._mode = None
                 self.cancelled.emit()
                 return
-            cal = self._generate_from_endpoints(self._quick_min_delta, max_delta)
+            cal = self._generate_from_endpoints(
+                self._quick_min_delta, self._quick_mid_delta, max_delta)
             self._finish(cal)
 
-    def _generate_from_endpoints(self, min_delta, max_delta):
-        """用全局校准曲线反查增量相对位置，复刻非线性形状到载具范围。
-        无全局校准时退化为线性插值。"""
+    def _generate_from_endpoints(self, min_delta, mid_delta, max_delta):
+        """3点快校：分段映射。
+        [最低角,中间角]一段，[中间角,最高角]一段，每段内用全局曲线angle_to_delta反查相对位置。
+        无全局校准时退化为线性插值。
+        旧2点配置兼容：mid_delta=None时用线性插值补全中间点。"""
         vehicle_total = max_delta - min_delta
-        print("=== 快校调试 ===")
-        print(f"载具角度范围: {self._min_angle}° ~ {self._max_angle}°")
-        print(f"快校端点: min_delta={min_delta}, max_delta={max_delta}, vehicle_total={vehicle_total}")
+        mid_angle = (self._min_angle + self._max_angle) / 2.0
+        # 旧2点兼容：无mid_delta时线性补全
+        if mid_delta is None:
+            mid_delta = (min_delta + max_delta) / 2.0
+        print("=== 快校调试(3点) ===")
+        print(f"载具角度范围: {self._min_angle}° ~ {mid_angle}° ~ {self._max_angle}°")
+        print(f"快校端点: min={min_delta}, mid={mid_delta}, max={max_delta}")
         if self.global_cal:
             print(f"全局曲线点: {self.global_cal.points}")
-            print(f"全局 min_delta={self.global_cal.min_delta}, max_delta={self.global_cal.max_delta}")
-            print(f"全局 min_angle={self.global_cal.min_angle}, max_angle={self.global_cal.max_angle}")
         else:
             print("全局校准: None（线性兜底）")
+
+        def _map_segment(seg_min_d, seg_max_d, seg_min_a, seg_max_a, global_cal):
+            """单段映射：将全局曲线中[seg_min_a, seg_max_a]范围映射到载具[seg_min_d, seg_max_d]"""
+            seg_total = seg_max_d - seg_min_d
+            if global_cal is None or seg_total == 0:
+                return []
+            g_min_d = global_cal.angle_to_delta(seg_min_a)
+            g_max_d = global_cal.angle_to_delta(seg_max_a)
+            g_range = g_max_d - g_min_d
+            if g_range == 0:
+                return []
+            pts = []
+            # 在该角度段内均匀取点（前4点在第一段，后4点在第二段，中间点共享）
+            return pts
+
         if self.global_cal is None:
             # 无全局校准：线性插值兜底
             generated = []
@@ -428,39 +459,47 @@ class Calibrator(QObject):
                 print(f"  点[{i}]: delta={d}, angle={a}°")
             print("=== 快校调试结束 ===")
             return result
-        global_min_delta = self.global_cal.min_delta
-        global_max_delta = self.global_cal.max_delta
-        global_delta_range = global_max_delta - global_min_delta
-        if global_delta_range == 0:
-            # 兜底：线性插值
-            generated = []
-            for i in range(AngleCalibration.NUM_POINTS):
-                rel = i / (AngleCalibration.NUM_POINTS - 1)
-                veh_angle = self._min_angle + rel * (self._max_angle - self._min_angle)
-                veh_delta = min_delta + rel * vehicle_total
-                generated.append((round(veh_delta, 1), round(veh_angle, 1)))
-            result = AngleCalibration(generated)
-            print("警告: global_delta_range==0，线性兜底")
-            for i, (d, a) in enumerate(result.points):
-                print(f"  点[{i}]: delta={d}, angle={a}°")
-            print("=== 快校调试结束 ===")
-            return result
-        generated = []
+
+        # 分段映射：前半段[最低角,中间角]，后半段[中间角,最高角]
+        # 7个点：点0-3在第一段（含中间点），点3-6在第二段（含中间点）
         global_min_angle = self.global_cal.min_angle
         global_max_angle = self.global_cal.max_angle
+        global_angle_range = global_max_angle - global_min_angle
+
+        generated = []
         for i in range(AngleCalibration.NUM_POINTS):
-            global_angle = self.global_cal.points[i][1]
-            # 关键：用全局曲线反查该角度对应的真实增量（捕捉非线性）
-            global_delta_at_angle = self.global_cal.angle_to_delta(global_angle)
-            # 该增量在全局增量范围内的相对位置
-            rel = (global_delta_at_angle - global_min_delta) / global_delta_range
-            # 映射到载具增量范围
-            veh_delta = min_delta + rel * vehicle_total
-            # 角度映射到载具范围（用角度比例）
-            veh_angle = self._min_angle + (global_angle - global_min_angle) / (global_max_angle - global_min_angle) * (self._max_angle - self._min_angle)
+            # 该点在载具角度范围中的比例
+            veh_angle = self._min_angle + i / (AngleCalibration.NUM_POINTS - 1) * (self._max_angle - self._min_angle)
+            # 确定该点属于哪一段
+            if veh_angle <= mid_angle:
+                # 第一段：[最低角,中间角]
+                seg_min_d, seg_max_d = min_delta, mid_delta
+                seg_min_a, seg_max_a = self._min_angle, mid_angle
+            else:
+                # 第二段：[中间角,最高角]
+                seg_min_d, seg_max_d = mid_delta, max_delta
+                seg_min_a, seg_max_a = mid_angle, self._max_angle
+
+            seg_total = seg_max_d - seg_min_d
+            if seg_total == 0:
+                veh_delta = seg_min_d
+            else:
+                # 用全局曲线反查该角度对应的增量在全局范围的相对位置
+                # 再映射到该段的载具增量范围
+                g_delta_at_angle = self.global_cal.angle_to_delta(veh_angle)
+                g_seg_min_d = self.global_cal.angle_to_delta(seg_min_a)
+                g_seg_max_d = self.global_cal.angle_to_delta(seg_max_a)
+                g_seg_range = g_seg_max_d - g_seg_min_d
+                if g_seg_range == 0:
+                    rel_in_seg = (veh_angle - seg_min_a) / (seg_max_a - seg_min_a) if seg_max_a != seg_min_a else 0
+                else:
+                    rel_in_seg = (g_delta_at_angle - g_seg_min_d) / g_seg_range
+                veh_delta = seg_min_d + rel_in_seg * seg_total
+
             generated.append((round(veh_delta, 1), round(veh_angle, 1)))
+
         result = AngleCalibration(generated)
-        print("生成的快校曲线:")
+        print("生成的3点快校曲线:")
         for i, (d, a) in enumerate(result.points):
             print(f"  点[{i}]: delta={d}, angle={a}°, delta_to_angle={result.delta_to_angle(d):.1f}°")
         print("=== 快校调试结束 ===")
