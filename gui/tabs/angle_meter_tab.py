@@ -807,10 +807,8 @@ class AngleMeterTab(QWidget):
     # === 热键微调（长按连续注入）===
     def _on_up_pressed(self):
         """上移微调按下：SendInput 模拟鼠标上移，启动定时器，0.5秒后加速。
-        根源：模拟真实鼠标移动，游戏炮管和角度仪示数同步。"""
+        任何状态下都触发（使用中/校准中），SendInput 使游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
-            return
-        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         self._up_pressed = True
         self._up_accel = False
@@ -828,8 +826,6 @@ class AngleMeterTab(QWidget):
     def _on_up_tick(self):
         if not self.raw or not self._up_pressed or self.tracker is None:
             return
-        if self.tracker.state not in ("ACTIVE", "PAUSED"):
-            return
         step = 5 if self._up_accel else 1
         _simulate_mouse_move(-step)
 
@@ -841,10 +837,8 @@ class AngleMeterTab(QWidget):
 
     def _on_down_pressed(self):
         """下移微调按下：SendInput 模拟鼠标下移，启动定时器，0.5秒后加速。
-        根源：模拟真实鼠标移动，游戏炮管和角度仪示数同步。"""
+        任何状态下都触发（使用中/校准中），SendInput 使游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
-            return
-        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         self._down_pressed = True
         self._down_accel = False
@@ -861,8 +855,6 @@ class AngleMeterTab(QWidget):
 
     def _on_down_tick(self):
         if not self.raw or not self._down_pressed or self.tracker is None:
-            return
-        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         step = 5 if self._down_accel else 1
         _simulate_mouse_move(step)
