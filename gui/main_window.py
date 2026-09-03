@@ -55,9 +55,9 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._apply_theme(self._current_theme)
 
-        # 启动刷新：概览页（第一个tab已创建）+ 数显模块（懒加载创建后刷新）
+        # 启动刷新：概览页（第一个tab已创建）
+        # RangefinderTab改为窗口显示后异步创建（main.py中QTimer.singleShot），避免阻塞启动
         self.overview_tab.refresh()
-        self._ensure_tab(3).refresh()  # rangefinder_tab: 数显热键需启动时注册
 
     # ==================== 主题 ====================
 
