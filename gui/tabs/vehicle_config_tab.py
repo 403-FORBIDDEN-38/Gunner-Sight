@@ -115,9 +115,9 @@ class VehicleConfigTab(QWidget):
         self.mag_bind_btn = QPushButton("选择准星图片")
         mag_detail_layout.addRow("准星图片:", self.mag_crosshair_label)
         mag_detail_layout.addRow("", self.mag_bind_btn)
-        # 缩放偏移模式切换按钮
-        self.overlay_mode_btn = QPushButton("缩放偏移：全局（点击切换为载具）")
-        mag_detail_layout.addRow("", self.overlay_mode_btn)
+        # 缩放偏移模式勾选框
+        self.overlay_mode_check = QCheckBox("该倍率使用载具缩放配置")
+        mag_detail_layout.addRow("", self.overlay_mode_check)
         mag_layout.addLayout(mag_detail_layout)
         right_layout.addWidget(mag_group, 2)
 
@@ -183,7 +183,7 @@ class VehicleConfigTab(QWidget):
         self.mag_list.currentItemChanged.connect(self._on_mag_selected)
         self.mag_list.itemDoubleClicked.connect(lambda _item: self._on_bind_crosshair())
         self.mag_bind_btn.clicked.connect(self._on_bind_crosshair)
-        self.overlay_mode_btn.clicked.connect(self._on_overlay_mode_toggle)
+        self.overlay_mode_check.stateChanged.connect(self._on_overlay_mode_changed)
         # 载具缩放偏移
         self.vo_scale_slider.valueChanged.connect(self._on_vehicle_scale_changed)
         self.vo_offset_x.valueChanged.connect(self._on_vehicle_offset_changed)
@@ -438,7 +438,9 @@ class VehicleConfigTab(QWidget):
         item = self.mag_list.currentItem()
         if not vehicle or not ammo or not item:
             self.mag_crosshair_label.setText("未绑定")
-            self.overlay_mode_btn.setText("缩放偏移：全局（点击切换为载具）")
+            self.overlay_mode_check.blockSignals(True)
+            self.overlay_mode_check.setChecked(False)
+            self.overlay_mode_check.blockSignals(False)
             return
         idx = item.data(Qt.UserRole)
         mags = self.config.get_magnifications(vehicle, ammo)
@@ -446,12 +448,11 @@ class VehicleConfigTab(QWidget):
             mag = mags[idx]
             crosshair = mag.get("crosshair", "")
             self.mag_crosshair_label.setText(crosshair if crosshair else "未绑定")
-            # 更新缩放偏移模式按钮文字
+            # 更新缩放偏移模式勾选框
             use_vehicle = mag.get("use_vehicle_overlay", False)
-            if use_vehicle:
-                self.overlay_mode_btn.setText("缩放偏移：载具（点击切换为全局）")
-            else:
-                self.overlay_mode_btn.setText("缩放偏移：全局（点击切换为载具）")
+            self.overlay_mode_check.blockSignals(True)
+            self.overlay_mode_check.setChecked(use_vehicle)
+            self.overlay_mode_check.blockSignals(False)
 
     def _on_mag_selected(self, _current, _previous):
         self._update_mag_detail()
@@ -509,22 +510,16 @@ class VehicleConfigTab(QWidget):
             self.config.update_magnification(vehicle, ammo, idx, label=new_label.strip())
             self._update_mag_item_text(idx)
 
-    def _on_overlay_mode_toggle(self):
-        """缩放偏移模式切换：全局↔载具，点击按钮切换"""
+    def _on_overlay_mode_changed(self, _state):
+        """缩放偏移模式切换：勾选框状态变化"""
         vehicle = self._get_selected_vehicle()
         ammo = self._get_selected_ammo()
         item = self.mag_list.currentItem()
         if not vehicle or not ammo or not item:
             return
         idx = item.data(Qt.UserRole)
-        current = self.config.get_magnification_overlay_mode(vehicle, ammo, idx)
-        use_vehicle = not current
+        use_vehicle = self.overlay_mode_check.isChecked()
         self.config.set_magnification_overlay_mode(vehicle, ammo, idx, use_vehicle)
-        # 更新按钮文字
-        if use_vehicle:
-            self.overlay_mode_btn.setText("缩放偏移：载具（点击切换为全局）")
-        else:
-            self.overlay_mode_btn.setText("缩放偏移：全局（点击切换为载具）")
         self._update_mag_item_text(idx)
         self._update_overlay_preview()
 
@@ -566,16 +561,11 @@ class VehicleConfigTab(QWidget):
         self._update_overlay_preview()
 
     def _update_overlay_preview(self):
-        """实时更新 overlay 预览（当前倍率开关选载具时）"""
+        """实时更新 overlay 预览（get_effective_overlay 已封装二选一逻辑，总是刷新）"""
         vehicle = self._get_selected_vehicle()
         ammo = self._get_selected_ammo()
         item = self.mag_list.currentItem()
         if not vehicle or not ammo or not item:
-            return
-        idx = item.data(Qt.UserRole)
-        # 只有当前倍率选载具时才需要实时更新（全局模式下改载具配置不影响当前显示）
-        use_vehicle = self.config.get_magnification_overlay_mode(vehicle, ammo, idx)
-        if not use_vehicle:
             return
         # 通过 state_machine 强制刷新 overlay（不改变状态）
         self.state.refresh_overlay()
