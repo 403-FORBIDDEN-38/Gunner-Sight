@@ -133,3 +133,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - P0-2: ConfigManager加配置版本号(CURRENT_CONFIG_VERSION=3)，迁移函数只在版本变化时执行，已迁移配置跳过所有迁移
 - P0-3: 关闭时热键注销简化，直接keyboard.unhook_all()，删除先unhook单个钩子的重复操作
 - 版本: V0.0140300062
+
+### 任务四：退出卡顿优化+UI文字修复（已完成）
+- P0-4: 退出卡顿优化 - rangefinder SHUTDOWN_WAIT_MS 1000->200ms，closeEvent quit前加tab_stack.deleteLater()主动删除所有tab
+- P0-5: 快校文字 快速校准（2点）->快速校准（3点）
+- P0-6: 去掉思源黑体加载，只保留Norwester英文字体，中文自动回退系统字体
+- 版本: V0.0140300063
