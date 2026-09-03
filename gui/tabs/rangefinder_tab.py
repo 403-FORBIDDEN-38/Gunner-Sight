@@ -33,16 +33,11 @@ class RangefinderTab(QWidget):
         self._picker = None
         self._saved_opacity = 1.0
         self._loading = False
+        self._data_loaded = False
         self._build_ui()
         self._connect_config_signals()
         self._disable_focus()
-        self._load_hotkeys()
-        # 根据配置初始化控件状态与数据
-        if self.config.is_rangefinder_enabled():
-            self._refresh_profile_list()
-            self._load_profile_to_ui()
-        else:
-            self._set_controls_enabled(False)
+        self._load_hotkeys()  # 热键注册必须在__init__（启动时可用）
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -727,8 +722,15 @@ class RangefinderTab(QWidget):
         self._refresh_profile_list()
 
     def showEvent(self, event):
-        """首次显示时补检 overlay 初始化"""
+        """P1-1: 首次显示时加载数据+补检overlay初始化"""
         super().showEvent(event)
+        if not self._data_loaded:
+            if self.config.is_rangefinder_enabled():
+                self._refresh_profile_list()
+                self._load_profile_to_ui()
+            else:
+                self._set_controls_enabled(False)
+            self._data_loaded = True
         if self.config.is_rangefinder_enabled() and self.rangefinder_engine is None:
             QTimer.singleShot(0, self._init_rangefinder)
 

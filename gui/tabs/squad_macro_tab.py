@@ -17,9 +17,16 @@ class SquadMacroTab(QWidget):
         self.config = config
         self.hotkey = hotkey
         self.squad_macro = None
+        self._data_loaded = False
         self._build_ui()
-        self._update_controls_enabled()
-        self._refresh_vehicle_list()
+
+    def showEvent(self, event):
+        """P1-1: 首次显示时加载数据，避免__init__阻塞"""
+        super().showEvent(event)
+        if not self._data_loaded:
+            self._update_controls_enabled()
+            self._refresh_vehicle_list()
+            self._data_loaded = True
 
     def _build_ui(self):
         outer = QVBoxLayout(self)

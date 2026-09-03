@@ -232,6 +232,8 @@ def _main():
     # P0-2: Overlay窗口延迟预创建（窗口显示后100ms异步创建，不阻塞启动）
     QTimer.singleShot(100, overlay._ensure_overlay)
 
+    # P0-3: OverviewTab数据延迟加载（窗口显示后异步refresh）
+    QTimer.singleShot(0, lambda: window.overview_tab.refresh())
     # 启动性能修复：RangefinderTab窗口显示后异步创建（不阻塞启动）
     QTimer.singleShot(0, lambda: window._ensure_tab(3).refresh())
 

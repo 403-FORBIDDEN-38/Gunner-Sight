@@ -152,3 +152,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 任务二检查: _connect_signals无意外创建tab，Overlay预创建(QTimer.singleShot(100))已存在
 - 预期: MainWindow创建919ms->200-300ms，启动总耗时1374ms->400-500ms
 - 版本: V0.0140300065
+
+### 启动性能系统性修复（已完成）
+- P0-1: 修复懒加载index错位 - _on_nav_changed用setCurrentWidget(widget)替代setCurrentIndex(index)
+- P0-2: 消除重复QSS - 删除__init__中提前的_setup_style()调用，只保留_apply_theme()
+- P0-3: OverviewTab数据延迟加载 - __init__删除refresh()，main.py窗口显示后QTimer.singleShot异步refresh
+- P1-1: 所有tab数据加载移到showEvent - squad_macro/angle_meter/rangefinder添加_data_loaded标志，首次显示时加载数据；热键注册保留在__init__（启动时可用）；vehicle_config/hotkey/resource已有showEvent加载
+- P1-2: tab创建加异常保护 - _ensure_tab中try-except包裹widget创建，失败时显示错误提示
+- 预期: MainWindow创建908ms->150-250ms，启动总耗时1315ms->300-450ms
+- 版本: V0.0140300066

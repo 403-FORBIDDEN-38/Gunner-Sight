@@ -50,14 +50,12 @@ class MainWindow(QMainWindow):
 
         self._current_theme = self.config.get_theme()
         self._scrolling = False  # 预留：防止信号循环
-        self._setup_style(self._current_theme)
         self._create_ui()
         self._connect_signals()
-        self._apply_theme(self._current_theme)
+        self._apply_theme(self._current_theme)  # P0-2: 只调一次（内部会调_setup_style）
 
-        # 启动刷新：概览页（第一个tab已创建）
-        # RangefinderTab改为窗口显示后异步创建（main.py中QTimer.singleShot），避免阻塞启动
-        self.overview_tab.refresh()
+        # P0-3: OverviewTab数据延迟加载（main.py中QTimer.singleShot异步refresh）
+        # RangefinderTab也改为窗口显示后异步创建，避免阻塞启动
 
     # ==================== 主题 ====================
 
@@ -291,12 +289,22 @@ class MainWindow(QMainWindow):
         QApplication.instance().installEventFilter(self)
 
     def _ensure_tab(self, index):
-        """P0-1: 懒加载创建tab，创建后连接该tab特有的信号"""
+        """P1-2: 懒加载创建tab，创建后连接该tab特有的信号。加异常保护。"""
         if index not in self._tab_cache:
-            widget = self._tab_factories[index]()
+            try:
+                widget = self._tab_factories[index]()
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                widget = QLabel(f"页面加载失败: {e}")
             self._tab_cache[index] = widget
             self.tab_stack.insertWidget(index, widget)
-            self._connect_tab_signals(index, widget)
+            if hasattr(widget, 'connect_signals') or index in (0, 1, 2, 3, 5, 6):
+                try:
+                    self._connect_tab_signals(index, widget)
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
         return self._tab_cache[index]
 
     # P0-1: property懒加载，兼容 self.rangefinder_tab 等属性访问
@@ -333,8 +341,8 @@ class MainWindow(QMainWindow):
         return self._ensure_tab(7)
 
     def _on_nav_changed(self, index):
-        self._ensure_tab(index)
-        self.tab_stack.setCurrentIndex(index)
+        widget = self._ensure_tab(index)
+        self.tab_stack.setCurrentWidget(widget)  # P0-1: 用widget引用，不用index（懒加载index会错位）
         self._update_page_nav_buttons(index)
 
 
