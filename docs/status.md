@@ -1,7 +1,7 @@
 # GunnerSight 项目状态
 
 ## 版本
-V0.0140300055（角度仪热键微调+校准体系重构完成，待冒烟测试）
+V0.0140300056（角度仪功能修复与UI优化完成）
 
 ## 测试
 - tests/test_config.py: 15 passed
@@ -14,31 +14,34 @@ V0.0140300055（角度仪热键微调+校准体系重构完成，待冒烟测试
 - 第二轮审查修复 R1/R2/R3: 完成
 - 第三轮 UI 优化 U3/U4: 完成
 - 第四轮状态一致性修复 U5/U5.1/U5.2: 完成
-- 角度仪热键微调+校准体系重构: 完成（代码修改完成，待冒烟测试）
+- 角度仪热键微调+校准体系重构: 完成
+- 角度仪功能修复与UI优化(B1-B3/F1/U1-U4): 完成
 
-## 当前轮任务完成详情
+## 已完成功能详情
 
-### 角度仪热键微调功能（阶段1-3）
-- 阶段1: RawInputReader 增加 _injected_delta_y + inject_delta_y()，consume_delta_y() 合并硬件+注入
-- 阶段2: HotkeyManager 新增 up/down pressed/released 信号，同时注册 keydown+keyup
-- 阶段3: angle_meter_tab 增加上移/下移热键绑定UI，长按定时器（50ms初始，0.5秒后加速到20ms，每次注入5）
-- 方向：上移注入负值（AngleTracker中 -consume = 正角度），下移注入正值
+### 角度仪热键微调功能
+- RawInputReader 增加 _injected_delta_y + inject_delta_y()，consume_delta_y() 合并硬件+注入
+- HotkeyManager 新增 up/down pressed/released 信号，同时注册 keydown+keyup
+- angle_meter_tab 增加上移/下移热键绑定UI，长按定时器（50ms初始，0.5秒后加速到20ms，每次注入5）
+- 方向：上移注入负值，下移注入正值
 - AngleTracker 和 Calibrator 完全不动
 
-### 校准体系重构（阶段4-7）
-- 阶段4: config_manager 新增 angle_meter_global_calibration 配置；profile 校准字段重构（calibration_type/quick_calibration/quick_min_delta/quick_max_delta/full_calibration）；12个新方法
-- 阶段5: Calibrator._generate_from_endpoints 改用 angle_to_delta 反查全局曲线增量相对位置，复刻非线性形状
-- 阶段6: angle_meter_tab UI重构——新增全局校准区域（状态+按钮+说明），载具校准改为方案选择（下拉框：未校准/快速/单独）+状态显示+开始/清除按钮；_on_cal_done区分全局/载具校准；重校全局后自动重新生成所有载具快校
-- 阶段7: 兼容性迁移——旧 calibration 字段无 calibration_type → 标记为 full，数据移入 full_calibration；_merge_config 递归补全新字段
+### 校准体系重构
+- config_manager 新增 angle_meter_global_calibration 配置；profile 校准字段重构
+- Calibrator._generate_from_endpoints 改用 angle_to_delta 反查全局曲线增量相对位置
+- angle_meter_tab UI重构——新增全局校准区域，载具校准改为方案选择+状态显示
+- 重校全局后自动重新生成所有载具快校
+- 兼容性迁移——旧 calibration 标记为 full
 
-## 关键设计决策
-- 热键微调在输入源层注入（RawInputReader），校准和使用自动都生效，防错逻辑自动覆盖
-- 快速校准算法：用全局曲线 angle_to_delta(global_angle) 反查真实增量，计算相对位置后映射到载具范围，复刻全局曲线非线性形状
-- 重校全局后：有 quick_min_delta/quick_max_delta 的载具快校自动重新生成；无 min_delta 的旧快校保留；独校不受影响
-- 两种方案数据独立保存，切换不丢失
-
-## 待修复问题
-（无，当前为新功能开发完成，待冒烟测试）
+### 角度仪功能修复与UI优化（当前轮）
+- B1: reset_to_zero() 修复 angle_to_delta(0.0) 和 emit(0.0) 未调用导致的崩溃
+- B2: _ensure_angle_meter_defaults 去掉空 profiles 自动恢复；delete_angle_meter_profile 允许删除最后一个；get_current_angle_meter_profile 默认值改为空字符串
+- B3: 微调热键加状态检查（只在 ACTIVE/PAUSED 状态注入），避免 IDLE 状态累积无效增量
+- F1: 校准开始自动最小化主窗口，完成/取消后恢复
+- U1: 开始/停止合并为 toggle_use_btn，文字根据状态切换
+- U2: 开始/取消校准合并为 cal_toggle_btn，文字根据校准状态切换
+- U3: 热键绑定区域改为两列网格布局（左列：开始/停止、暂离、校准确认；右列：上移、下移）
+- U4: 去掉"清除当前方案"按钮及 _on_cal_clear 方法
 
 ## 审查修复记录
 ### 第一轮（已完成）
@@ -49,8 +52,8 @@ V0.0140300055（角度仪热键微调+校准体系重构完成，待冒烟测试
 - O2（代码质量）: state_machine 新增 overlay_settings_changed 专用信号
 
 ### 第二轮（已完成）
-- R1（发布必修）: 切换缩放模式从载具切回全局时不生效 → 删除 _update_overlay_preview 中错误的提前 return 判断
-- R2（UI）: 缩放模式切换控件从按钮改为 QCheckBox 勾选框"该倍率使用载具缩放配置"
+- R1（发布必修）: 切换缩放模式从载具切回全局时不生效 → 删除错误的提前 return 判断
+- R2（UI）: 缩放模式切换控件从按钮改为 QCheckBox 勾选框
 - R3（流程）: 执行Agent汇报精简（不超过5行），详细内容写进 docs/status.md
 
 ### 第三轮（已完成）
@@ -58,7 +61,7 @@ V0.0140300055（角度仪热键微调+校准体系重构完成，待冒烟测试
 - U4（UI）: 倍率详情区域从 QFormLayout 改为 QVBoxLayout 左对齐
 
 ### 第四轮（已完成）
-- U5（发布必修）: 切走再切回载具配置页时载具选中状态丢失 → _refresh_vehicle_list 恢复载具选中
+- U5（发布必修）: 切走再切回载具配置页时载具选中状态丢失 → 恢复选中
 - U5.1: _refresh_ammo_list 恢复弹种选中
 - U5.2: _refresh_mag_list 恢复倍率选中
 
@@ -72,4 +75,4 @@ V0.0140300055（角度仪热键微调+校准体系重构完成，待冒烟测试
 
 ## 环境备注
 - 系统未安装 git，使用 dulwich（纯 Python git 实现）替代
-- python 命令指向 Windows Store 占位符，使用 py 启动器（py -m pytest）
+- 打包 Python: C:\Users\suncheng\AppData\Local\Programs\Python\Python313\python.exe

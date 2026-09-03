@@ -1,7 +1,7 @@
 """角度仪页：配置列表+关联载具、校准、使用、角度overlay。常闭零消耗。"""
 
 from PyQt5.QtWidgets import (
-    QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame,
+    QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame, QGridLayout,
     QGroupBox, QLabel, QCheckBox, QDoubleSpinBox, QPushButton,
     QLineEdit, QApplication, QListWidgetItem, QInputDialog, QAbstractItemView,
     QComboBox
@@ -130,38 +130,38 @@ class AngleMeterTab(QWidget):
         self.angle_display.setMinimumHeight(60)
         use_v.addWidget(self.angle_display)
         use_btn_row = QHBoxLayout()
-        self.start_btn = QPushButton("开始使用")
-        use_btn_row.addWidget(self.start_btn)
-        self.stop_btn = QPushButton("停止")
-        use_btn_row.addWidget(self.stop_btn)
+        self.toggle_use_btn = QPushButton("开始使用")
+        use_btn_row.addWidget(self.toggle_use_btn)
         self.pause_btn = QPushButton("暂离/恢复")
         use_btn_row.addWidget(self.pause_btn)
         use_v.addLayout(use_btn_row)
-        hk_use_row1 = QHBoxLayout()
-        hk_use_row1.addWidget(QLabel("开始/停止热键:"))
+        hk_grid = QGridLayout()
+        hk_grid.setSpacing(6)
+        # 左列
+        hk_grid.addWidget(QLabel("开始/停止:"), 0, 0)
         self.hk_toggle = HotkeyLineEdit()
         self.hk_toggle.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("toggle", k))
-        hk_use_row1.addWidget(self.hk_toggle)
-        hk_use_row1.addStretch()
-        use_v.addLayout(hk_use_row1)
-        hk_use_row2 = QHBoxLayout()
-        hk_use_row2.addWidget(QLabel("暂离热键:"))
+        hk_grid.addWidget(self.hk_toggle, 0, 1)
+        hk_grid.addWidget(QLabel("暂离:"), 1, 0)
         self.hk_pause = HotkeyLineEdit()
         self.hk_pause.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("pause", k))
-        hk_use_row2.addWidget(self.hk_pause)
-        hk_use_row2.addStretch()
-        use_v.addLayout(hk_use_row2)
-        hk_use_row3 = QHBoxLayout()
-        hk_use_row3.addWidget(QLabel("上移微调:"))
+        hk_grid.addWidget(self.hk_pause, 1, 1)
+        hk_grid.addWidget(QLabel("校准确认:"), 2, 0)
+        self.hk_calibrate = HotkeyLineEdit()
+        self.hk_calibrate.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("calibrate", k))
+        hk_grid.addWidget(self.hk_calibrate, 2, 1)
+        # 右列
+        hk_grid.addWidget(QLabel("上移微调:"), 0, 2)
         self.hk_up = HotkeyLineEdit()
         self.hk_up.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("up", k))
-        hk_use_row3.addWidget(self.hk_up)
-        hk_use_row3.addWidget(QLabel("下移微调:"))
+        hk_grid.addWidget(self.hk_up, 0, 3)
+        hk_grid.addWidget(QLabel("下移微调:"), 1, 2)
         self.hk_down = HotkeyLineEdit()
         self.hk_down.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("down", k))
-        hk_use_row3.addWidget(self.hk_down)
-        hk_use_row3.addStretch()
-        use_v.addLayout(hk_use_row3)
+        hk_grid.addWidget(self.hk_down, 1, 3)
+        hk_grid.setColumnStretch(1, 1)
+        hk_grid.setColumnStretch(3, 1)
+        use_v.addLayout(hk_grid)
         sc_layout.addWidget(use_group)
 
         # === 行2：校准设置 ===
@@ -199,20 +199,10 @@ class AngleMeterTab(QWidget):
         self.cal_hint_label.setObjectName("cal_hint")
         cal_v.addWidget(self.cal_hint_label)
         cal_btn_row = QHBoxLayout()
-        self.cal_start_btn = QPushButton("开始校准")
-        cal_btn_row.addWidget(self.cal_start_btn)
-        self.cal_cancel_btn = QPushButton("取消校准")
-        cal_btn_row.addWidget(self.cal_cancel_btn)
-        self.cal_clear_btn = QPushButton("清除当前方案")
-        cal_btn_row.addWidget(self.cal_clear_btn)
+        self.cal_toggle_btn = QPushButton("开始校准")
+        cal_btn_row.addWidget(self.cal_toggle_btn)
         cal_v.addLayout(cal_btn_row)
-        hk_cal_row = QHBoxLayout()
-        hk_cal_row.addWidget(QLabel("校准确认热键:"))
-        self.hk_calibrate = HotkeyLineEdit()
-        self.hk_calibrate.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("calibrate", k))
-        hk_cal_row.addWidget(self.hk_calibrate)
-        hk_cal_row.addStretch()
-        cal_v.addLayout(hk_cal_row)
+
         sc_layout.addWidget(cal_group)
 
         # === 行3+行4：角度仪配置（QGroupBox 包裹，左上角小字标题，组内自适应高度）===
@@ -296,19 +286,16 @@ class AngleMeterTab(QWidget):
         self.rename_profile_btn.clicked.connect(self._on_rename_profile)
         self.delete_profile_btn.clicked.connect(self._on_delete_profile)
         self.global_cal_btn.clicked.connect(self._on_global_cal)
-        self.cal_start_btn.clicked.connect(self._on_cal_start)
-        self.cal_cancel_btn.clicked.connect(self._on_cal_cancel)
-        self.cal_clear_btn.clicked.connect(self._on_cal_clear)
-        self.start_btn.clicked.connect(self._on_start)
-        self.stop_btn.clicked.connect(self._on_stop)
+        self.cal_toggle_btn.clicked.connect(self._on_cal_toggle)
+        self.toggle_use_btn.clicked.connect(self._on_toggle_use)
         self.pause_btn.clicked.connect(self._on_pause)
 
         # 焦点禁用
         for w in [self.enable_check, self.profile_search, self.min_spin, self.max_spin,
                   self.add_profile_btn, self.rename_profile_btn, self.delete_profile_btn,
-                  self.global_cal_btn, self.cal_start_btn, self.cal_cancel_btn, self.cal_clear_btn,
+                  self.global_cal_btn, self.cal_toggle_btn,
                   self.cal_scheme_combo,
-                  self.start_btn, self.stop_btn, self.pause_btn,
+                  self.toggle_use_btn, self.pause_btn,
                   self.hk_toggle, self.hk_pause, self.hk_calibrate, self.hk_reset,
                   self.hk_up, self.hk_down]:
             w.setFocusPolicy(Qt.NoFocus)
@@ -574,13 +561,23 @@ class AngleMeterTab(QWidget):
         """全局校准：7点，范围固定-80~80，完成后保存到全局并触发快校重新生成"""
         if not self.calibrator:
             return
+        if self.calibrator.is_calibrating:
+            self.calibrator.cancel()
+            return
         self._global_calibrating = True
         self.calibrator.start("full", -80.0, 80.0)
         self._show_overlay()
+        self.cal_toggle_btn.setText("取消校准")
+        # F1: 全局校准开始后自动最小化主窗口
+        if self.window():
+            self.window().showMinimized()
 
-    def _on_cal_start(self):
-        """根据当前选择的方案开始载具校准"""
+    def _on_cal_toggle(self):
+        """开始或取消载具校准（根据当前校准状态）"""
         if not self.calibrator:
+            return
+        if self.calibrator.is_calibrating:
+            self.calibrator.cancel()
             return
         name = self.config.get_current_angle_meter_profile()
         p = self.config.get_angle_meter_profile(name)
@@ -593,6 +590,10 @@ class AngleMeterTab(QWidget):
         else:
             return
         self._show_overlay()
+        self.cal_toggle_btn.setText("取消校准")
+        # F1: 校准开始后自动最小化主窗口
+        if self.window():
+            self.window().showMinimized()
 
     def _on_cal_scheme_changed(self, index):
         """切换校准方案：立即更新AngleTracker"""
@@ -607,30 +608,9 @@ class AngleMeterTab(QWidget):
         self._apply_current_profile_to_tracker()
         self._load_profile_params(name)
 
-    def _on_cal_clear(self):
-        """清除当前方案的校准数据"""
-        name = self.config.get_current_angle_meter_profile()
-        if not name:
-            return
-        profile = self.config.get_angle_meter_profile(name)
-        ctype = profile.get("calibration_type", "none")
-        if ctype == "quick":
-            profile["quick_calibration"] = None
-            profile["quick_min_delta"] = 0.0
-            profile["quick_max_delta"] = 0.0
-        elif ctype == "full":
-            profile["full_calibration"] = None
-        profile["calibration_type"] = "none"
-        self.config.set_angle_meter_profile(name, profile)
-        self._apply_current_profile_to_tracker()
-        self._load_profile_params(name)
-
-    def _on_cal_cancel(self):
-        if self.calibrator:
-            self.calibrator.cancel()
-
     def _on_cal_progress(self, step, total):
         self.cal_status_label.setText(f"校准中: {step}/{total}")
+        self.cal_toggle_btn.setText("取消校准")
 
     def _on_cal_hint(self, step, total, target):
         hint = f"→ 请将炮塔调到 {target:.1f}°，按校准确认热键 ({step+1}/{total})"
@@ -640,6 +620,10 @@ class AngleMeterTab(QWidget):
 
     def _on_cal_done(self, cal):
         self.cal_hint_label.setText("")
+        self.cal_toggle_btn.setText("开始校准")
+        # F1: 校准完成后恢复主窗口
+        if self.window():
+            self.window().showNormal()
         if self.overlay:
             self.overlay.set_hint("")
             if not self.tracker or self.tracker.state != "ACTIVE":
@@ -672,6 +656,10 @@ class AngleMeterTab(QWidget):
 
     def _on_cal_cancelled(self):
         self.cal_hint_label.setText("")
+        self.cal_toggle_btn.setText("开始校准")
+        # F1: 校准取消后恢复主窗口
+        if self.window():
+            self.window().showNormal()
         if self.overlay:
             self.overlay.set_hint("")
             if not self.tracker or self.tracker.state != "ACTIVE":
@@ -685,16 +673,16 @@ class AngleMeterTab(QWidget):
             self.overlay.show()
             self.overlay.move(100, 100)
 
-    def _on_start(self):
-        if self.tracker:
-            self.tracker.start()
-            self._show_overlay()
-
-    def _on_stop(self):
-        if self.tracker:
+    def _on_toggle_use(self):
+        if not self.tracker:
+            return
+        if self.tracker.state in ("ACTIVE", "PAUSED"):
             self.tracker.stop()
             if self.overlay:
                 self.overlay.hide()
+        else:
+            self.tracker.start()
+            self._show_overlay()
 
     def _on_pause(self):
         if self.tracker:
@@ -707,10 +695,13 @@ class AngleMeterTab(QWidget):
         if self.overlay:
             self.overlay.set_state(state.lower())
         if state == "ACTIVE":
+            self.toggle_use_btn.setText("停止")
             self.use_hint_label.setText("✓ 使用中，角度从最低角开始累积")
         elif state == "PAUSED":
+            self.toggle_use_btn.setText("停止")
             self.use_hint_label.setText("⏸ 已暂离，按暂离/恢复继续")
         else:
+            self.toggle_use_btn.setText("开始使用")
             self.use_hint_label.setText("⚠ 使用前请将炮塔调到最低角，然后按开始")
 
     def _on_angle(self, angle):
@@ -740,9 +731,11 @@ class AngleMeterTab(QWidget):
                 self.tracker.stop()
                 if self.overlay:
                     self.overlay.hide()
+                self.toggle_use_btn.setText("开始使用")
             else:
                 self.tracker.start()
                 self._show_overlay()
+                self.toggle_use_btn.setText("停止")
 
     def _on_hotkey_pause(self):
         if self.tracker:
@@ -762,16 +755,18 @@ class AngleMeterTab(QWidget):
 
     # === 热键微调（长按连续注入）===
     def _on_up_pressed(self):
-        """上移微调按下：立即注入1，启动定时器，0.5秒后加速"""
+        """上移微调按下：立即注入1，启动定时器，0.5秒后加速。
+        根源：只在使用中(ACTIVE/PAUSED)注入，避免IDLE状态累积无效增量。"""
         if not self.raw or self.tracker is None:
+            return
+        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         self._up_pressed = True
         self._up_accel = False
-        self.raw.inject_delta_y(-1)  # 上移注入负值（AngleTracker中 -consume = 正角度）
+        self.raw.inject_delta_y(-1)
         if self._up_timer:
             self._up_timer.setInterval(50)
             self._up_timer.start()
-            # 0.5秒后切换到加速模式
             QTimer.singleShot(500, self._enable_up_accel)
 
     def _enable_up_accel(self):
@@ -780,7 +775,9 @@ class AngleMeterTab(QWidget):
             self._up_timer.setInterval(20)
 
     def _on_up_tick(self):
-        if not self.raw or not self._up_pressed:
+        if not self.raw or not self._up_pressed or self.tracker is None:
+            return
+        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         step = 5 if self._up_accel else 1
         self.raw.inject_delta_y(-step)
@@ -792,12 +789,15 @@ class AngleMeterTab(QWidget):
             self._up_timer.stop()
 
     def _on_down_pressed(self):
-        """下移微调按下：立即注入1，启动定时器，0.5秒后加速"""
+        """下移微调按下：立即注入1，启动定时器，0.5秒后加速。
+        根源：只在使用中(ACTIVE/PAUSED)注入，避免IDLE状态累积无效增量。"""
         if not self.raw or self.tracker is None:
+            return
+        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         self._down_pressed = True
         self._down_accel = False
-        self.raw.inject_delta_y(1)  # 下移注入正值
+        self.raw.inject_delta_y(1)
         if self._down_timer:
             self._down_timer.setInterval(50)
             self._down_timer.start()
@@ -809,7 +809,9 @@ class AngleMeterTab(QWidget):
             self._down_timer.setInterval(20)
 
     def _on_down_tick(self):
-        if not self.raw or not self._down_pressed:
+        if not self.raw or not self._down_pressed or self.tracker is None:
+            return
+        if self.tracker.state not in ("ACTIVE", "PAUSED"):
             return
         step = 5 if self._down_accel else 1
         self.raw.inject_delta_y(step)
