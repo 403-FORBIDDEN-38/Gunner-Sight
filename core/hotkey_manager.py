@@ -57,6 +57,10 @@ class HotkeyManager(QObject):
     angle_meter_pause_triggered = pyqtSignal()  # 角度仪暂离/恢复
     angle_meter_calibrate_triggered = pyqtSignal()  # 角度仪校准确认
     angle_meter_reset_triggered = pyqtSignal()  # 角度仪归零
+    angle_meter_up_pressed = pyqtSignal()  # 角度仪上移微调按下
+    angle_meter_up_released = pyqtSignal()  # 角度仪上移微调松开
+    angle_meter_down_pressed = pyqtSignal()  # 角度仪下移微调按下
+    angle_meter_down_released = pyqtSignal()  # 角度仪下移微调松开
 
     def __init__(self, config_manager, state_machine, parent=None):
         super().__init__(parent)
@@ -183,12 +187,20 @@ class HotkeyManager(QObject):
                 ]
                 for action, callback in am_actions:
                     hk = am_hks.get(action, {})
-                    # 统一双键结构，角度仪只用 key1（单键绑定）
                     key = hk.get("key1", "")
                     trigger = hk.get("trigger1", "keydown")
                     if key:
                         self._register_hotkey(key, trigger, callback, f"am_{action}")
-                    # key2 留空（角度仪不支持双键组合，保持单键）
+                # up/down 微调热键：同时注册 keydown 和 keyup（用于长按连续输出）
+                for action, down_cb, up_cb in [
+                    ("up", self._on_angle_meter_up_down, self._on_angle_meter_up_up),
+                    ("down", self._on_angle_meter_down_down, self._on_angle_meter_down_up),
+                ]:
+                    hk = am_hks.get(action, {})
+                    key = hk.get("key1", "")
+                    if key:
+                        self._register_hotkey(key, "keydown", down_cb, f"am_{action}_down")
+                        self._register_hotkey(key, "keyup", up_cb, f"am_{action}_up")
 
             # 如果有鼠标热键，确保共享鼠标钩子已连接并 acquire
             if self._mouse_hotkeys:
@@ -393,6 +405,18 @@ class HotkeyManager(QObject):
 
     def _on_angle_meter_reset(self):
         self.angle_meter_reset_triggered.emit()
+
+    def _on_angle_meter_up_down(self):
+        self.angle_meter_up_pressed.emit()
+
+    def _on_angle_meter_up_up(self):
+        self.angle_meter_up_released.emit()
+
+    def _on_angle_meter_down_down(self):
+        self.angle_meter_down_pressed.emit()
+
+    def _on_angle_meter_down_up(self):
+        self.angle_meter_down_released.emit()
 
     def reload_hotkeys(self):
         """重新加载所有热键（配置修改后调用）"""

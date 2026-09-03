@@ -73,6 +73,14 @@ class AngleMeterTab(QWidget):
         self.overlay = None
         self._timer = None
         self._loading = False
+        # 热键微调长按状态
+        self._up_pressed = False
+        self._down_pressed = False
+        self._up_timer = None
+        self._down_timer = None
+        self._up_accel = False  # 0.5秒后加速
+        self._down_accel = False
+        self._global_calibrating = False
         self._build_ui()
         self._load_hotkeys()
         self._refresh_profile_list()
@@ -143,26 +151,60 @@ class AngleMeterTab(QWidget):
         hk_use_row2.addWidget(self.hk_pause)
         hk_use_row2.addStretch()
         use_v.addLayout(hk_use_row2)
+        hk_use_row3 = QHBoxLayout()
+        hk_use_row3.addWidget(QLabel("上移微调:"))
+        self.hk_up = HotkeyLineEdit()
+        self.hk_up.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("up", k))
+        hk_use_row3.addWidget(self.hk_up)
+        hk_use_row3.addWidget(QLabel("下移微调:"))
+        self.hk_down = HotkeyLineEdit()
+        self.hk_down.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("down", k))
+        hk_use_row3.addWidget(self.hk_down)
+        hk_use_row3.addStretch()
+        use_v.addLayout(hk_use_row3)
         sc_layout.addWidget(use_group)
 
         # === 行2：校准设置 ===
         cal_group = QGroupBox("校准设置")
         cal_v = QVBoxLayout(cal_group)
         cal_v.setSpacing(6)
-        self.cal_status_label = QLabel("状态: 使用全局出厂校准")
+        # 全局校准区域
+        global_cal_row = QHBoxLayout()
+        self.global_cal_status = QLabel("全局校准: 未校准（使用出厂默认）")
+        self.global_cal_status.setFont(QFont("Consolas", 10))
+        global_cal_row.addWidget(self.global_cal_status, 1)
+        self.global_cal_btn = QPushButton("全局校准(7点)")
+        global_cal_row.addWidget(self.global_cal_btn)
+        cal_v.addLayout(global_cal_row)
+        global_cal_hint = QLabel("适配显示器/dpi/游戏灵敏度，只需做一次，是所有载具校准的基础。重校后快速校准自动更新。")
+        global_cal_hint.setFont(QFont("Consolas", 8))
+        global_cal_hint.setObjectName("hint_text")
+        global_cal_hint.setWordWrap(True)
+        cal_v.addWidget(global_cal_hint)
+        sep_global = QFrame(); sep_global.setFrameShape(QFrame.HLine); sep_global.setObjectName("angle_meter_sep")
+        cal_v.addWidget(sep_global)
+        # 载具校准方案选择
+        scheme_row = QHBoxLayout()
+        scheme_row.addWidget(QLabel("校准方案:"))
+        self.cal_scheme_combo = QComboBox()
+        self.cal_scheme_combo.addItems(["未校准（使用全局出厂）", "快速校准（2点）", "单独校准（7点）"])
+        self.cal_scheme_combo.currentIndexChanged.connect(self._on_cal_scheme_changed)
+        scheme_row.addWidget(self.cal_scheme_combo, 1)
+        self.cal_status_label = QLabel("")
         self.cal_status_label.setFont(QFont("Consolas", 10))
-        cal_v.addWidget(self.cal_status_label)
+        scheme_row.addWidget(self.cal_status_label, 1)
+        cal_v.addLayout(scheme_row)
         self.cal_hint_label = QLabel("")
         self.cal_hint_label.setFont(QFont("Consolas", 10))
         self.cal_hint_label.setObjectName("cal_hint")
         cal_v.addWidget(self.cal_hint_label)
         cal_btn_row = QHBoxLayout()
-        self.cal_quick_btn = QPushButton("快速校准(2点)")
-        cal_btn_row.addWidget(self.cal_quick_btn)
-        self.cal_full_btn = QPushButton("精确校准(7点)")
-        cal_btn_row.addWidget(self.cal_full_btn)
+        self.cal_start_btn = QPushButton("开始校准")
+        cal_btn_row.addWidget(self.cal_start_btn)
         self.cal_cancel_btn = QPushButton("取消校准")
         cal_btn_row.addWidget(self.cal_cancel_btn)
+        self.cal_clear_btn = QPushButton("清除当前方案")
+        cal_btn_row.addWidget(self.cal_clear_btn)
         cal_v.addLayout(cal_btn_row)
         hk_cal_row = QHBoxLayout()
         hk_cal_row.addWidget(QLabel("校准确认热键:"))
@@ -253,9 +295,10 @@ class AngleMeterTab(QWidget):
         self.add_profile_btn.clicked.connect(self._on_add_profile)
         self.rename_profile_btn.clicked.connect(self._on_rename_profile)
         self.delete_profile_btn.clicked.connect(self._on_delete_profile)
-        self.cal_quick_btn.clicked.connect(self._on_cal_quick)
-        self.cal_full_btn.clicked.connect(self._on_cal_full)
+        self.global_cal_btn.clicked.connect(self._on_global_cal)
+        self.cal_start_btn.clicked.connect(self._on_cal_start)
         self.cal_cancel_btn.clicked.connect(self._on_cal_cancel)
+        self.cal_clear_btn.clicked.connect(self._on_cal_clear)
         self.start_btn.clicked.connect(self._on_start)
         self.stop_btn.clicked.connect(self._on_stop)
         self.pause_btn.clicked.connect(self._on_pause)
@@ -263,9 +306,11 @@ class AngleMeterTab(QWidget):
         # 焦点禁用
         for w in [self.enable_check, self.profile_search, self.min_spin, self.max_spin,
                   self.add_profile_btn, self.rename_profile_btn, self.delete_profile_btn,
-                  self.cal_quick_btn, self.cal_full_btn, self.cal_cancel_btn,
+                  self.global_cal_btn, self.cal_start_btn, self.cal_cancel_btn, self.cal_clear_btn,
+                  self.cal_scheme_combo,
                   self.start_btn, self.stop_btn, self.pause_btn,
-                  self.hk_toggle, self.hk_pause, self.hk_calibrate, self.hk_reset]:
+                  self.hk_toggle, self.hk_pause, self.hk_calibrate, self.hk_reset,
+                  self.hk_up, self.hk_down]:
             w.setFocusPolicy(Qt.NoFocus)
 
     # === 启用/禁用 ===
@@ -288,7 +333,9 @@ class AngleMeterTab(QWidget):
         self.raw = RawInputReader()
         self.raw.register()
         self.tracker = AngleTracker(self.raw)
-        self.calibrator = Calibrator(self.raw, AngleCalibration())
+        global_points = self.config.get_global_calibration_points()
+        global_cal = AngleCalibration(global_points) if global_points else AngleCalibration()
+        self.calibrator = Calibrator(self.raw, global_cal)
         self.overlay = AngleOverlay()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.tracker.update)
@@ -306,11 +353,26 @@ class AngleMeterTab(QWidget):
         self.hotkey.angle_meter_pause_triggered.connect(self._on_hotkey_pause)
         self.hotkey.angle_meter_calibrate_triggered.connect(self._on_hotkey_calibrate)
         self.hotkey.angle_meter_reset_triggered.connect(self._on_hotkey_reset)
+        self.hotkey.angle_meter_up_pressed.connect(self._on_up_pressed)
+        self.hotkey.angle_meter_up_released.connect(self._on_up_released)
+        self.hotkey.angle_meter_down_pressed.connect(self._on_down_pressed)
+        self.hotkey.angle_meter_down_released.connect(self._on_down_released)
+        # 长按定时器（50ms初始间隔，0.5秒后加速到20ms，每次注入增量递增）
+        self._up_timer = QTimer(self)
+        self._up_timer.setInterval(50)
+        self._up_timer.timeout.connect(self._on_up_tick)
+        self._down_timer = QTimer(self)
+        self._down_timer.setInterval(50)
+        self._down_timer.timeout.connect(self._on_down_tick)
         # 刷新
         self._refresh_profile_list()
         self._apply_current_profile_to_tracker()
 
     def _shutdown_engine(self):
+        if self._up_timer:
+            self._up_timer.stop()
+        if self._down_timer:
+            self._down_timer.stop()
         if self._timer:
             self._timer.stop()
             self._timer = None
@@ -375,11 +437,25 @@ class AngleMeterTab(QWidget):
         self.min_spin.setValue(profile.get("min_angle", -80.0))
         self.max_spin.setValue(profile.get("max_angle", 80.0))
         self._loading = False
-        cal = profile.get("calibration")
-        if cal:
-            self.cal_status_label.setText(f"状态: 载具单独校准（{len(cal)}点）✓")
+        # 校准方案状态
+        ctype = profile.get("calibration_type", "none")
+        scheme_map = {"none": 0, "quick": 1, "full": 2}
+        self.cal_scheme_combo.blockSignals(True)
+        self.cal_scheme_combo.setCurrentIndex(scheme_map.get(ctype, 0))
+        self.cal_scheme_combo.blockSignals(False)
+        if ctype == "quick" and profile.get("quick_calibration"):
+            self.cal_status_label.setText(f"快速校准 ✓（{len(profile['quick_calibration'])}点）")
+        elif ctype == "full" and profile.get("full_calibration"):
+            self.cal_status_label.setText(f"单独校准 ✓（{len(profile['full_calibration'])}点）")
         else:
-            self.cal_status_label.setText("状态: 使用全局出厂校准（建议做一次快速校准）")
+            self.cal_status_label.setText("未校准（使用全局出厂）")
+        # 全局校准状态
+        if self.config.is_global_calibrated():
+            self.global_cal_status.setText("全局校准: 已校准 ✓")
+            self.global_cal_btn.setText("重新校准全局")
+        else:
+            self.global_cal_status.setText("全局校准: 未校准（使用出厂默认）")
+            self.global_cal_btn.setText("全局校准(7点)")
         self.auto_reset_check.blockSignals(True)
         self.auto_reset_check.setChecked(profile.get("auto_reset", False))
         self.auto_reset_check.blockSignals(False)
@@ -397,8 +473,15 @@ class AngleMeterTab(QWidget):
         # 范围改变时清除旧校准（校准与范围绑定）
         if (abs(new_min - profile.get("min_angle", -80.0)) > 0.01 or
                 abs(new_max - profile.get("max_angle", 80.0)) > 0.01):
-            profile["calibration"] = None
-            self.cal_status_label.setText("状态: 使用全局出厂校准（范围已变更，旧校准已清除）")
+            profile["calibration_type"] = "none"
+            profile["quick_calibration"] = None
+            profile["full_calibration"] = None
+            profile["quick_min_delta"] = 0.0
+            profile["quick_max_delta"] = 0.0
+            self.cal_status_label.setText("未校准（范围已变更，旧校准已清除）")
+            self.cal_scheme_combo.blockSignals(True)
+            self.cal_scheme_combo.setCurrentIndex(0)
+            self.cal_scheme_combo.blockSignals(False)
         profile["min_angle"] = new_min
         profile["max_angle"] = new_max
         self.config.set_angle_meter_profile(name, profile)
@@ -478,7 +561,7 @@ class AngleMeterTab(QWidget):
         if not name:
             return
         profile = self.config.get_angle_meter_profile(name)
-        cal_data = profile.get("calibration")
+        cal_data = self.config.get_effective_angle_meter_calibration(name)
         cal = AngleCalibration.from_list(cal_data) if cal_data else None
         self.tracker.set_vehicle_config(
             profile.get("min_angle", -80.0),
@@ -487,19 +570,60 @@ class AngleMeterTab(QWidget):
         self.angle_display.setText(f"{profile.get('min_angle', -80.0):+.1f}°")
 
     # === 校准 ===
-    def _on_cal_quick(self):
-        if self.calibrator:
-            name = self.config.get_current_angle_meter_profile()
-            p = self.config.get_angle_meter_profile(name)
-            self.calibrator.start("quick", p.get("min_angle", -80), p.get("max_angle", 80))
-            self._show_overlay()
+    def _on_global_cal(self):
+        """全局校准：7点，范围固定-80~80，完成后保存到全局并触发快校重新生成"""
+        if not self.calibrator:
+            return
+        self._global_calibrating = True
+        self.calibrator.start("full", -80.0, 80.0)
+        self._show_overlay()
 
-    def _on_cal_full(self):
-        if self.calibrator:
-            name = self.config.get_current_angle_meter_profile()
-            p = self.config.get_angle_meter_profile(name)
+    def _on_cal_start(self):
+        """根据当前选择的方案开始载具校准"""
+        if not self.calibrator:
+            return
+        name = self.config.get_current_angle_meter_profile()
+        p = self.config.get_angle_meter_profile(name)
+        scheme = self.cal_scheme_combo.currentIndex()
+        self._global_calibrating = False
+        if scheme == 1:
+            self.calibrator.start("quick", p.get("min_angle", -80), p.get("max_angle", 80))
+        elif scheme == 2:
             self.calibrator.start("full", p.get("min_angle", -80), p.get("max_angle", 80))
-            self._show_overlay()
+        else:
+            return
+        self._show_overlay()
+
+    def _on_cal_scheme_changed(self, index):
+        """切换校准方案：立即更新AngleTracker"""
+        if self._loading:
+            return
+        name = self.config.get_current_angle_meter_profile()
+        if not name:
+            return
+        type_map = {0: "none", 1: "quick", 2: "full"}
+        ctype = type_map.get(index, "none")
+        self.config.set_angle_meter_calibration_type(name, ctype)
+        self._apply_current_profile_to_tracker()
+        self._load_profile_params(name)
+
+    def _on_cal_clear(self):
+        """清除当前方案的校准数据"""
+        name = self.config.get_current_angle_meter_profile()
+        if not name:
+            return
+        profile = self.config.get_angle_meter_profile(name)
+        ctype = profile.get("calibration_type", "none")
+        if ctype == "quick":
+            profile["quick_calibration"] = None
+            profile["quick_min_delta"] = 0.0
+            profile["quick_max_delta"] = 0.0
+        elif ctype == "full":
+            profile["full_calibration"] = None
+        profile["calibration_type"] = "none"
+        self.config.set_angle_meter_profile(name, profile)
+        self._apply_current_profile_to_tracker()
+        self._load_profile_params(name)
 
     def _on_cal_cancel(self):
         if self.calibrator:
@@ -515,19 +639,36 @@ class AngleMeterTab(QWidget):
             self.overlay.set_hint(hint)
 
     def _on_cal_done(self, cal):
-        name = self.config.get_current_angle_meter_profile()
-        if name:
-            profile = self.config.get_angle_meter_profile(name)
-            profile["calibration"] = cal.to_list()
-            self.config.set_angle_meter_profile(name, profile)
-            if self.tracker:
-                self.tracker.set_calibration(cal)
         self.cal_hint_label.setText("")
         if self.overlay:
             self.overlay.set_hint("")
             if not self.tracker or self.tracker.state != "ACTIVE":
                 self.overlay.hide()
-        self.cal_status_label.setText(f"状态: 载具单独校准（{len(cal.points)}点）✓")
+        if getattr(self, '_global_calibrating', False):
+            # 全局校准完成：保存到全局，触发所有载具快校重新生成
+            self.config.set_global_calibration(cal.to_list())
+            self.global_cal_status.setText("全局校准: 已校准 ✓")
+            self.global_cal_btn.setText("重新校准全局")
+            # 更新Calibrator的全局曲线
+            if self.calibrator:
+                self.calibrator.global_cal = cal
+            self.cal_status_label.setText("全局校准完成，载具快速校准已自动更新")
+            self._global_calibrating = False
+        else:
+            # 载具校准完成：根据当前方案保存
+            name = self.config.get_current_angle_meter_profile()
+            if name:
+                scheme = self.cal_scheme_combo.currentIndex()
+                if scheme == 1:  # 快速校准
+                    # 保存min_delta/max_delta用于重校全局后重新生成
+                    min_d = cal.min_delta
+                    max_d = cal.max_delta
+                    self.config.set_angle_meter_quick_calibration(name, cal.to_list(), min_d, max_d)
+                elif scheme == 2:  # 单独校准
+                    self.config.set_angle_meter_full_calibration(name, cal.to_list())
+                if self.tracker:
+                    self.tracker.set_calibration(cal)
+                self._load_profile_params(name)
 
     def _on_cal_cancelled(self):
         self.cal_hint_label.setText("")
@@ -535,6 +676,7 @@ class AngleMeterTab(QWidget):
             self.overlay.set_hint("")
             if not self.tracker or self.tracker.state != "ACTIVE":
                 self.overlay.hide()
+        self._global_calibrating = False
         self.cal_status_label.setText("校准已取消")
 
     # === 使用 ===
@@ -580,7 +722,8 @@ class AngleMeterTab(QWidget):
     def _load_hotkeys(self):
         hks = self.config.get_angle_meter_hotkeys()
         for action, widget in [("toggle", self.hk_toggle), ("pause", self.hk_pause),
-                               ("calibrate", self.hk_calibrate), ("reset", self.hk_reset)]:
+                               ("calibrate", self.hk_calibrate), ("reset", self.hk_reset),
+                               ("up", self.hk_up), ("down", self.hk_down)]:
             # 统一双键结构，角度仪 UI 只用 key1（单键绑定）
             key = hks.get(action, {}).get("key1", "")
             widget._key = key
@@ -616,6 +759,66 @@ class AngleMeterTab(QWidget):
         profile = self.config.get_angle_meter_profile(name) if name else {}
         if profile.get("auto_reset", False):
             self.tracker.reset_to_zero()
+
+    # === 热键微调（长按连续注入）===
+    def _on_up_pressed(self):
+        """上移微调按下：立即注入1，启动定时器，0.5秒后加速"""
+        if not self.raw or self.tracker is None:
+            return
+        self._up_pressed = True
+        self._up_accel = False
+        self.raw.inject_delta_y(-1)  # 上移注入负值（AngleTracker中 -consume = 正角度）
+        if self._up_timer:
+            self._up_timer.setInterval(50)
+            self._up_timer.start()
+            # 0.5秒后切换到加速模式
+            QTimer.singleShot(500, self._enable_up_accel)
+
+    def _enable_up_accel(self):
+        if self._up_pressed and self._up_timer:
+            self._up_accel = True
+            self._up_timer.setInterval(20)
+
+    def _on_up_tick(self):
+        if not self.raw or not self._up_pressed:
+            return
+        step = 5 if self._up_accel else 1
+        self.raw.inject_delta_y(-step)
+
+    def _on_up_released(self):
+        self._up_pressed = False
+        self._up_accel = False
+        if self._up_timer:
+            self._up_timer.stop()
+
+    def _on_down_pressed(self):
+        """下移微调按下：立即注入1，启动定时器，0.5秒后加速"""
+        if not self.raw or self.tracker is None:
+            return
+        self._down_pressed = True
+        self._down_accel = False
+        self.raw.inject_delta_y(1)  # 下移注入正值
+        if self._down_timer:
+            self._down_timer.setInterval(50)
+            self._down_timer.start()
+            QTimer.singleShot(500, self._enable_down_accel)
+
+    def _enable_down_accel(self):
+        if self._down_pressed and self._down_timer:
+            self._down_accel = True
+            self._down_timer.setInterval(20)
+
+    def _on_down_tick(self):
+        if not self.raw or not self._down_pressed:
+            return
+        step = 5 if self._down_accel else 1
+        self.raw.inject_delta_y(step)
+
+    def _on_down_released(self):
+        self._down_pressed = False
+        self._down_accel = False
+        if self._down_timer:
+            self._down_timer.stop()
 
     # === 生命周期 ===
     def showEvent(self, event):
