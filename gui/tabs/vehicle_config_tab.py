@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QGroupBox, QListWidget,
     QListWidgetItem, QLineEdit, QPushButton, QLabel, QFormLayout,
     QMessageBox, QInputDialog, QAbstractItemView,
-    QRadioButton, QButtonGroup, QSlider, QSpinBox
+    QSlider, QSpinBox, QCheckBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
