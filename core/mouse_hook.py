@@ -13,7 +13,7 @@ import threading
 from PyQt5.QtCore import QObject, pyqtSignal
 
 # 独立的 user32 DLL 实例，避免全局 windll 的线程安全问题
-from core.win32_utils import user32 as _user32  # T3: 统一 Win32 入口
+from core.win32_utils import user32 as _user32  # 统一 Win32 入口
 
 # 严格设置函数参数类型和返回类型（64位安全）
 _user32.SetWindowsHookExW.argtypes = [
@@ -146,7 +146,7 @@ class MouseHook(QObject):
                 pass
         # 等待钩子线程结束（最多500ms）
         if self._thread and self._thread.is_alive():
-            self._thread.join(0.5)
+            self._thread.join
         self._proc_ref = None
         self._thread_id = None
         self._thread = None

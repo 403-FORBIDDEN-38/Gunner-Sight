@@ -1,6 +1,6 @@
 """Rangefinder 结果 Overlay - 透明置顶鼠标穿透窗口"""
 import ctypes
-from core.win32_utils import user32  # T3: 统一 Win32 入口
+from core.win32_utils import user32  # 统一 Win32 入口
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont
@@ -15,7 +15,7 @@ class POINT(ctypes.Structure):
 
 
 class RangefinderOverlay(QWidget):
-    edit_mode_changed = pyqtSignal(bool)  # T8: 编辑模式变更信号，替代 200ms 轮询
+    edit_mode_changed = pyqtSignal(bool)  # 编辑模式变更信号，替代 200ms 轮询
 
     def __init__(self):
         super().__init__()
@@ -35,7 +35,7 @@ class RangefinderOverlay(QWidget):
     def set_edit_mode(self, enabled):
         self._edit_mode = enabled
         if not enabled:
-            self.edit_mode_changed.emit(False)  # T8: 退出编辑模式时发射信号
+            self.edit_mode_changed.emit(False)  # 退出编辑模式时发射信号
         if enabled:
             self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
             self.setCursor(Qt.SizeAllCursor)

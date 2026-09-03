@@ -42,7 +42,7 @@ class OverlayWindow(QWidget):
 
         # 图片缓存：{path: (pixmap, inverted_pixmap)}，避免重复从磁盘加载
         self._pixmap_cache = {}
-        self._pixmap_cache_max = 50  # A6: 与 _scaled_cache 一致的上限策略，防止长期运行累积
+        self._pixmap_cache_max = 50  # 与 _scaled_cache 一致的上限策略，防止长期运行累积
         self._current_path = ""
         # 缩放缓存：(path, scale, inverted) -> scaled_pixmap，避免paintEvent中重复缩放
         self._scaled_cache = {}
@@ -119,7 +119,7 @@ class OverlayWindow(QWidget):
             else:
                 # 预生成反色版本并存入缓存
                 self._crosshair_pixmap_inverted = self._create_inverted_pixmap(self._crosshair_pixmap)
-                # A6 修复：上限判断在写入前，保证当前项一定在缓存中（命中路径只读不清）
+                # 上限判断在写入前，保证当前项一定在缓存中（命中路径只读不清）
                 if len(self._pixmap_cache) >= self._pixmap_cache_max:
                     self._pixmap_cache.clear()
                 self._pixmap_cache[image_path] = (self._crosshair_pixmap, self._crosshair_pixmap_inverted)
@@ -218,7 +218,7 @@ class OverlayWindow(QWidget):
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
-            # A6 统一模式：上限判断在写入前，保证当前项一定在缓存中
+            # 上限判断在写入前，保证当前项一定在缓存中
             if len(self._scaled_cache) >= 50:
                 self._scaled_cache.clear()
             self._scaled_cache[cache_key] = scaled_pixmap

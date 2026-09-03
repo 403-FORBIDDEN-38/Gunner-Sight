@@ -1,6 +1,6 @@
 """测距仪页：UI切换、测距仪模块、ROI、结果显示、配置管理、关联载具"""
 import ctypes
-from core.win32_utils import user32  # T3: 统一 Win32 入口
+from core.win32_utils import user32  # 统一 Win32 入口
 from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame,
     QGroupBox, QLabel, QCheckBox, QSpinBox, QPushButton, QComboBox,
@@ -14,7 +14,7 @@ from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
 from gui.widgets import HotkeyPairWidget, VehicleFilterWidget, RegionSelector, PointPicker, OptimizedListWidget
 
-# T9: 时间常量（魔法数字命名化，注释取值依据）
+# 时间常量（魔法数字命名化，注释取值依据）
 MEASURE_DELAY_MS = 150        # 测距启动延迟：热键触发后等待 UI 切换/BlockInput 状态稳定再截图
 SHUTDOWN_WAIT_MS = 1000       # 关闭等待超时：测距线程 abort 后应在 1s 内返回，超时则强制继续关闭
 
@@ -601,7 +601,7 @@ class RangefinderTab(QWidget):
     def _on_drag(self):
         if self.rangefinder_overlay:
             self.rangefinder_overlay.set_edit_mode(True)
-            # T8: 信号驱动替代 200ms 轮询，退出编辑模式时自动触发保存
+            # 信号驱动替代 200ms 轮询，退出编辑模式时自动触发保存
             try:
                 self.rangefinder_overlay.edit_mode_changed.disconnect()
             except Exception:
@@ -620,7 +620,7 @@ class RangefinderTab(QWidget):
     def _on_drag2(self):
         if self.rangefinder_overlay2:
             self.rangefinder_overlay2.set_edit_mode(True)
-            # T8: 信号驱动替代 200ms 轮询
+            # 信号驱动替代 200ms 轮询
             try:
                 self.rangefinder_overlay2.edit_mode_changed.disconnect()
             except Exception:
@@ -745,7 +745,7 @@ class RangefinderTab(QWidget):
         # 请求中止当前测距（让 measure() 安全提前返回，确保 BlockInput 被恢复）
         if self.rangefinder_engine:
             self.rangefinder_engine.abort()
-        # T8: 断开编辑模式信号（轮询定时器已删除）
+        # 断开编辑模式信号（轮询定时器已删除）
         for ov in (self.rangefinder_overlay, self.rangefinder_overlay2):
             if ov:
                 try:
@@ -755,7 +755,7 @@ class RangefinderTab(QWidget):
         # 等待测距线程自然结束（measure() 会因 abort 标志快速返回）
         if self._measure_thread and self._measure_thread.isRunning():
             finished = self._measure_thread.wait(SHUTDOWN_WAIT_MS)  # 最多等待1秒
-            # 修复 D9：超时分支必须有明确处理，不能静默继续
+            # 超时分支必须有明确处理，不能静默继续
             if not finished:
                 print(f"[Rangefinder] 测距线程关闭等待超时({SHUTDOWN_WAIT_MS}ms)，强制继续关闭")
                 # 确认 BlockInput 已恢复（测距线程 abort 路径会在 finally 中恢复）

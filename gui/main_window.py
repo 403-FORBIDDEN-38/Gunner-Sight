@@ -390,7 +390,7 @@ class MainWindow(QMainWindow):
     def _on_quick_vehicle_changed(self, name):
         if name:
             self.state.set_vehicle(name)
-            # 19.3: 切换载具重建弹种热键列表 + 重新注册热键（只注册当前载具的弹种键）
+            # 切换载具重建弹种热键列表 + 重新注册热键（只注册当前载具的弹种键）
             self.hotkey_tab.refresh_ammo_hotkeys()
             self.hotkey.reload_hotkeys()
             # 自动切换关联的测距仪配置

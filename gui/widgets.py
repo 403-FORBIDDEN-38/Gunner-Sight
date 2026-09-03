@@ -57,8 +57,8 @@ class HotkeyLineEdit(QLineEdit):
         self._capturing = False
         self._mouse_hook = None
         self._key = ""
-        self._pending_modifier = None  # 17.2: 待决修饰键
-        self._has_non_modifier = False  # 17.2: 本次捕获是否已按过非修饰键
+        self._pending_modifier = None  # 待决修饰键
+        self._has_non_modifier = False  # 本次捕获是否已按过非修饰键
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -74,7 +74,7 @@ class HotkeyLineEdit(QLineEdit):
             if key == Qt.Key_Escape:
                 self._finish_capture(None)
                 return
-            # 17.2: 修饰键记录为待决，keyReleaseEvent 判断是否单独绑定
+            # 修饰键记录为待决，keyReleaseEvent 判断是否单独绑定
             if key in (Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta):
                 self._pending_modifier = key
                 return
@@ -91,7 +91,7 @@ class HotkeyLineEdit(QLineEdit):
             super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
-        # 17.2: 若释放的是待决修饰键且期间未捕获其他键，则绑定该修饰键本身
+        # 若释放的是待决修饰键且期间未捕获其他键，则绑定该修饰键本身
         if self._capturing and self._pending_modifier is not None:
             if event.key() == self._pending_modifier and not self._has_non_modifier:
                 name = {Qt.Key_Control: "ctrl", Qt.Key_Shift: "shift",
@@ -103,7 +103,7 @@ class HotkeyLineEdit(QLineEdit):
         super().keyReleaseEvent(event)
 
     def event(self, event):
-        # 17.2: Tab 被 QLineEdit 当焦点切换，拦截捕获态下的 Tab 按键
+        # Tab 被 QLineEdit 当焦点切换，拦截捕获态下的 Tab 按键
         if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Tab and self._capturing:
             self._finish_capture("tab")
             return True
@@ -371,7 +371,7 @@ class VehicleFilterWidget(QWidget):
         item = self.list.currentItem()
         return item.text() if item else None
 
-    # === T11: 公共方法，替代外部直接操作 self.list 私有成员 ===
+    # === 公共方法，替代外部直接操作 self.list 私有成员 ===
     def set_no_selection(self):
         """设置列表为无选择模式（check 模式下禁用高亮选中）"""
         from PyQt5.QtWidgets import QAbstractItemView
