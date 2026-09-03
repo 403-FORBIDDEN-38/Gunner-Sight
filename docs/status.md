@@ -1,33 +1,27 @@
 ﻿# 当前项目状态
 
 ## 版本
-V0.0140300054（载具级缩放偏移第三轮 UI 优化完成）
+V0.0140300054（载具配置页状态一致性修复完成）
 
 ## 测试
 - 总计: 32 passed, 0 failed
 
-## 第三轮修复记录（U3/U4）
+## 第四轮修复记录（U5）
 
-### U3（UI优化）：缩放调整增加数值输入框，支持精确微调
-- 把 vo_scale_value（QLabel）改成 vo_scale_spin（QSpinBox）
-- 范围 1-1000，后缀 "%"，固定宽度 80
-- 滑块和输入框双向联动（blockSignals 防循环）
-- 两者都触发配置保存（set_vehicle_overlay）和预览刷新（_update_overlay_preview）
-- _update_vehicle_overlay_ui 中两者都 blockSignals 后设置
-- 布局：缩放: [滑块] [100%]
-
-### U4（UI优化）：倍率详情区域控件对齐优化
-- mag_detail_layout 从 QFormLayout 改成 QVBoxLayout（全部左对齐）
-- 第一行：QHBoxLayout 放 "准星图片:" + mag_crosshair_label + stretch
-- 第二行：mag_bind_btn 直接 addWidget
-- 第三行：overlay_mode_check 直接 addWidget
-- 三行从同一位置开始，视觉整齐
+### U5（发布必修）：切走再切回载具配置页时，载具选中状态丢失
+- 根因：showEvent 触发 refresh() → _refresh_vehicle_list() 清空载具列表后不恢复之前选中的载具
+- 弹种/倍率列表未被重建，保留选中状态，导致载具未选中 + 弹种/倍率选中 = 状态撕裂
+- 编辑操作第一步 _get_selected_vehicle() 返回 None，直接 return，编辑静默失效
+- 修复：_refresh_vehicle_list() 重建前记录 previously_selected，重建后在 blockSignals(False) 之后恢复选中
+- 边界：之前选中的载具被过滤/搜索排除时不恢复，保持未选中（合理行为）
+- 恢复选中后 _on_vehicle_selected 自动触发，弹种/倍率列表刷新，三者状态一致
 
 ## 功能完成状态
 - 载具级缩放偏移功能: 完成
 - 第一轮审查修复 F1/U1/U2/O1/O2: 完成
 - 第二轮审查修复 R1/R2/R3: 完成
 - 第三轮 UI 优化 U3/U4: 完成
+- 第四轮状态一致性修复 U5: 完成
 
 ## 待修复问题
 （无）

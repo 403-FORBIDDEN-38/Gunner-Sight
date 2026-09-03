@@ -284,6 +284,8 @@ class VehicleConfigTab(QWidget):
             if tag_item and tag_item.data(Qt.UserRole) != "__all__":
                 tag_filter = tag_item.data(Qt.UserRole)
         names = self.config.get_vehicle_names_filtered(search, tag_filter or "")
+        # 记录当前选中的载具，重建后恢复（切走再切回时保持状态一致）
+        previously_selected = self._get_selected_vehicle()
         self.vehicle_list.blockSignals(True)
         self.vehicle_list.clear()
         for name in names:
@@ -293,6 +295,12 @@ class VehicleConfigTab(QWidget):
             item.setData(Qt.UserRole, name)
             self.vehicle_list.addItem(item)
         self.vehicle_list.blockSignals(False)
+        # 恢复之前选中的载具（在 blockSignals(False) 之后，确保触发 currentItemChanged 刷新弹种/倍率）
+        if previously_selected:
+            for i in range(self.vehicle_list.count()):
+                if self.vehicle_list.item(i).data(Qt.UserRole) == previously_selected:
+                    self.vehicle_list.setCurrentRow(i)
+                    break
         self._update_tag_checkboxes()
 
     def _update_tag_checkboxes(self):
