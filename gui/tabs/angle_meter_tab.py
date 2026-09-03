@@ -216,7 +216,7 @@ class AngleMeterTab(QWidget):
         scheme_row = QHBoxLayout()
         scheme_row.addWidget(QLabel("校准方案:"))
         self.cal_scheme_combo = QComboBox()
-        self.cal_scheme_combo.addItems(["点击选择校准方案", "快速校准（2点）", "单独校准（7点）"])
+        self.cal_scheme_combo.addItems(["点击选择校准方案", "快速校准（3点）", "单独校准（7点）"])
         self.cal_scheme_combo.currentIndexChanged.connect(self._on_cal_scheme_changed)
         scheme_row.addWidget(self.cal_scheme_combo, 1)
         self.cal_status_label = QLabel("")

@@ -454,5 +454,7 @@ class MainWindow(QMainWindow):
         self.config.save_config()
         print(f"[性能] 关闭-配置保存 耗时={(time.perf_counter()-_t5)*1000:.0f}ms")
         print(f"[性能] 关闭总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
+        # P0-4: 主动删除所有tab，减少Qt析构时间
+        self.tab_stack.deleteLater()
         event.accept()
         QApplication.instance().quit()

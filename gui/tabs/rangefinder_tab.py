@@ -16,7 +16,7 @@ from gui.widgets import HotkeyPairWidget, VehicleFilterWidget, RegionSelector, P
 
 # 时间常量（魔法数字命名化，注释取值依据）
 MEASURE_DELAY_MS = 150        # 测距启动延迟：热键触发后等待 UI 切换/BlockInput 状态稳定再截图
-SHUTDOWN_WAIT_MS = 1000       # 关闭等待超时：测距线程 abort 后应在 1s 内返回，超时则强制继续关闭
+SHUTDOWN_WAIT_MS = 200        # 关闭等待超时：测距线程 abort 后应在 200ms 内返回，超时则强制继续关闭
 
 
 class RangefinderTab(QWidget):
