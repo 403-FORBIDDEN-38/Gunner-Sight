@@ -167,3 +167,15 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: enable_cb/interval_spin/locked_cb初始值设置用blockSignals包裹，避免__init__阶段触发信号
 - 修复: _ensure_tab异常保护逻辑修正，widget创建失败时不尝试连接信号
 - 版本: V0.0140300067
+
+### 启动性能完整优化（7项全部执行）
+- 优化1 QSS分阶段: _setup_minimal_style+_setup_full_style，窗口显示后异步应用
+- 优化2 消除focus遍历: 删除_disable_control_focus，QSS加focus:none/clickfocus规则
+- 优化3 refresh_preview延迟: showEvent中QTimer.singleShot异步加载准星预览
+- 优化4 VehicleFilterWidget延迟: OverviewTab中_ensure_vehicle_filter懒加载
+- 优化5 提权消除: _request_admin移到main()入口，避免import时触发
+- 优化6 容器简化: 审查后无明显冗余容器（已用layout嵌套）
+- 优化7 Config迁移跳过: config_version=3已实现，最新版本跳过迁移
+- 额外优化: 第一个tab(OverviewTab)延迟创建到window.show后，MainWindow创建790ms->3ms
+- 实测: MainWindow创建3ms，第一个tab创建14ms，完整QSS 64ms
+- 版本: V0.0140300068

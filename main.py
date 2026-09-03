@@ -42,7 +42,7 @@ def _request_admin():
         print(f"[Main] 提权请求异常: {e}，程序退出")
     sys.exit(0)
 
-_request_admin()
+# 优化5: _request_admin移到main()中，避免import时触发提权
 
 # 将项目根目录添加到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -132,6 +132,7 @@ def load_custom_fonts(app):
 
 
 def main():
+    _request_admin()  # 优化5: 提权移到main入口
     # 控制台输出同时写入文件，窗口闪太快也能在文件里看
     _log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
     _log_file = open(os.path.join(_log_dir, "startup_log.txt"), "w", encoding="utf-8")
@@ -222,6 +223,20 @@ def _main():
     print(f"[性能] 主窗口显示 耗时={(time.perf_counter()-_t7)*1000:.0f}ms")
     print(f"[性能] 启动总耗时(不含字体)={(time.perf_counter()-_t0)*1000:.0f}ms")
 
+    # 异步初始化：极简QSS(防白屏)->第一个tab->完整QSS->数据刷新
+    def _delayed_init():
+        _di = time.perf_counter()
+        window._setup_minimal_style(window._current_theme)
+        print(f'[性能] 极简QSS 耗时={(time.perf_counter()-_di)*1000:.0f}ms')
+        _di2 = time.perf_counter()
+        window._init_first_tab()
+        print(f'[性能] 第一个tab创建 耗时={(time.perf_counter()-_di2)*1000:.0f}ms')
+        _di3 = time.perf_counter()
+        window._setup_full_style(window._current_theme)
+        print(f'[性能] 完整QSS 耗时={(time.perf_counter()-_di3)*1000:.0f}ms')
+        window.overview_tab.refresh()
+    QTimer.singleShot(0, _delayed_init)
+
     # P0-1: 字体延迟加载，窗口先用系统默认字体显示
     def _load_fonts_delayed():
         _tf = time.perf_counter()
@@ -232,9 +247,7 @@ def _main():
     # P0-2: Overlay窗口延迟预创建（窗口显示后100ms异步创建，不阻塞启动）
     QTimer.singleShot(100, overlay._ensure_overlay)
 
-    # P0-3: OverviewTab数据延迟加载（窗口显示后异步refresh）
-    QTimer.singleShot(0, lambda: window.overview_tab.refresh())
-    # 启动性能修复：RangefinderTab窗口显示后异步创建（不阻塞启动）
+    # RangefinderTab异步创建（不阻塞启动）
     QTimer.singleShot(0, lambda: window._ensure_tab(3).refresh())
 
     # 窗口显示后再初始化热键（keyboard 库导入+注册约 500ms，不阻塞窗口出现）
