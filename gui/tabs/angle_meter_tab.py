@@ -1,6 +1,7 @@
 """角度仪页：配置列表+关联载具、校准、使用、角度overlay。常闭零消耗。"""
 
 import ctypes
+import time
 from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame, QGridLayout,
     QGroupBox, QLabel, QCheckBox, QDoubleSpinBox, QPushButton,
@@ -104,8 +105,10 @@ class AngleMeterTab(QWidget):
         self._down_pressed = False
         self._up_timer = None
         self._down_timer = None
-        self._up_accel = False  # 0.5秒后加速
+        self._up_accel = False  # 0.8秒后加速
         self._down_accel = False
+        self._up_pressed_time = 0.0
+        self._down_pressed_time = 0.0
         self._global_calibrating = False
         self._build_ui()
         self._load_hotkeys()
@@ -806,27 +809,26 @@ class AngleMeterTab(QWidget):
 
     # === 热键微调（长按连续注入）===
     def _on_up_pressed(self):
-        """上移微调按下：SendInput 模拟鼠标上移，启动定时器，0.5秒后加速。
+        """上移微调按下：SendInput 模拟鼠标上移，启动定时器，0.8秒后加速。
         任何状态下都触发（使用中/校准中），SendInput 使游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
             return
         self._up_pressed = True
+        self._up_pressed_time = time.time()
         self._up_accel = False
         _simulate_mouse_move(-1)
         if self._up_timer:
             self._up_timer.setInterval(50)
             self._up_timer.start()
-            QTimer.singleShot(500, self._enable_up_accel)
-
-    def _enable_up_accel(self):
-        if self._up_pressed and self._up_timer:
-            self._up_accel = True
-            self._up_timer.setInterval(20)
 
     def _on_up_tick(self):
         if not self.raw or not self._up_pressed or self.tracker is None:
             return
-        step = 5 if self._up_accel else 1
+        held = time.time() - self._up_pressed_time
+        if held > 0.8 and not self._up_accel:
+            self._up_accel = True
+            self._up_timer.setInterval(30)
+        step = 2 if self._up_accel else 1
         _simulate_mouse_move(-step)
 
     def _on_up_released(self):
@@ -836,27 +838,26 @@ class AngleMeterTab(QWidget):
             self._up_timer.stop()
 
     def _on_down_pressed(self):
-        """下移微调按下：SendInput 模拟鼠标下移，启动定时器，0.5秒后加速。
+        """下移微调按下：SendInput 模拟鼠标下移，启动定时器，0.8秒后加速。
         任何状态下都触发（使用中/校准中），SendInput 使游戏炮管和角度仪示数同步。"""
         if not self.raw or self.tracker is None:
             return
         self._down_pressed = True
+        self._down_pressed_time = time.time()
         self._down_accel = False
         _simulate_mouse_move(1)
         if self._down_timer:
             self._down_timer.setInterval(50)
             self._down_timer.start()
-            QTimer.singleShot(500, self._enable_down_accel)
-
-    def _enable_down_accel(self):
-        if self._down_pressed and self._down_timer:
-            self._down_accel = True
-            self._down_timer.setInterval(20)
 
     def _on_down_tick(self):
         if not self.raw or not self._down_pressed or self.tracker is None:
             return
-        step = 5 if self._down_accel else 1
+        held = time.time() - self._down_pressed_time
+        if held > 0.8 and not self._down_accel:
+            self._down_accel = True
+            self._down_timer.setInterval(30)
+        step = 2 if self._down_accel else 1
         _simulate_mouse_move(step)
 
     def _on_down_released(self):
