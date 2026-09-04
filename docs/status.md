@@ -518,3 +518,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 三批全部完成: P1墓碑代码+资源生命周期+异常吞没, P2未使用import+硬编码确认, P3补充测试
 - 提交: 42394365(P1) -> 07d80448(P2) -> 0de6a1c9(P3)
 - 最终测试: 69 passed
+
+### BUG-9 数显穿透双路径根因修复
+- 触发路径1: 编辑模式下切tab，overlay是独立顶层窗口不hide，_edit_mode保持True，showEvent不触发，穿透永不恢复
+- 触发路径2: 测距流程中setWindowOpacity/setFixedSize等操作可能清除WS_EX_TRANSPARENT，无自动恢复机制
+- 第一层overlay_base: 新增ensure_click_through()，重写setWindowOpacity/setWindowFlags，操作后自动重新应用穿透
+- 第二层rangefinder_overlay: 删除__init__中重复的setWindowFlags(缺少NoDropShadowWindowHint)和setAttribute，基类为唯一窗口标志来源
+- 第三层rangefinder_tab: 添加hideEvent切tab时自动退出编辑模式，showEvent兜底强制退出
+- 验证: 3文件编译通过，69测试全通过
+- commit: 00a8615e

@@ -717,6 +717,10 @@ class RangefinderTab(QWidget):
             self.rangefinder_overlay2.set_image(QPixmap.fromImage(qimg))
         elif not img2 and self.rangefinder_overlay2:
             self.rangefinder_overlay2.clear()
+        # BUG-9第四层：测距完成后强制恢复两个overlay的穿透（额外保险）
+        for ov in (self.rangefinder_overlay, self.rangefinder_overlay2):
+            if ov:
+                ov.ensure_click_through()
 
     def refresh(self):
         """全量刷新（供 main_window 调用）"""
