@@ -231,6 +231,11 @@ class AngleMeterTab(QWidget):
         self.hk_reset.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("reset", k))
         reset_row.addWidget(self.hk_reset, 1)
         param_row.addLayout(reset_row, 1)
+        # UI-2: 归零键注释
+        reset_hint = QLabel("适用于开火后角度归于水平的武器")
+        reset_hint.setFont(QFont("Consolas", 8))
+        reset_hint.setObjectName("hint_text")
+        cfg_v.addWidget(reset_hint)
         cfg_v.addLayout(param_row)
         sep_param = QFrame(); sep_param.setFrameShape(QFrame.HLine); sep_param.setObjectName("angle_meter_sep")
         cfg_v.addWidget(sep_param)
@@ -418,9 +423,9 @@ class AngleMeterTab(QWidget):
             active = self.config.get_active_calibration_point_count(name)
             cal_pts = self.config.get_angle_meter_calibration_points(name, active)
             if cal_pts:
-                parts.append(f"{active}点已校准")
+                parts.append("已校准(%d点)" % active)
             else:
-                parts.append(f"{active}点未校准")
+                parts.append("未校准")
             if vehicles:
                 parts.append(f"载具:{','.join(vehicles)}")
             if tags_eff:
@@ -840,6 +845,9 @@ class AngleMeterTab(QWidget):
             self._data_loaded = True
         elif self.config.is_angle_meter_enabled() and self.tracker is None:
             self._init_engine()
+        # BUG-5: 每次显示都刷新关联载具（载具页标签可能已变更）
+        if self.config.get_current_angle_meter_profile():
+            self._refresh_linked_vehicles()
 
     def shutdown(self):
         self._shutdown_engine()

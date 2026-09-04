@@ -81,14 +81,14 @@ def _execute_steps(steps, bx, by):
             vk = _VK_MAP.get(step.get("key", "").lower())
             if vk is not None:
                 _user32.keybd_event(vk, 0, 0, 0)
-                time.sleep
+                time.sleep(0.02)
                 _user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
         elif action == "click":
             _user32.SetCursorPos(int(bx), int(by))
-            time.sleep
-            _user32.mouse_event(0x0002, 0, 0, 0, 0)
-            time.sleep
-            _user32.mouse_event(0x0004, 0, 0, 0, 0)
+            time.sleep(0.02)
+            _user32.mouse_event(0x0002, 0, 0, 0, 0)  # LEFTDOWN
+            time.sleep(0.02)
+            _user32.mouse_event(0x0004, 0, 0, 0, 0)  # LEFTUP
 
 
 def apply_step_interval(steps, interval):
