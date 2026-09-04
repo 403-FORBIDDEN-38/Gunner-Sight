@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont
 
-from core.win32_utils import set_click_through
+from core.overlay_base import ClickThroughOverlay
 from core.mouse_hook import MouseHook
 
 
@@ -14,45 +14,36 @@ class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
 
-class RangefinderOverlay(QWidget):
+class RangefinderOverlay(ClickThroughOverlay):
     edit_mode_changed = pyqtSignal(bool)  # 编辑模式变更信号，替代 200ms 轮询
 
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFixedSize(300, 80)
         self._pixmap = None
-        self._edit_mode = False
         self._drag_pos = None
         self._scaled_cache = None
         self._cache_size = None
         self._mouse_hook_connected = False
-        set_click_through(int(self.winId()), True)
 
     def set_edit_mode(self, enabled):
-        self._edit_mode = enabled
+        """重写基类：保留MouseHook点击外部退出逻辑"""
+        super().set_edit_mode(enabled)
         if not enabled:
-            self.edit_mode_changed.emit(False)  # 退出编辑模式时发射信号
+            self.edit_mode_changed.emit(False)
         if enabled:
-            self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
-            self.setCursor(Qt.SizeAllCursor)
-            # 监听全局鼠标点击，点击 overlay 外区域自动退出编辑模式
             if not self._mouse_hook_connected:
                 MouseHook.instance().mouse_down.connect(self._on_global_mouse_down)
                 MouseHook.instance().acquire()
                 self._mouse_hook_connected = True
         else:
-            self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-            self.setCursor(Qt.ArrowCursor)
             if self._mouse_hook_connected:
                 MouseHook.instance().mouse_down.disconnect(self._on_global_mouse_down)
                 MouseHook.instance().release()
                 self._mouse_hook_connected = False
-        set_click_through(int(self.winId()), not enabled)
-        self.update()
 
     def _on_global_mouse_down(self, button):
         """全局鼠标按下事件：点击 overlay 外区域自动退出编辑模式"""
@@ -86,12 +77,6 @@ class RangefinderOverlay(QWidget):
     def clear(self):
         self._pixmap = None
         self.update()
-
-    def showEvent(self, event):
-        """19.1: Qt 在 show/update 后可能重置扩展样式，showEvent 中重新设置穿透"""
-        super().showEvent(event)
-        if not self._edit_mode:
-            set_click_through(int(self.winId()), True)
 
     def paintEvent(self, event):
         p = QPainter(self)

@@ -11,10 +11,10 @@ from PyQt5.QtCore import Qt, QTimer
 from pathlib import Path
 from typing import Optional
 
-from core.win32_utils import apply_click_through
+from core.overlay_base import ClickThroughOverlay
 
 
-class OverlayWindow(QWidget):
+class OverlayWindow(ClickThroughOverlay):
     """Overlay透明窗口 - 用于绘制准星"""
 
     def __init__(self, parent=None):
@@ -29,7 +29,6 @@ class OverlayWindow(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
         # 准星相关
         self._crosshair_pixmap: Optional[QPixmap] = None
@@ -55,18 +54,12 @@ class OverlayWindow(QWidget):
         # 初始化窗口
         self._init_window()
 
-        # 应用鼠标穿透（延迟到窗口创建后）
-        QTimer.singleShot(100, self._apply_click_through)
+
 
     @property
     def current_path(self) -> str:
         """D5: 公共只读属性，替代外部访问 _current_path 私有成员"""
         return self._current_path
-
-    def showEvent(self, event):
-        """19.1: Qt 在 show/update 后可能重置扩展样式，showEvent 中重新设置穿透"""
-        super().showEvent(event)
-        self._apply_click_through()
 
     def _init_window(self):
         """初始化窗口大小和位置"""
@@ -80,13 +73,6 @@ class OverlayWindow(QWidget):
             self._screen_width = 1920
             self._screen_height = 1080
             self.setGeometry(0, 0, 1920, 1080)
-
-    def _apply_click_through(self):
-        """应用鼠标穿透和工具窗口样式"""
-        try:
-            apply_click_through(int(self.winId()))
-        except Exception as e:
-            print(f"[Overlay] 应用窗口样式失败: {e}")
 
     def set_crosshair(self, image_path: str):
         """设置准星图片（带缓存，避免重复从磁盘加载）"""

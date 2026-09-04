@@ -476,3 +476,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - hotkey_manager.py: toggle热键始终注册（不受enabled影响），record/measure仅启用时注册（上一轮已做）
 - 测试: 23个距离测算测试+32个config测试全通过；更新test_state_machine/test_disabled_no_response/test_get_status_text/test_status_colors适配两层状态；test_disable_clears_calibration改名为test_standby_preserves_calibration（待机不清理标定数据）
 - commit: 00cb50a8
+
+### RELEASE: V0.0140300084 打包发布
+- 版本: 083→084（info_tab APP_VERSION + version_info.txt 同步）
+- 测试: 32 config + 23 distance_meter 全通过
+- 修复: test_cycle_scale方向适配（cycle_scale(1)大到小，cycle_scale(-1)小到大）
+- 打包: onedir (EXE+COLLECT)，config/resources外置exe同级，README/USER_GUIDE部署
+- 签名: CN=403 FORBIDDEN 自签名，UnknownError=NotTrusted正常
+- 发布版: C:\Users\suncheng\Doubao\chats\2026-07-30\new-chat\GunnerSight_Release\
+- commit: 0da9f73a

@@ -1,4 +1,4 @@
-﻿"""信息页：标题、简述、免费声明、README链接、吉祥物开关"""
+"""信息页：标题、简述、免费声明、README链接、吉祥物开关"""
 import sys
 import os
 import subprocess
