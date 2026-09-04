@@ -26,14 +26,15 @@ class ResourceManager:
         return self.resources_dir
 
     def list_resources(self) -> List[str]:
-        """列出所有资源文件名"""
+        """列出所有资源文件名（递归扫描子文件夹，返回相对路径）"""
         if not self.resources_dir.exists():
             return []
         extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
-        return sorted([
-            f.name for f in self.resources_dir.iterdir()
-            if f.is_file() and f.suffix.lower() in extensions
-        ])
+        result = []
+        for f in self.resources_dir.rglob("*"):
+            if f.is_file() and f.suffix.lower() in extensions:
+                result.append(str(f.relative_to(self.resources_dir)))
+        return sorted(result)
 
     def get_resource_path(self, filename: str) -> Optional[str]:
         """获取资源文件的完整路径"""
@@ -57,7 +58,7 @@ class ResourceManager:
             # 先比较文件大小快速排除，大小相同才计算 MD5（避免不必要的全文件读取）
             source_size = source.stat().st_size
             source_hash = self._file_md5(source)
-            for existing in self.resources_dir.iterdir():
+            for existing in self.resources_dir.rglob("*"):
                 if not (existing.is_file() and existing.suffix.lower() in
                         {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}):
                     continue

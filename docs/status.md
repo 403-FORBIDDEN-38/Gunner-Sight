@@ -243,3 +243,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 代码质量7项: 异常处理多为合理资源清理; -80/80为profile默认值非限制; 无重复造轮子(rangefinder/angle_meter为独立模块配置); 32 passed
 - commit: 5d18d4f0
 - 打包: onedir+签名, 发布版已更新
+
+### V0.0140300078 - BUG-5二次修复+UI修正+FEATURE-2
+- BUG-5根因: vehicle_config_tab._on_tag_check_changed/_on_rename_tag修改标签后未发射data_changed信号; main_window中data_changed只连了overview_tab未连angle_meter_tab。修复: 标签变更后emit data_changed; main_window连接vehicle_tab.data_changed->angle_meter_tab.on_vehicle_data_changed; angle_meter_tab新增on_vehicle_data_changed刷新关联载具和配置列表
+- UI-1: 角度仪配置列表去掉校准状态显示(已校准/未校准), 校准状态只在校准设置区域显示
+- UI-2: 归零键注释从整行上方改为归零键正下方(reset_col垂直布局包含reset_row+hint)
+- FEATURE-2: 资源库新增'导入文件夹'按钮, 递归遍历子文件夹, 支持png/jpg/jpeg/bmp/gif/webp, 同名跳过, 导入后显示成功/跳过统计
+- 测试: 32 passed
+- commit: df8aad41
+- 打包: onedir+签名, 发布版已更新
