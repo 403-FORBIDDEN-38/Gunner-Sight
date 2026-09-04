@@ -31,7 +31,10 @@ def quick_toggle_ui(x, y, step_interval=None):
             _user32.BlockInput(True)
             _blocked = True
         except Exception:
-            pass
+            # 危险: BlockInput失败意味着用户输入未被阻止，继续模拟鼠标可能导致状态不一致
+            print("[quick_toggle_ui] BlockInput(True)失败，需管理员权限，中止操作")
+            _toggle_ui_running = False
+            return
         steps = apply_step_interval(DEFAULT_TOGGLE_STEPS, step_interval)
         _execute_steps(steps, x, y)
     finally:

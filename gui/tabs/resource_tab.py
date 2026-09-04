@@ -146,7 +146,7 @@ class ResourceTab(QWidget):
                                 item.setIcon(self._icon_cache[name])
                                 break
             except Exception:
-                pass
+                pass  # 单个图标加载失败不影响其他图标，合理清理保护
             batch -= 1
         if self._icon_queue:
             QTimer.singleShot(0, self._load_next_icons)
