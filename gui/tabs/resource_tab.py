@@ -39,11 +39,11 @@ class ResourceTab(QWidget):
         left_layout.addWidget(self.resource_list, 1)
         res_btn_layout = QHBoxLayout()
         self.import_resource_btn = QPushButton("导入PNG")
-        self.import_folder_btn = QPushButton("导入文件夹")
+        self.refresh_btn = QPushButton("刷新")
         self.rename_resource_btn = QPushButton("重命名")
         self.delete_resource_btn = QPushButton("删除")
         res_btn_layout.addWidget(self.import_resource_btn)
-        res_btn_layout.addWidget(self.import_folder_btn)
+        res_btn_layout.addWidget(self.refresh_btn)
         res_btn_layout.addWidget(self.rename_resource_btn)
         res_btn_layout.addWidget(self.delete_resource_btn)
         left_layout.addLayout(res_btn_layout)
@@ -90,7 +90,7 @@ class ResourceTab(QWidget):
 
     def connect_signals(self):
         self.import_resource_btn.clicked.connect(self._on_import_resource)
-        self.import_folder_btn.clicked.connect(self._on_import_folder)
+        self.refresh_btn.clicked.connect(self._on_refresh)
         self.rename_resource_btn.clicked.connect(self._on_rename_resource)
         self.delete_resource_btn.clicked.connect(self._on_delete_resource)
         self.resource_list.currentItemChanged.connect(self._on_resource_selected)
@@ -99,6 +99,10 @@ class ResourceTab(QWidget):
 
     def _refresh_resource_list(self):
         search = self.resource_search.text().lower()
+        # FEATURE-2修正: 懒加载缓存，切换页面不重复扫描
+        if not hasattr(self, '_resource_cache') or self._resource_cache is None:
+            self._resource_cache = self.resources.list_resources()
+        resources = self._resource_cache
         if not hasattr(self, '_icon_cache'):
             self._icon_cache = {}
         if not hasattr(self, '_icon_queue'):
@@ -107,7 +111,7 @@ class ResourceTab(QWidget):
         self._icon_queue.clear()
         self.resource_list.blockSignals(True)
         self.resource_list.clear()
-        for name in self.resources.list_resources():
+        for name in resources:
             if search and search not in name.lower():
                 continue
             item = QListWidgetItem(name)
@@ -214,6 +218,7 @@ class ResourceTab(QWidget):
             return
         dest_name = self.resources.import_resource(path)
         if dest_name:
+            self._resource_cache = None
             self._refresh_resource_list()
             # 选中新导入的项
             for i in range(self.resource_list.count()):
@@ -221,29 +226,10 @@ class ResourceTab(QWidget):
                     self.resource_list.setCurrentRow(i)
                     break
 
-    def _on_import_folder(self):
-        """FEATURE-2: 选择文件夹批量导入图片（递归包含子文件夹）"""
-        folder = QFileDialog.getExistingDirectory(self, "选择图片文件夹")
-        if not folder:
-            return
-        exts = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
-        imported = 0
-        skipped = 0
-        for root, _dirs, files in os.walk(folder):
-            for fname in files:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in exts:
-                    continue
-                fpath = os.path.join(root, fname)
-                dest = self.resources.import_resource(fpath)
-                if dest:
-                    imported += 1
-                else:
-                    skipped += 1
-        if imported > 0:
-            self._refresh_resource_list()
-        QMessageBox.information(self, "批量导入完成",
-                                "成功导入 %d 个，跳过 %d 个（同名已存在）" % (imported, skipped))
+    def _on_refresh(self):
+        """FEATURE-2修正: 手动刷新资源列表（重新扫描resources目录）"""
+        self._resource_cache = None
+        self._refresh_resource_list()
 
     def _on_rename_resource(self):
         item = self.resource_list.currentItem()
@@ -258,6 +244,7 @@ class ResourceTab(QWidget):
                     self._icon_cache[new.strip()] = self._icon_cache.pop(old)
                 if hasattr(self, '_pixmap_cache') and old in self._pixmap_cache:
                     self._pixmap_cache[new.strip()] = self._pixmap_cache.pop(old)
+                self._resource_cache = None
                 self._refresh_resource_list()
 
     def _on_delete_resource(self):
@@ -276,6 +263,7 @@ class ResourceTab(QWidget):
                 self._icon_cache.pop(name, None)
             if hasattr(self, '_pixmap_cache'):
                 self._pixmap_cache.pop(name, None)
+            self._resource_cache = None
             self._refresh_resource_list()
             if unbound > 0:
                 QMessageBox.information(self, "提示", f"已删除资源，并解绑 {unbound} 个倍率的准星引用。")
