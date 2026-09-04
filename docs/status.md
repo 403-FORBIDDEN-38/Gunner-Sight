@@ -376,3 +376,10 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 17项逻辑测试全通过(新增防打断提示+标定途中改比例尺2项, 更新2项旧测试断言)
 - commit: 1ca3eb4b
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型七次修复2项（不并入主程序，不打包）
+- 修复1悬浮状态颜色区分: 新增STATUS_COLORS常量映射(未启用#888灰/未标定#f44红/标定中#fa0橙/已标定#0f8绿/测距中#0af青), DistanceMeter.get_status_color()返回当前状态颜色, DistanceOverlay.set_text_color()设置status_label和result_label颜色, _update_overlay_state中调用
+- 修复2 ctrl+滚轮切换比例尺: 新增SCALE_PRESETS=[900,300,100,33]常量, DistanceMeter.cycle_scale(direction)循环切换(-1上滚/+1下滚, 33上滚->900, 900下滚->33), 切换后自动重置标定状态; GlobalHotkeyManager新增低级WH_MOUSE_LL钩子监听WM_MOUSEWHEEL, GetAsyncKeyState(VK_CONTROL)检查ctrl按下, delta>0上滚delta<0下滚, QTimer.singleShot转主线程; tab层_on_wheel_scale同步更新比例尺输入框
+- 验证: 19项逻辑测试全通过(新增ctrl+滚轮循环切换+状态颜色2项)
+- commit: a32e83ca
+- 版本号不变(原型不并入主程序)
