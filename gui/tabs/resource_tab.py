@@ -39,9 +39,11 @@ class ResourceTab(QWidget):
         left_layout.addWidget(self.resource_list, 1)
         res_btn_layout = QHBoxLayout()
         self.import_resource_btn = QPushButton("导入PNG")
+        self.import_folder_btn = QPushButton("导入文件夹")
         self.rename_resource_btn = QPushButton("重命名")
         self.delete_resource_btn = QPushButton("删除")
         res_btn_layout.addWidget(self.import_resource_btn)
+        res_btn_layout.addWidget(self.import_folder_btn)
         res_btn_layout.addWidget(self.rename_resource_btn)
         res_btn_layout.addWidget(self.delete_resource_btn)
         left_layout.addLayout(res_btn_layout)
@@ -88,6 +90,7 @@ class ResourceTab(QWidget):
 
     def connect_signals(self):
         self.import_resource_btn.clicked.connect(self._on_import_resource)
+        self.import_folder_btn.clicked.connect(self._on_import_folder)
         self.rename_resource_btn.clicked.connect(self._on_rename_resource)
         self.delete_resource_btn.clicked.connect(self._on_delete_resource)
         self.resource_list.currentItemChanged.connect(self._on_resource_selected)
@@ -217,6 +220,30 @@ class ResourceTab(QWidget):
                 if self.resource_list.item(i).data(Qt.UserRole) == dest_name:
                     self.resource_list.setCurrentRow(i)
                     break
+
+    def _on_import_folder(self):
+        """FEATURE-2: 选择文件夹批量导入图片（递归包含子文件夹）"""
+        folder = QFileDialog.getExistingDirectory(self, "选择图片文件夹")
+        if not folder:
+            return
+        exts = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+        imported = 0
+        skipped = 0
+        for root, _dirs, files in os.walk(folder):
+            for fname in files:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext not in exts:
+                    continue
+                fpath = os.path.join(root, fname)
+                dest = self.resources.import_resource(fpath)
+                if dest:
+                    imported += 1
+                else:
+                    skipped += 1
+        if imported > 0:
+            self._refresh_resource_list()
+        QMessageBox.information(self, "批量导入完成",
+                                "成功导入 %d 个，跳过 %d 个（同名已存在）" % (imported, skipped))
 
     def _on_rename_resource(self):
         item = self.resource_list.currentItem()

@@ -242,6 +242,8 @@ class VehicleConfigTab(QWidget):
             if tag in tags:
                 tags.remove(tag)
         self.config.set_vehicle_tags(vehicle, tags)
+        self._refresh_vehicle_list()
+        self.data_changed.emit()  # BUG-5: 标签变更后发射信号，通知其他页面刷新
 
     def _on_add_tag(self):
         name = self.tag_input.text().strip()
@@ -259,6 +261,7 @@ class VehicleConfigTab(QWidget):
             self.config.rename_tag(old, new.strip())
             self._refresh_tag_list()
             self._refresh_vehicle_list()
+            self.data_changed.emit()
 
     def _on_remove_tag(self):
         item = self.tag_list.currentItem()
