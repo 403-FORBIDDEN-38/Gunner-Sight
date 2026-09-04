@@ -289,3 +289,27 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: ca74c035
 - 打包: onedir+签名, 发布版已更新
+
+### V0.0140300082 - 全量扫描3问题根源性彻查
+#### 问题1: time.sleep调用链确认
+- 共15处sleep: rangefinder.py 9处, squad_macro.py 6处
+- squad_macro.py全部6处在后台线程(threading.Thread daemon), 保留
+- rangefinder.py中measure()的2处动作间容错在MeasureThread后台线程, 保留
+- rangefinder.py中_execute_steps/_click/_press_key的7处被quick_toggle_ui和_run_steps共享
+  - _run_steps路径在MeasureThread后台线程, 保留
+  - quick_toggle_ui路径在热键回调(主线程), 原直接调用会阻塞UI事件循环
+- 修复: on_toggle_ui_hotkey改用threading.Thread(daemon=True)执行quick_toggle_ui
+#### 问题2: 异常吞没审查
+- 共23处except:pass(含多行)
+- 22处合理清理保护(钩子释放/BlockInput恢复/SetCursorPos恢复/信号disconnect/窗口关闭/回调异常/配置重命名), 保留
+- 1处危险操作吞没: rangefinder.py quick_toggle_ui中BlockInput(True)失败仍继续模拟鼠标
+- 修复: BlockInput(True)失败改为打印警告+重置重入标志+return中止
+- resource_tab.py图标加载失败pass加注释说明
+#### 问题3: 自验流程改进
+- 新增tools/static_scan.py静态扫描工具
+- 检查项: 裸函数引用(如time.sleep无括号)/重复方法定义/except危险吞没/可能未使用import
+- 每次提交前必须运行, 结果写入status.md
+- 当前扫描结果: 0 ERROR, 0 WARN, 9 INFO(均为可能未使用import的误报)
+- 测试: 32 passed
+- commit: 433d23ba
+- 打包: onedir+签名, 发布版已更新
