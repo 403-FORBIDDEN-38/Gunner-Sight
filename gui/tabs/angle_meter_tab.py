@@ -171,17 +171,21 @@ class AngleMeterTab(QWidget):
         use_v.addLayout(hk_grid)
         sc_layout.addWidget(use_group)
 
-        # === 行2：校准设置（FEATURE-1: 单模式，用户自选点数）===
+        # === 行2：校准设置（FEATURE-1补充: 各精度方案独立保存可切换）===
         cal_group = QGroupBox("校准设置")
         cal_v = QVBoxLayout(cal_group)
         cal_v.setSpacing(6)
-        # 校准点数选择
+        # 方案切换按钮组
         scheme_row = QHBoxLayout()
-        scheme_row.addWidget(QLabel("校准点数:"))
-        self.cal_point_count_combo = QComboBox()
-        self.cal_point_count_combo.addItems(["3点", "5点", "7点", "9点", "11点"])
-        self.cal_point_count_combo.setCurrentIndex(2)  # 默认7点
-        scheme_row.addWidget(self.cal_point_count_combo)
+        scheme_row.addWidget(QLabel("精度方案:"))
+        self.cal_scheme_buttons = {}
+        for cnt in (3, 5, 7, 9, 11):
+            btn = QPushButton("%d点" % cnt)
+            btn.setCheckable(True)
+            btn.setFixedWidth(56)
+            btn.clicked.connect(lambda checked, c=cnt: self._on_cal_scheme_changed(c))
+            self.cal_scheme_buttons[cnt] = btn
+            scheme_row.addWidget(btn)
         scheme_row.addStretch()
         self.cal_status_label = QLabel("")
         self.cal_status_label.setFont(QFont("Consolas", 10))
@@ -208,12 +212,12 @@ class AngleMeterTab(QWidget):
         range_row = QHBoxLayout()
         range_row.addWidget(QLabel("最低角:"))
         self.min_spin = QDoubleSpinBox()
-        self.min_spin.setRange(-90, 90); self.min_spin.setSuffix("°")
+        self.min_spin.setRange(-180, 180); self.min_spin.setSuffix("°")
         self.min_spin.valueChanged.connect(self._on_profile_param_changed)
         range_row.addWidget(self.min_spin)
         range_row.addWidget(QLabel("最高角:"))
         self.max_spin = QDoubleSpinBox()
-        self.max_spin.setRange(-90, 90); self.max_spin.setSuffix("°")
+        self.max_spin.setRange(-180, 180); self.max_spin.setSuffix("°")
         self.max_spin.valueChanged.connect(self._on_profile_param_changed)
         range_row.addWidget(self.max_spin)
         range_row.addStretch()
@@ -286,11 +290,13 @@ class AngleMeterTab(QWidget):
         # 焦点禁用（SpinBox保留ClickFocus以支持键盘输入和滚轮调节）
         for w in [self.enable_check, self.profile_search,
                   self.add_profile_btn, self.rename_profile_btn, self.delete_profile_btn,
-                  self.cal_toggle_btn, self.cal_point_count_combo,
+                  self.cal_toggle_btn,
                   self.toggle_use_btn, self.pause_btn,
                   self.hk_toggle, self.hk_pause, self.hk_calibrate, self.hk_reset,
                   self.hk_up, self.hk_down]:
             w.setFocusPolicy(Qt.NoFocus)
+        for btn in self.cal_scheme_buttons.values():
+            btn.setFocusPolicy(Qt.NoFocus)
         # BUG-3: 俯仰范围输入框需要可输入+可滚轮，设为ClickFocus
         self.min_spin.setFocusPolicy(Qt.ClickFocus)
         self.max_spin.setFocusPolicy(Qt.ClickFocus)
@@ -409,11 +415,12 @@ class AngleMeterTab(QWidget):
                 continue
             parts = []
             # FEATURE-1: 校准状态
-            cal_pts = self.config.get_angle_meter_calibration_points(name)
+            active = self.config.get_active_calibration_point_count(name)
+            cal_pts = self.config.get_angle_meter_calibration_points(name, active)
             if cal_pts:
-                parts.append(f"已校准{len(cal_pts)}点")
+                parts.append(f"{active}点已校准")
             else:
-                parts.append("未校准")
+                parts.append(f"{active}点未校准")
             if vehicles:
                 parts.append(f"载具:{','.join(vehicles)}")
             if tags_eff:
@@ -440,14 +447,19 @@ class AngleMeterTab(QWidget):
     def _load_profile_params(self, name):
         profile = self.config.get_angle_meter_profile(name)
         self._loading = True
-        self.min_spin.setValue(profile.get("min_angle", -80.0))
-        self.max_spin.setValue(profile.get("max_angle", 80.0))
-        # FEATURE-1: 校准点数选择
-        pc = profile.get("calibration_point_count", 7)
-        pc_map = {3: 0, 5: 1, 7: 2, 9: 3, 11: 4}
-        self.cal_point_count_combo.setCurrentIndex(pc_map.get(pc, 2))
-        # 校准状态
-        cal_pts = profile.get("calibration_points")
+        self.min_spin.setValue(profile.get("pitch_min", -80.0))
+        self.max_spin.setValue(profile.get("pitch_max", 80.0))
+        # FEATURE-1补充: 方案按钮组状态
+        active = profile.get("active_calibration_point_count", 7)
+        status_map = self.config.get_all_calibration_status(name)
+        for cnt, btn in self.cal_scheme_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(cnt == active)
+            btn.blockSignals(False)
+            suffix = "✓" if status_map.get(cnt) else ""
+            btn.setText("%d点%s" % (cnt, suffix))
+        # 当前方案校准状态
+        cal_pts = self.config.get_angle_meter_calibration_points(name)
         if cal_pts:
             self.cal_status_label.setText("当前方案已校准(%d点)" % len(cal_pts))
         else:
@@ -463,13 +475,17 @@ class AngleMeterTab(QWidget):
         profile = self.config.get_angle_meter_profile(name)
         new_min = self.min_spin.value()
         new_max = self.max_spin.value()
-        # FEATURE-1: 范围改变时清除旧校准（校准与范围绑定）
-        if (abs(new_min - profile.get("min_angle", -80.0)) > 0.01 or
-                abs(new_max - profile.get("max_angle", 80.0)) > 0.01):
-            profile["calibration_points"] = None
-            self.cal_status_label.setText("当前方案未校准")
-        profile["min_angle"] = new_min
-        profile["max_angle"] = new_max
+        # FEATURE-1补充: 范围改变时清空所有精度方案（校准与范围绑定）
+        if (abs(new_min - profile.get("pitch_min", -80.0)) > 0.01 or
+                abs(new_max - profile.get("pitch_max", 80.0)) > 0.01):
+            self.config.clear_all_calibrations(name)
+            profile = self.config.get_angle_meter_profile(name)
+            self.cal_status_label.setText("范围已变更，所有方案归为未校准")
+            # 更新按钮状态
+            for cnt, btn in self.cal_scheme_buttons.items():
+                btn.setText("%d点" % cnt)
+        profile["pitch_min"] = new_min
+        profile["pitch_max"] = new_max
         self.config.set_angle_meter_profile(name, profile)
         self._apply_current_profile_to_tracker()
 
@@ -552,12 +568,28 @@ class AngleMeterTab(QWidget):
         cal_data = self.config.get_effective_angle_meter_calibration(name)
         cal = AngleCalibration.from_list(cal_data) if cal_data else None
         self.tracker.set_vehicle_config(
-            profile.get("min_angle", -80.0),
-            profile.get("max_angle", 80.0),
+            profile.get("pitch_min", -80.0),
+            profile.get("pitch_max", 80.0),
             cal)
-        self.angle_display.setText(f"{profile.get('min_angle', -80.0):+.1f}°")
+        self.angle_display.setText("%+.1f°" % profile.get("pitch_min", -80.0))
 
-    # === 校准（FEATURE-1: 单模式，用户自选点数）===
+    # === 校准（FEATURE-1补充: 各精度方案独立保存可切换）===
+    def _on_cal_scheme_changed(self, count):
+        """切换当前使用的精度方案"""
+        if self._loading:
+            return
+        name = self.config.get_current_angle_meter_profile()
+        if not name:
+            return
+        self.config.set_active_calibration_point_count(name, count)
+        # 更新按钮选中状态
+        for cnt, btn in self.cal_scheme_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(cnt == count)
+            btn.blockSignals(False)
+        self._load_profile_params(name)
+        self._apply_current_profile_to_tracker()
+
     def _on_cal_toggle(self):
         """开始或取消载具校准"""
         if not self.calibrator:
@@ -570,8 +602,8 @@ class AngleMeterTab(QWidget):
             self.cal_status_label.setText("请先创建角度仪配置")
             return
         p = self.config.get_angle_meter_profile(name)
-        num_points = [3, 5, 7, 9, 11][self.cal_point_count_combo.currentIndex()]
-        self.calibrator.start(num_points, p.get("min_angle", -80), p.get("max_angle", 80))
+        num_points = self.config.get_active_calibration_point_count(name)
+        self.calibrator.start(num_points, p.get("pitch_min", -80), p.get("pitch_max", 80))
         self._show_overlay()
         self.cal_toggle_btn.setText("取消校准")
         # 校准开始后自动最小化主窗口
@@ -598,10 +630,10 @@ class AngleMeterTab(QWidget):
             self.overlay.set_hint("")
             if not self.tracker or self.tracker.state != "ACTIVE":
                 self.overlay.hide()
-        # FEATURE-1: 载具校准完成，直接保存calibration_points
+        # FEATURE-1补充: 保存到当前active方案，不覆盖其他方案
         name = self.config.get_current_angle_meter_profile()
         if name:
-            num_points = [3, 5, 7, 9, 11][self.cal_point_count_combo.currentIndex()]
+            num_points = self.config.get_active_calibration_point_count(name)
             self.config.set_angle_meter_calibration_points(name, cal.to_list(), num_points)
             if self.tracker:
                 self.tracker.set_calibration(cal)

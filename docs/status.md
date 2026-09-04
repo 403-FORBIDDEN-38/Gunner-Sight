@@ -216,3 +216,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: 02555202
 - 打包: onedir + 签名，发布版已更新
+
+### V0.0140300075 - FEATURE-1: 取消全局校准，每载具单曲线
+- 配置层: 删除angle_meter_global_calibration，删除calibration_type/quick_calibration/full_calibration，每载具只有calibration_points+calibration_point_count(3/5/7/9/11)
+- 逻辑层: AngleCalibration删除NUM_POINTS/GLOBAL_TARGETS；AngleTracker删除全局校准分支，calibration必须是载具曲线；Calibrator重构为单模式start(num_points,min,max)直接采集N点
+- UI层: 删除全局校准UI和快校/独校选择，改为校准点数下拉框(3/5/7/9/11)；列表显示已校准N点/未校准
+- 迁移: config_version 3->4，旧quick_calibration/full_calibration->calibration_points，全局校准数据丢弃。实测AAA/MK19各7点校准数据保留
+- 测试: 32 passed
+- commit: 41f18d92
+- 打包: onedir + 签名，发布版已更新
