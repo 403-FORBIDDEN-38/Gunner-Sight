@@ -52,6 +52,25 @@ def _default_angle_meter_segment() -> Dict:
     }
 
 
+def _default_distance_meter_segment() -> Dict:
+    """distance_meter 配置段默认值（空房子原则：默认禁用，无默认热键，无标定数据）"""
+    return {
+        "enabled": False,
+        "scale_meters": 300,
+        "calibrated_pixels": 0,
+        "pixels_per_meter": 0,
+        "calibration_direction": "",
+        "overlay_offset_x": 100,
+        "overlay_offset_y": 100,
+        "hotkeys": {
+            "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "record": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "measure": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "modifier": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+        }
+    }
+
+
 class ConfigManager:
     """配置管理器 - 负责所有配置数据的持久化与访问"""
 
@@ -123,6 +142,7 @@ class ConfigManager:
             },
             "squad_macro": {"enabled": False, "hotkey": {"key1": "", "trigger1": "keydown"}, "squad_name": "", "locked": True, "interval_ms": 100},
             "angle_meter": _default_angle_meter_segment(),
+            "distance_meter": _default_distance_meter_segment(),
             "current_state": {"vehicle": None, "ammo_type": None, "magnification_index": 0}
         }
 
@@ -720,6 +740,74 @@ class ConfigManager:
         hk[f"key{slot}"] = key
         hk[f"trigger{slot}"] = trigger
         self.request_save()
+
+    # === 距离测算模块（FEATURE-3）===
+
+    def is_distance_meter_enabled(self) -> bool:
+        return self._config.get("distance_meter", {}).get("enabled", False)
+
+    def set_distance_meter_enabled(self, enabled: bool):
+        self._config.setdefault("distance_meter", {})["enabled"] = enabled
+        self.request_save()
+
+    def get_distance_meter_scale(self) -> float:
+        return self._config.get("distance_meter", {}).get("scale_meters", 300)
+
+    def set_distance_meter_scale(self, scale: float):
+        self._config.setdefault("distance_meter", {})["scale_meters"] = float(scale)
+        self.request_save()
+
+    def get_distance_meter_calibration(self) -> dict:
+        dm = self._config.get("distance_meter", {})
+        return {
+            "calibrated_pixels": dm.get("calibrated_pixels", 0),
+            "pixels_per_meter": dm.get("pixels_per_meter", 0),
+            "calibration_direction": dm.get("calibration_direction", ""),
+        }
+
+    def set_distance_meter_calibration(self, calibrated_pixels: float, pixels_per_meter: float, direction: str):
+        dm = self._config.setdefault("distance_meter", {})
+        dm["calibrated_pixels"] = calibrated_pixels
+        dm["pixels_per_meter"] = pixels_per_meter
+        dm["calibration_direction"] = direction
+        self.request_save()
+
+    def clear_distance_meter_calibration(self):
+        """禁用时清理标定数据"""
+        dm = self._config.setdefault("distance_meter", {})
+        dm["calibrated_pixels"] = 0
+        dm["pixels_per_meter"] = 0
+        dm["calibration_direction"] = ""
+        self.request_save()
+
+    def get_distance_meter_overlay_offset(self) -> tuple:
+        dm = self._config.get("distance_meter", {})
+        return dm.get("overlay_offset_x", 100), dm.get("overlay_offset_y", 100)
+
+    def set_distance_meter_overlay_offset(self, x: int, y: int):
+        dm = self._config.setdefault("distance_meter", {})
+        dm["overlay_offset_x"] = int(x)
+        dm["overlay_offset_y"] = int(y)
+        self.request_save()
+
+    def get_distance_meter_hotkeys(self) -> dict:
+        return self._config.get("distance_meter", {}).get("hotkeys", {
+            "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "record": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "measure": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "modifier": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+        })
+
+    def set_distance_meter_hotkey(self, action: str, key: str, trigger: str = "keydown", slot: int = 1):
+        hk = self._config.setdefault("distance_meter", {}).setdefault("hotkeys", {}).setdefault(action, {
+            "key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"
+        })
+        hk[f"key{slot}"] = key
+        hk[f"trigger{slot}"] = trigger
+        self.request_save()
+
+    def get_distance_meter_modifier(self) -> str:
+        return self.get_distance_meter_hotkeys().get("modifier", {}).get("key1", "")
 
     # ==================== 建队宏 ====================
 

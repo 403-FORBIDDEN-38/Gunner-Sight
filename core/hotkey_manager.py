@@ -61,6 +61,9 @@ class HotkeyManager(QObject):
     angle_meter_up_released = pyqtSignal()  # 角度仪上移微调松开
     angle_meter_down_pressed = pyqtSignal()  # 角度仪下移微调按下
     angle_meter_down_released = pyqtSignal()  # 角度仪下移微调松开
+    distance_meter_toggle_triggered = pyqtSignal()  # 标定测距启用/禁用
+    distance_meter_record_triggered = pyqtSignal()  # 标定测距记录（标定）
+    distance_meter_measure_triggered = pyqtSignal()  # 标定测距测算（测距）
 
     def __init__(self, config_manager, state_machine, parent=None):
         super().__init__(parent)
@@ -196,6 +199,20 @@ class HotkeyManager(QObject):
                     if key:
                         self._register_hotkey(key, "keydown", down_cb, f"am_{action}_down")
                         self._register_hotkey(key, "keyup", up_cb, f"am_{action}_up")
+            # 距离测算热键（FEATURE-3）
+            if self.config.is_distance_meter_enabled():
+                dm_hks = self.config.get_distance_meter_hotkeys()
+                for action, cb in [
+                    ("toggle", self._on_distance_meter_toggle),
+                    ("record", self._on_distance_meter_record),
+                    ("measure", self._on_distance_meter_measure),
+                ]:
+                    hk = dm_hks.get(action, {})
+                    for slot in (1, 2):
+                        key = hk.get(f"key{slot}", "")
+                        if key:
+                            trigger = hk.get(f"trigger{slot}", "keydown")
+                            self._register_hotkey(key, trigger, cb, f"dm_{action}_{slot}")
 
             # 如果有鼠标热键，确保共享鼠标钩子已连接并 acquire
             if self._mouse_hotkeys:
@@ -412,6 +429,15 @@ class HotkeyManager(QObject):
 
     def _on_angle_meter_down_up(self):
         self.angle_meter_down_released.emit()
+
+    def _on_distance_meter_toggle(self):
+        self.distance_meter_toggle_triggered.emit()
+
+    def _on_distance_meter_record(self):
+        self.distance_meter_record_triggered.emit()
+
+    def _on_distance_meter_measure(self):
+        self.distance_meter_measure_triggered.emit()
 
     def reload_hotkeys(self):
         """重新加载所有热键（配置修改后调用）"""
