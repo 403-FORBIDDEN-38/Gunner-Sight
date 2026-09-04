@@ -138,9 +138,9 @@ class RangefinderEngine:
 
     def _click(self, x, y):
         _user32.SetCursorPos(int(x), int(y))
-        time.sleep
+        time.sleep(0.02)
         _user32.mouse_event(0x0002, 0, 0, 0, 0)
-        time.sleep
+        time.sleep(0.02)
         _user32.mouse_event(0x0004, 0, 0, 0, 0)
 
     def _press_key(self, key_name):
@@ -148,7 +148,7 @@ class RangefinderEngine:
         if vk is None:
             return
         _user32.keybd_event(vk, 0, 0, 0)
-        time.sleep
+        time.sleep(0.02)
         _user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
     def _run_steps(self, steps):
@@ -188,7 +188,7 @@ class RangefinderEngine:
                 if not self._abort:
                     self.toggle_ui()  # 显示UI
                 if not self._abort:
-                    time.sleep  # 动作间容错
+                    time.sleep(0.01)  # 动作间容错
                 if not self._abort:
                     captured1 = self.capture_roi()
                 # 第二区域（如果启用）
@@ -197,7 +197,7 @@ class RangefinderEngine:
                     if roi2.get("enabled", False):
                         captured2 = self.capture_roi(roi2)
                 if not self._abort:
-                    time.sleep  # 动作间容错
+                    time.sleep(0.01)  # 动作间容错
                 if not self._abort:
                     self.toggle_ui()  # 隐藏UI
             finally:

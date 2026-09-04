@@ -261,3 +261,13 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: f7e51b0b
 - 打包: onedir+签名, 发布版已更新
+
+### V0.0140300080 - BUG-6准星不显示修复(严重回归)
+- 根因: 用户把准星图片从resources顶层移动到子文件夹后, 配置中存储的仍是顶层文件名; _migrate_crosshair_paths只在config_version变化时执行, 且顶层文件不存在就直接清空引用, 导致get_current_crosshair返回不存在的路径
+- 修复1: _migrate_crosshair_paths中顶层文件不存在时改为rglob递归搜索子文件夹, 找到则更新为相对路径(如'任意/Dot.png'), 找不到才清空
+- 修复2: _migrate_crosshair_paths移出版本判断, 每次启动都执行(幂等, 已存在的引用不重复处理)
+- 验证: get_current_crosshair返回resources/任意/Dot.png, path exists=True
+- ResourceManager底层路径逻辑未被污染: list_resources递归扫描返回相对路径, get_resource_path用resources_dir/filename支持相对路径, 与ConfigManager一致
+- 测试: 32 passed
+- commit: 321f46dd
+- 打包: onedir+签名, 发布版已更新
