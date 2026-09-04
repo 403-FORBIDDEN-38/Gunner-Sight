@@ -45,6 +45,12 @@ class RangefinderOverlay(ClickThroughOverlay):
                 MouseHook.instance().release()
                 self._mouse_hook_connected = False
 
+    def hideEvent(self, event):
+        """重写基类hideEvent：确保隐藏时退出编辑模式并release MouseHook"""
+        if self._edit_mode or self._mouse_hook_connected:
+            self.set_edit_mode(False)
+        super().hideEvent(event)
+
     def _on_global_mouse_down(self, button):
         """全局鼠标按下事件：点击 overlay 外区域自动退出编辑模式"""
         if not self._edit_mode or button != "mouse_left":
