@@ -1,4 +1,4 @@
-"""信息页：标题、简述、免费声明、README链接、吉祥物开关"""
+﻿"""信息页：标题、简述、免费声明、README链接、吉祥物开关"""
 import sys
 import os
 import subprocess
@@ -9,7 +9,7 @@ from PyQt5.QtCore import Qt, QTimer
 
 from core.resource_manager import ResourceManager
 
-APP_VERSION = "V0.0140300083"
+APP_VERSION = "V0.0140300084"
 
 
 class InfoTab(QWidget):
