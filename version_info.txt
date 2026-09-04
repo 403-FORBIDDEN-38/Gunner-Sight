@@ -1,10 +1,10 @@
-﻿# PyInstaller Version Resource File
+# PyInstaller Version Resource File
 # 由 code-review 第十三节 13.2 要求生成，版本与 APP_VERSION 同源
 
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 1, 4, 83),
-    prodvers=(0, 1, 4, 83),
+    filevers=(0, 1, 4, 84),
+    prodvers=(0, 1, 4, 84),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -19,12 +19,12 @@ VSVersionInfo(
         u'080404B0',
         [StringStruct(u'CompanyName', u'403 FORBIDDEN'),
         StringStruct(u'FileDescription', u'GunnerSight - Squad 游戏辅助软件'),
-        StringStruct(u'FileVersion', u'0.1.4.82'),
+        StringStruct(u'FileVersion', u'0.1.4.84'),
         StringStruct(u'InternalName', u'GunnerSight'),
         StringStruct(u'LegalCopyright', u'Copyright (C) 2026 403 FORBIDDEN'),
         StringStruct(u'OriginalFilename', u'GunnerSight.exe'),
         StringStruct(u'ProductName', u'GunnerSight Overlay'),
-        StringStruct(u'ProductVersion', u'V0.0140300082')])
+        StringStruct(u'ProductVersion', u'V0.0140300084')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
   ]

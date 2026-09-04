@@ -468,3 +468,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - CapsLock问题: 根因是QKeySequence.toString()对CapsLock等特殊键返回空或格式不符（capslock vs caps lock），与keyboard库event.name不匹配。修复: HotkeyLineEdit新增_SPECIAL_KEY_MAP（CapsLock/NumLock/ScrollLock/Print/Pause/Insert/Delete/Home/End/PageUp/PageDown），keyPressEvent中优先用映射
 - 验证: 32个原有测试+23个距离测算测试全通过，static_scan 0 ERROR，py_compile通过
 - commit: ca0ce0a4
+
+### REFACTOR: 启用/禁用热键两层状态分离
+- 设计: 第一层UI开关控模块开启/关闭（创建/销毁meter+overlay，注册/unregister热键）；第二层热键只切_flow_active（进入/退出测距流程），不销毁meter不隐藏overlay
+- distance_meter.py: 新增_flow_active属性+set_flow_active()/is_flow_active()；toggle()改为只切换_flow_active，不再设置config.enabled；record_point()/measure_point()/quick_measure()开头检查_flow_active，待机时返回None并提示；get_status_parts()中_flow_active=False时返回待机状态（state_word=待机, color=#888888, hint=按启用热键开始）；set_scale_meters()检查_flow_active而非config.enabled（根因修复：旧代码检查self.enabled导致set_scale后state被重置为DISABLED）；get_status_text()中DISABLED文本从'未启用'改为'待机'
+- distance_meter_tab.py: _on_module_toggle()只控模块开启/关闭；_on_toggle_hotkey()只调用meter.toggle()切换_flow_active，不调用init/shutdown/reload；_init_engine中meter创建后_flow_active默认False（待机）
+- hotkey_manager.py: toggle热键始终注册（不受enabled影响），record/measure仅启用时注册（上一轮已做）
+- 测试: 23个距离测算测试+32个config测试全通过；更新test_state_machine/test_disabled_no_response/test_get_status_text/test_status_colors适配两层状态；test_disable_clears_calibration改名为test_standby_preserves_calibration（待机不清理标定数据）
+- commit: 00cb50a8
