@@ -20,16 +20,6 @@ class OverlayWindow(ClickThroughOverlay):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # 窗口设置
-        self.setWindowFlags(
-            Qt.FramelessWindowHint |
-            Qt.WindowStaysOnTopHint |
-            Qt.Tool |
-            Qt.NoDropShadowWindowHint
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
-
         # 准星相关
         self._crosshair_pixmap: Optional[QPixmap] = None
         self._crosshair_pixmap_inverted: Optional[QPixmap] = None
