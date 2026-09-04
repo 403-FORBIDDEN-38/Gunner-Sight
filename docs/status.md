@@ -495,3 +495,10 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 附带修复: info_tab.py和test_distance_meter_logic.py的UTF-8 BOM导致static_scan解析失败
 - 验证: 32 config + 23 distance_meter测试全通过，static_scan 0 ERROR，py_compile通过
 - commit: 59582985
+
+### 全量审查第一批P1
+- P1-1 墓碑代码删除: distance_overlay.py删除set_status/set_text_color兼容桩、_drag_pos、所有鼠标事件处理、编辑模式绘制分支、position_changed信号；set_edit_mode重写为空操作确保始终穿透
+- P1-2 资源生命周期: rangefinder_overlay添加hideEvent调用set_edit_mode(False)确保模块禁用时MouseHook release；其他模块确认OK（mouse_hook引用计数、overlay_base/mascot QTimer父对象管理、config_manager无QTimer）
+- P1-3 异常吞没审查: 28处except均为合理清理保护（finally资源释放、BlockInput失败处理），无危险错误吞没
+- 测试: 32+23全通过
+- commit: 42394365

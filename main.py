@@ -7,7 +7,6 @@ import sys
 import atexit
 import os
 import time
-import ctypes
 import traceback
 from core.win32_utils import shell32
 

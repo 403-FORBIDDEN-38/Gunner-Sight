@@ -1,6 +1,5 @@
 """角度仪页：配置列表+关联载具、校准、使用、角度overlay。常闭零消耗。"""
 
-import ctypes
 import time
 from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame, QGridLayout,
@@ -8,7 +7,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QApplication, QListWidgetItem, QInputDialog, QAbstractItemView,
     QComboBox
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QColor
 
 from core.config_manager import ConfigManager
@@ -50,7 +49,7 @@ class AngleOverlay(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        from PyQt5.QtGui import QPainter, QBrush, QPen
+        from PyQt5.QtGui import QPainter, QBrush
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         # 背景

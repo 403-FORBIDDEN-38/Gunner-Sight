@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSizePolicy, QApplication,
     QListWidgetItem, QDialog
 )
-from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QPoint, QSize, QRect
-from PyQt5.QtGui import QKeySequence, QPixmap, QPainter, QColor, QFont
+from PyQt5.QtCore import  Qt, pyqtSignal, QPoint, QSize, QRect
+from PyQt5.QtGui import  QPixmap, QPainter, QColor, QFont
 
 from core.hotkey_manager import HotkeyManager
 from core.mouse_hook import MouseHook
