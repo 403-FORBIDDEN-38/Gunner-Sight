@@ -437,3 +437,16 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 22项逻辑测试全通过(删除test_start_calibration, 持久化测试加flush_save, 斜线修正测试用set_scale_meters重置)
 - commit: f7b0a2c5
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3并入GS主程序：标定测距模块（V0.0140300083）
+- 第一步config_manager: 新增_default_distance_meter_segment（空房子：enabled=False, 热键全空, 标定数据全0）, 12个方法（is/set_enabled, get/set_scale, get/set/clear_calibration, get/set_overlay_offset, get/set_hotkeys, get_modifier）, _default_config添加distance_meter段
+- 第二步逻辑层重构: distance_meter.py __init__接收ConfigManager, 删除独立_config_path/_load/_save/_save_debounced/flush_save/DEFAULT_CONFIG, 所有配置读写通过config_manager, toggle()禁用时调用clear_distance_meter_calibration()清理标定数据
+- 第三步UI层重构: distance_meter_tab.py完全重写, 删除自实现HotkeyLineEdit/GlobalHotkeyManager, 复用HotkeyPairWidget x4（toggle/record/measure/modifier）, 可关闭模式（enable_check+settings_container）, _init_engine/_shutdown_engine, 悬浮窗口右下偏移（屏宽-offset_x-窗口宽）
+- 第四步overlay微调: 保留现有实现, 位置由tab层计算后move
+- 第五步hotkey_manager扩展: 新增distance_meter_toggle/record/measure_triggered 3个信号, reload_hotkeys中注册距离测算热键（仅模块启用时）
+- 第六步main_window集成: 导航插入标定测距(index 4), 角度仪顺延为5, 懒加载工厂+property+信号连接+_shutdown_map更新
+- 第七步README: 核心特性添加标定测距, 可选模块列表更新
+- 第八步原型清理: 删除tools/test_distance_meter.py独立测试入口, 删除config/distance_meter_test.json, test_distance_meter_logic.py适配ConfigManager（23项全通过）
+- 验证: 32个原有测试全通过 + 23个距离测算逻辑测试全通过, 30个文件py_compile通过, static_scan 0 ERROR
+- commit: 905429e2
+- 版本: V0.0140300083
