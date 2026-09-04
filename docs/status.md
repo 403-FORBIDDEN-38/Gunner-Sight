@@ -359,3 +359,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 13项逻辑测试全通过(DistanceMeter层DISABLED检查已覆盖, tab层新增enabled前置检查)
 - commit: 2769bc8d
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型五次修复4项（不并入主程序，不打包）
+- 修复1: 移除设置页'启动/关闭悬浮窗口'按钮及_toggle_test_overlay方法, 悬浮窗口模块启动时常显, 设置页只保留比例尺输入+3热键绑定+悬浮位置
+- 修复2热键组合键容错: 废弃keyboard.add_hotkey(精确匹配单键), 改用keyboard.hook全局事件监听+_pressed_keys集合边沿检测, 多键同时按下时目标键被按下即触发(不要求其他键松开), 按住不重复触发; 键盘回调仍QTimer.singleShot转主线程
+- 修复3标定/测距独立: 移除record_point中MEASURING_WAIT_D打断测距的分支, 移除measure_point中CALIBRATING_WAIT_B打断标定的死代码分支; 多次标定: CALIBRATED状态按记录键自动清除旧标定数据(pixels_per_meter/calibrated_pixels/direction/last_result)开始新标定; 多次测距: 完成后按测算键自动开始新测距(保留标定数据)
+- 修复4悬浮文字精简: get_status_text重写为'状态 | 下一步提示/结果'格式, 移除比例尺数值重复显示/冗余描述, 示例: 未启用|请按启用热键 / 未标定|请按记录热键标定第1点 / 标定中|请按记录热键标定第2点 / 已标定(横向)|请按测算热键测距第1点 / 测距中|请按测算热键测距第2点 / 已标定|距离:600m
+- 验证: 15项逻辑测试全通过(新增标定/测距独立+多次标定测距2项, 修复多次标定未清旧数据bug)
+- commit: e97bc599
+- 版本号不变(原型不并入主程序)
