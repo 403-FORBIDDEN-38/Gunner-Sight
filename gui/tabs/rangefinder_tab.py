@@ -671,13 +671,19 @@ class RangefinderTab(QWidget):
 
     def on_toggle_ui_hotkey(self):
         from core.rangefinder import quick_toggle_ui
+        import threading
         profile_name = self.config.get_current_rangefinder_profile()
         if profile_name:
             btn = self.config.get_rangefinder_profile(profile_name).get("ui_button", {})
         else:
             btn = {}
-        quick_toggle_ui(btn.get("x", 960), btn.get("y", 540),
-                        step_interval=self.config.get_toggle_ui_step_interval())
+        # quick_toggle_ui含time.sleep，必须在后台线程执行避免阻塞UI事件循环
+        threading.Thread(
+            target=quick_toggle_ui,
+            args=(btn.get("x", 960), btn.get("y", 540)),
+            kwargs={"step_interval": self.config.get_toggle_ui_step_interval()},
+            daemon=True
+        ).start()
 
     def _start_measure(self):
         if not self.rangefinder_engine or not self.config.get_current_rangefinder_profile():

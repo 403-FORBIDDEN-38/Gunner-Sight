@@ -271,3 +271,21 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: 321f46dd
 - 打包: onedir+签名, 发布版已更新
+
+### V0.0140300081 - BUG-7数显频率+BUG-8穿透丢失根源性彻查
+#### BUG-7根因: rangefinder.py和squad_macro.py中共10处time.sleep被截断为裸引用(与BUG-4同类批量编辑损伤)
+- rangefinder.py: _click方法2处(SetCursorPos后/mouse_event LEFTDOWN后), _press_key方法1处(keybd_event按下后), measure方法2处(toggle_ui后/截图后动作间容错)
+- squad_macro.py: _paste方法2处(Ctrl按下后/V按下后), activate_window方法1处(ShowWindow后), alt_tab方法2处(Alt按下后/Tab按下后)
+- 影响: 裸引用不执行等待, UI切换/按键操作可能失败需重试, 整体流程变慢; 测距流程中点击UI按钮无响应导致截取失败
+- 修复: 全部恢复为time.sleep(0.01~0.05)实际调用
+#### BUG-8根因: overlay.py中两个重复showEvent方法, 后者(延迟50ms版本)覆盖前者(立即应用版本)
+- line 66: showEvent立即调用_apply_click_through()
+- line 237: showEvent用QTimer.singleShot(50, ...)延迟应用穿透
+- Python类中后定义的同名方法覆盖前者, 导致实际生效的是延迟版本, show后50ms内窗口已显示但无穿透
+- 修复: 删除重复的延迟版本, 保留立即应用版本
+#### 适配: 发布版config同步到开发版
+- 发布版有4个角度仪配置(AAA示例/MK19/AGS/QLZ87), 开发版只有2个, 已同步(含校准数据)
+- resources无发布版独有文件, 开发版3个临时截图文件不同步
+- 测试: 32 passed
+- commit: ca74c035
+- 打包: onedir+签名, 发布版已更新
