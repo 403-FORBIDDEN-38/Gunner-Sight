@@ -383,3 +383,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 19项逻辑测试全通过(新增ctrl+滚轮循环切换+状态颜色2项)
 - commit: a32e83ca
 - 版本号不变(原型不并入主程序)
+
+### ctrl+滚轮切换失败根因修复（不并入主程序，不打包）
+- 根因: 64位系统上ctypes类型定义错误! LRESULT用了c_long(32位), WPARAM用了c_int(32位), LPARAM用了POINTER(MSLLHOOKSTRUCT), 导致WH_MOUSE_LL低级鼠标钩子回调的参数解析失败, 无法正确接收WM_MOUSEWHEEL消息
+- 修复: LRESULT改为c_ssize_t(64位), WPARAM/LPARAM改为c_size_t(64位), HOOKPROC签名改为(c_int, WPARAM, LPARAM)->LRESULT; 用ctypes.WinDLL独立实例避免全局windll类型冲突; 显式设置所有Win32函数的argtypes/restype; 保存_wheel_user32引用用于清理; 回调中lParam用ctypes.cast转换为POINTER(MSLLHOOKSTRUCT)
+- 新增调试输出: 钩子注册成功/失败打印hhook或error code, 回调异常打印traceback
+- 验证: 19项逻辑测试全通过(无回归)
+- commit: 0f75ee5d
+- 版本号不变(原型不并入主程序)
