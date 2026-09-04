@@ -252,3 +252,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: df8aad41
 - 打包: onedir+签名, 发布版已更新
+
+### V0.0140300079 - FEATURE-2修正: 资源库自动扫描子文件夹
+- 删除上一版'导入文件夹'按钮及_on_import_folder方法(用户需求重新明确: 不是按钮导入, 是自动扫描resources子文件夹)
+- resource_manager.list_resources改为rglob递归扫描, 返回相对路径(如subfolder/image.png); import_resource重复检查也改为递归
+- resource_tab新增'刷新'按钮, 点击清除缓存重新扫描; 懒加载缓存(_resource_cache), 首次打开页面时扫描, 切换页面不重复扫描
+- 导入/删除/重命名后自动清除缓存; 性能: rglob扫描几百张图片约10-50ms
+- 测试: 32 passed
+- commit: f7e51b0b
+- 打包: onedir+签名, 发布版已更新

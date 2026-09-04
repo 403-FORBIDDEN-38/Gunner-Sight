@@ -79,11 +79,11 @@ class ConfigManager:
         # 加载配置
         self.load_config()
 
+        # BUG-6: 准星路径修复每次启动都执行（文件可能被移动到子文件夹）
+        self._migrate_crosshair_paths()
         # P0-2: 配置版本号判断，只在版本变化时执行迁移
         cfg_ver = self._config.get("config_version", 0)
         if cfg_ver < CURRENT_CONFIG_VERSION:
-            # 数据迁移：旧版倍率准星存绝对路径，统一为文件名
-            self._migrate_crosshair_paths()
             # 数据迁移：旧版弹种热键用 key/trigger 单键格式，统一为 key1/trigger1/key2/trigger2
             self._migrate_ammo_hotkeys()
             # 数据迁移：旧版 "xcj" 配置段 → 新版 "rangefinder" 段（批次2 全局改名）
@@ -140,9 +140,17 @@ class ConfigManager:
                         ch = os.path.basename(ch)
                         mag["crosshair"] = ch
                         changed = True
-                    # 文件不存在 → 清空（避免持续报"准星图片不存在"）
+                    # 文件不存在 → 递归搜索子文件夹，找到则更新为相对路径；找不到才清空
                     if ch and not (self.resources_dir / ch).exists():
-                        mag["crosshair"] = ""
+                        found = None
+                        for f in self.resources_dir.rglob("*"):
+                            if f.is_file() and f.name == ch:
+                                found = str(f.relative_to(self.resources_dir))
+                                break
+                        if found:
+                            mag["crosshair"] = found
+                        else:
+                            mag["crosshair"] = ""
                         changed = True
         if changed:
             self.request_save()
