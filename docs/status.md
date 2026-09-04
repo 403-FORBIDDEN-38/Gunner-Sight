@@ -313,3 +313,16 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: 433d23ba
 - 打包: onedir+签名, 发布版已更新
+
+### FEATURE-3距离测算模块原型（不并入主程序，不打包）
+- 文件: core/distance_meter.py(逻辑层), core/distance_overlay.py(悬浮窗口), gui/tabs/distance_meter_tab.py(设置页)
+- 测试入口: tools/test_distance_meter.py(独立启动), tools/test_distance_meter_logic.py(9项单元测试全通过)
+- 状态机: DISABLED -> ENABLED_UNCALIBRATED -> CALIBRATING_WAIT_B -> CALIBRATED -> MEASURING_WAIT_D
+- 3个热键: 启用/记录(比例尺标定两点)/测算(距离测量两点), 记录与测算分开支持一次标定多次测距
+- 悬浮窗口: 透明置顶鼠标穿透, 双击进入拖动模式, 位置可配置持久化
+- 配置: 独立JSON文件(distance_meter_test.json), 不影响主程序config.json
+- 禁硬编码: 比例尺/热键/悬浮位置/颜色全部可配置
+- 未修改main.py/main_window.py, 未注册到tab导航, 未加入PyInstaller打包
+- 验证: 9项逻辑测试全通过(像素距离/状态机/标定/测距/多次测距/重新标定/禁用无响应/持久化/比例尺重置)
+- commit: 85f9fc6e
+- 版本号不变(原型不并入主程序)
