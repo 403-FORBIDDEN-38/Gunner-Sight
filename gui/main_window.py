@@ -247,10 +247,10 @@ class MainWindow(QMainWindow):
             2: lambda: HotkeyTab(config=self.config, state=self.state, hotkey=self.hotkey),
             3: lambda: RangefinderTab(config=self.config, hotkey=self.hotkey),
             4: lambda: DistanceMeterTab(config=self.config, hotkey=self.hotkey),
-            4: lambda: AngleMeterTab(config=self.config, hotkey=self.hotkey),
-            5: lambda: SquadMacroTab(config=self.config, hotkey=self.hotkey),
-            6: lambda: ResourceTab(config=self.config, resources=self.resources),
-            7: lambda: InfoTab(resources=self.resources),
+            5: lambda: AngleMeterTab(config=self.config, hotkey=self.hotkey),
+            6: lambda: SquadMacroTab(config=self.config, hotkey=self.hotkey),
+            7: lambda: ResourceTab(config=self.config, resources=self.resources),
+            8: lambda: InfoTab(resources=self.resources),
         }
         self._tab_cache = {}  # index -> widget
 
@@ -321,23 +321,23 @@ class MainWindow(QMainWindow):
 
     @property
     def distance_meter_tab(self):
-        return self._get_tab(4)
-
-    @property
-    def angle_meter_tab(self):
         return self._ensure_tab(4)
 
     @property
-    def squad_macro_tab(self):
+    def angle_meter_tab(self):
         return self._ensure_tab(5)
 
     @property
-    def resource_tab(self):
+    def squad_macro_tab(self):
         return self._ensure_tab(6)
 
     @property
-    def info_tab(self):
+    def resource_tab(self):
         return self._ensure_tab(7)
+
+    @property
+    def info_tab(self):
+        return self._ensure_tab(8)
 
     def _on_nav_changed(self, index):
         widget = self._ensure_tab(index)
@@ -413,9 +413,13 @@ class MainWindow(QMainWindow):
         elif index == 3:  # rangefinder
             self.hotkey.rangefinder_measure_triggered.connect(widget.on_measure_hotkey)
             self.hotkey.toggle_ui_triggered.connect(widget.on_toggle_ui_hotkey)
-        elif index == 5:  # squad_macro
+        elif index == 4:  # 标定测距（热键信号在_init_engine中连接，此处留空）
+            pass
+        elif index == 5:  # 角度仪（热键信号在_init_engine中连接，常闭模式）
+            pass
+        elif index == 6:  # 建队宏
             self.hotkey.squad_macro_triggered.connect(widget.on_hotkey)
-        elif index == 6:  # resource
+        elif index == 7:  # 资源库
             widget.connect_signals()
 
     # ==================== 跨页回调 ====================
