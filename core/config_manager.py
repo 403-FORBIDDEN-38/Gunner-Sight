@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 # 配置版本号：迁移函数只在版本变化时执行，避免每次启动重复遍历
-CURRENT_CONFIG_VERSION = 4
+CURRENT_CONFIG_VERSION = 5
 
 
 def get_app_base_dir() -> Path:
@@ -27,11 +27,11 @@ def get_app_base_dir() -> Path:
 
 
 def _default_angle_meter_profile() -> Dict:
-    """FEATURE-1: 角度仪默认配置单一工厂。每载具单曲线，用户自选点数。"""
+    """FEATURE-1补充: 角度仪默认配置。各精度方案独立保存，可切换。"""
     return {
-        "min_angle": -80.0, "max_angle": 80.0,
-        "calibration_points": None,   # 载具校准曲线（[[delta, angle], ...]），None=未校准
-        "calibration_point_count": 7, # 用户自选校准点数（3/5/7/9/11）
+        "pitch_min": -80.0, "pitch_max": 80.0,  # 俯仰角范围，不设硬限制
+        "calibrations": {},  # {"3": [...], "5": [...], "7": [...], "9": [...], "11": [...]}
+        "active_calibration_point_count": 7,  # 当前使用的精度方案
         "linked_vehicles": [], "auto_reset": False
     }
 
@@ -206,34 +206,47 @@ class ConfigManager:
             print("[ConfigManager] 配置迁移: 角度仪热键 单键→双键 已迁移")
 
     def _migrate_angle_meter_calibration(self):
-        """FEATURE-1: 旧 quick_calibration/full_calibration → calibration_points。
-        优先级: full_calibration > quick_calibration > calibration(旧字段)。
-        全局校准数据丢弃（不再需要）。"""
+        """FEATURE-1补充: 迁移链。
+        v3->v4: 旧quick/full→calibration_points，丢弃全局校准。
+        v4->v5: 单方案calibration_points→calibrations[count]，min/max_angle→pitch_min/max。"""
         am = self._config.get("angle_meter", {})
         profiles = am.get("profiles", {})
         changed = False
         for pname, pdata in profiles.items():
-            # 旧格式迁移：有calibration_type或quick/full字段但无calibration_points
-            if "calibration_points" not in pdata:
+            # v3->v4: 旧quick/full→calibration_points
+            if "calibration_points" not in pdata and "calibrations" not in pdata:
                 old_cal = (pdata.get("full_calibration")
                            or pdata.get("quick_calibration")
                            or pdata.get("calibration"))
                 if old_cal:
                     pdata["calibration_points"] = old_cal
-                    print(f"[ConfigManager] 配置迁移: 角度仪profile '{pname}' 旧校准→calibration_points ({len(old_cal)}点)")
+                    print(f"[ConfigManager] 迁移v4: '{pname}' 旧校准→calibration_points ({len(old_cal)}点)")
                 else:
                     pdata["calibration_points"] = None
                 pdata.setdefault("calibration_point_count", 7)
-                # 清理旧字段
                 for k in ("calibration_type", "quick_calibration", "quick_min_delta",
                           "quick_mid_delta", "quick_max_delta", "full_calibration", "calibration"):
                     pdata.pop(k, None)
+                changed = True
+            # v4->v5: 单方案→calibrations字典
+            if "calibrations" not in pdata:
+                count = pdata.get("calibration_point_count", 7)
+                pts = pdata.get("calibration_points")
+                pdata["calibrations"] = {str(count): pts} if pts else {}
+                pdata["active_calibration_point_count"] = count
+                # min/max_angle -> pitch_min/max
+                pdata["pitch_min"] = pdata.get("min_angle", -80.0)
+                pdata["pitch_max"] = pdata.get("max_angle", 80.0)
+                # 清理旧字段
+                for k in ("calibration_points", "calibration_point_count", "min_angle", "max_angle"):
+                    pdata.pop(k, None)
+                print(f"[ConfigManager] 迁移v5: '{pname}' 单方案→calibrations, active={count}")
                 changed = True
         # 丢弃全局校准数据
         if "angle_meter_global_calibration" in self._config:
             del self._config["angle_meter_global_calibration"]
             changed = True
-            print("[ConfigManager] 配置迁移: 丢弃 angle_meter_global_calibration")
+            print("[ConfigManager] 迁移: 丢弃 angle_meter_global_calibration")
         if changed:
             self.request_save()
 
@@ -1156,20 +1169,45 @@ class ConfigManager:
     # --- 热键（单键：toggle=开始/停止, pause=暂离, calibrate=校准确认, reset=归零）---
 
     # === 全局校准 ===
-    def get_angle_meter_calibration_points(self, name: str):
-        """FEATURE-1: 获取载具校准曲线点列表，None=未校准"""
-        return self.get_angle_meter_profile(name).get("calibration_points")
+    def get_angle_meter_calibration_points(self, name: str, point_count: int = None):
+        """FEATURE-1补充: 获取指定点数的校准曲线，None=未校准。
+        point_count为None时用active_calibration_point_count。"""
+        profile = self.get_angle_meter_profile(name)
+        if point_count is None:
+            point_count = profile.get("active_calibration_point_count", 7)
+        return profile.get("calibrations", {}).get(str(point_count))
 
     def set_angle_meter_calibration_points(self, name: str, points, point_count: int = 7):
-        """FEATURE-1: 保存载具校准曲线"""
+        """FEATURE-1补充: 保存指定点数的校准曲线，不覆盖其他方案"""
         profile = self.get_angle_meter_profile(name)
-        profile["calibration_points"] = points
-        profile["calibration_point_count"] = point_count
+        profile.setdefault("calibrations", {})[str(point_count)] = points
+        profile["active_calibration_point_count"] = point_count
+        self.set_angle_meter_profile(name, profile)
+
+    def get_active_calibration_point_count(self, name: str) -> int:
+        return self.get_angle_meter_profile(name).get("active_calibration_point_count", 7)
+
+    def set_active_calibration_point_count(self, name: str, count: int):
+        profile = self.get_angle_meter_profile(name)
+        profile["active_calibration_point_count"] = count
+        self.set_angle_meter_profile(name, profile)
+
+    def get_all_calibration_status(self, name: str) -> dict:
+        """返回各点数方案的校准状态: {3: bool, 5: bool, 7: bool, 9: bool, 11: bool}"""
+        cals = self.get_angle_meter_profile(name).get("calibrations", {})
+        return {c: bool(cals.get(str(c))) for c in (3, 5, 7, 9, 11)}
+
+    def clear_all_calibrations(self, name: str):
+        """FEATURE-1补充: 清空该载具所有精度方案的校准数据（范围变更时调用）"""
+        profile = self.get_angle_meter_profile(name)
+        profile["calibrations"] = {}
         self.set_angle_meter_profile(name, profile)
 
     def get_effective_angle_meter_calibration(self, name: str):
-        """FEATURE-1: 直接返回载具自己的calibration_points，无全局兜底"""
-        return self.get_angle_meter_profile(name).get("calibration_points")
+        """FEATURE-1补充: 返回active方案的校准曲线，无全局兜底"""
+        profile = self.get_angle_meter_profile(name)
+        count = profile.get("active_calibration_point_count", 7)
+        return profile.get("calibrations", {}).get(str(count))
 
     def get_angle_meter_hotkeys(self) -> Dict:
         # 统一为双键结构（key1/trigger1/key2/trigger2），与全局热键一致；角度仪 UI 只用 key1
