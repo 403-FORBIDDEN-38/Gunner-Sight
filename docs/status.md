@@ -409,3 +409,13 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 19项逻辑测试全通过(无回归)
 - commit: ef160e72
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型十次修复：shift+测距键沿用上一次点1（不并入主程序，不打包）
+- 需求: 已标定且测距过至少一次后, 按shift+测距键沿用上一次点1, 当前鼠标位置为点2, 直接计算距离; 适用于环测多点和点2重试偷懒
+- 实现1记录上一次点1: DistanceMeter新增_last_measure_point_1属性; 正常测距(measure_point第2次)完成后更新为本次点C(点1); quick_measure完成后不更新(支持连续环测)
+- 实现2 shift检测: tab层_on_measure_hotkey中用keyboard.is_pressed('shift')检测; shift按下且last_measure_point_1有值→调用quick_measure(); 否则正常measure_point(); 未完成过测距时quick_measure返回'no_history'提示'请先完成一次正常测距'
+- 实现3快速测距: quick_measure()直接用last_measure_point_1+当前光标位置计算像素距离(直线), 除以pixels_per_meter得米数, 悬浮显示'距离：Xm (沿用上一次点1)'
+- 实现4状态约束: 只在已标定状态可用; 未标定提示'请先完成比例尺标定'; set_scale_meters切换比例尺时清空_last_measure_point_1(旧标定失效需重新测距); 新增last_measure_point_1只读property
+- 验证: 22项逻辑测试全通过(新增3项: shift+测距沿用上一次点1连续环测/无测距历史提示/切换比例尺清空历史点1)
+- commit: 22f179a6
+- 版本号不变(原型不并入主程序)
