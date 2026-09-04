@@ -1,5 +1,4 @@
 """测距仪页：UI切换、测距仪模块、ROI、结果显示、配置管理、关联载具"""
-import ctypes
 from core.win32_utils import user32  # 统一 Win32 入口
 from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame,

@@ -7,7 +7,7 @@ Overlay渲染模块 (Overlay Renderer)
 
 from PyQt5.QtWidgets import QWidget, QApplication
 from PyQt5.QtGui import QPixmap, QPainter, QImage
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt
 from pathlib import Path
 from typing import Optional
 
