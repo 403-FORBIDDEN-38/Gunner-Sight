@@ -459,3 +459,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 错误8: _shutdown_map已正确（3数显,4标定测距,5角度仪,6建队宏），无需修改
 - 验证: 9个导航项对应正确页面，32个原有测试+23个距离测算测试全通过，py_compile通过
 - commit: 1043b375
+
+### BUG-FIX: 标定测距模块5个根源问题修复
+- 问题1悬浮窗口状态文字不显示: 根因是_update_status_display中set_result('', '#ffffff')覆盖了set_state_hint的内容。修复: 无result时不调用set_result，只在有result时调用
+- 问题2/3热键启用/禁用失效: 根因A是_on_toggle_hotkey只调用meter.toggle()未同步引擎状态和热键注册。修复: 提取_set_enabled(enabled)统一入口（设置config+init/shutdown引擎+控件可用+同步checkbox+reload_hotkeys），UI开关和热键回调都走_set_enabled。根因B是toggle热键在禁用时被unregister导致无法热键重新启用。修复: hotkey_manager中toggle热键无条件注册（不检查is_distance_meter_enabled），record/measure仍只在启用时注册
+- 问题4组合键第二个热键框无效: 根因是get_distance_meter_modifier只读key1。修复: 新增get_distance_meter_modifiers()返回[key1,key2]过滤空值，is_modifier_pressed改为any(keyboard.is_pressed(k) for k in modifiers)
+- 问题5悬浮窗口位置不对关闭再开启叠加: 根因是_init_engine中先_position_overlay()再show()，此时overlay.width()是默认值非实际渲染值。修复: 先show()再_position_overlay()
+- CapsLock问题: 根因是QKeySequence.toString()对CapsLock等特殊键返回空或格式不符（capslock vs caps lock），与keyboard库event.name不匹配。修复: HotkeyLineEdit新增_SPECIAL_KEY_MAP（CapsLock/NumLock/ScrollLock/Print/Pause/Insert/Delete/Home/End/PageUp/PageDown），keyPressEvent中优先用映射
+- 验证: 32个原有测试+23个距离测算测试全通过，static_scan 0 ERROR，py_compile通过
+- commit: ca0ce0a4
