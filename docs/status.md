@@ -419,3 +419,13 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 22项逻辑测试全通过(新增3项: shift+测距沿用上一次点1连续环测/无测距历史提示/切换比例尺清空历史点1)
 - commit: 22f179a6
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型十一次修复：快捷键体系重构（不并入主程序，不打包）
+- 需求: 弃用ctrl+滚轮切换比例尺, 改为组合热键形式; 新增可绑定组合键(默认SHIFT); 组合键+标定键循环切换比例尺; 组合键+测距键沿用上一次点1
+- 实现1新增组合键: DEFAULT_CONFIG的hotkeys新增modifier字段(默认'shift'); DistanceMeter.is_modifier_pressed()用keyboard.is_pressed检测配置的组合键; 设置页新增'组合键（修饰键）'绑定框; modifier只保存配置不注册全局热键
+- 实现2删除ctrl+滚轮废码: 删除GlobalHotkeyManager中_wheel_hook/_wheel_callback/_wheel_hook_proc/_wheel_user32属性; 删除set_wheel_callback/_ensure_wheel_hook方法(含WH_MOUSE_LL低级钩子/ctypes类型定义/VK_CONTROL检查); 删除unregister_all中滚轮钩子清理; 删除DistanceMeterTab中set_wheel_callback调用和_on_wheel_scale方法; 修改提示文字为'组合键+标定键切换'
+- 实现3组合键+标定键切换比例尺: _on_record_hotkey中检测is_modifier_pressed(), 按下则调用_switch_scale()(从_on_wheel_scale重构, 固定cycle_scale(-1)即index+1大到小循环900→300→100→33→900); 未按下则正常record_point()
+- 实现4组合键+测距键沿用上一次点1: _on_measure_hotkey中用is_modifier_pressed()替换硬编码keyboard.is_pressed('shift'); 按下且有last_measure_point_1则quick_measure(), 否则正常measure_point()
+- 验证: 22项逻辑测试全通过(无回归); grep确认无wheel/WM_MOUSEWHEEL/WH_MOUSE_LL/VK_CONTROL残留
+- commit: 503d7ad5
+- 版本号不变(原型不并入主程序)
