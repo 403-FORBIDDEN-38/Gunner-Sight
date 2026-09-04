@@ -225,3 +225,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: 41f18d92
 - 打包: onedir + 签名，发布版已更新
+
+### V0.0140300076 - FEATURE-1补充: 各精度方案独立保存可切换
+- 配置层: calibrations字典{3/5/7/9/11: points} + active_calibration_point_count + pitch_min/pitch_max(不设硬限制-180~180)
+- 逻辑层: 角度查询用active方案曲线; 修改pitch范围清空所有方案; 新增get_all_calibration_status/clear_all_calibrations/set_active_calibration_point_count
+- UI层: 校准点数下拉框改为3/5/7/9/11按钮组(可切换, 已校准显示✓); 俯仰角范围-90~90改为-180~180
+- 迁移: config_version 4->5, 单方案calibration_points->calibrations[count], min/max_angle->pitch_min/max。实测AAA/MK19校准数据保留
+- 测试: 32 passed
+- commit: 0e443a5f
+- 打包: onedir + 签名，发布版已更新
