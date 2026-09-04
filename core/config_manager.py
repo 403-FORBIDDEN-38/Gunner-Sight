@@ -806,8 +806,10 @@ class ConfigManager:
         hk[f"trigger{slot}"] = trigger
         self.request_save()
 
-    def get_distance_meter_modifier(self) -> str:
-        return self.get_distance_meter_hotkeys().get("modifier", {}).get("key1", "")
+    def get_distance_meter_modifiers(self) -> list:
+        """返回组合键列表[key1, key2]（过滤空值），任一按下即触发组合键效果"""
+        hk = self.get_distance_meter_hotkeys().get("modifier", {})
+        return [k for k in [hk.get("key1", ""), hk.get("key2", "")] if k]
 
     # ==================== 建队宏 ====================
 
