@@ -326,3 +326,14 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 9项逻辑测试全通过(像素距离/状态机/标定/测距/多次测距/重新标定/禁用无响应/持久化/比例尺重置)
 - commit: 85f9fc6e
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型修复5项（不并入主程序，不打包）
+- 修复1: HotkeyLineEdit支持鼠标按键(左/右/中/侧键1/侧键2)+特殊键(CapsLock/NumLock/ScrollLock/Insert/Delete/Home/End/PageUp/PageDown/方向键等), grabMouse捕获鼠标点击
+- 修复2根因: 热键绑定后只保存到配置, 从未注册全局热键! 新增GlobalHotkeyManager类, 键盘用keyboard库add_hotkey注册, 鼠标用MouseHook全局钩子注册, 注册失败打印错误日志
+- 修复3: 悬浮窗口从220x70缩小为一行文本(高度28px, 宽度自适应内容120~400px), 显示格式'状态 | 结果', 保持点击穿透
+- 修复4: 默认悬浮位置从x=100,y=100改为x=100,y=200, 保留可配置性
+- 修复5: 移除'重置标定'按钮, 新增'比例尺标定'按钮, 点击调用start_calibration()自动清除旧标定→进入等待点A状态→悬浮提示'请记录比例尺第1点', 标定中可再次点击重新开始
+- DistanceMeter新增start_calibration()方法
+- 验证: 11项逻辑测试全通过(新增start_calibration/默认位置2项)
+- commit: d5fa5d2b
+- 版本号不变(原型不并入主程序)
