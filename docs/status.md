@@ -337,3 +337,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 11项逻辑测试全通过(新增start_calibration/默认位置2项)
 - commit: d5fa5d2b
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型二次修复3项（不并入主程序，不打包）
+- 修复1(严重崩溃)根因: keyboard库add_hotkey的回调在钩子子线程执行, 回调中操作QWidget(通过status_callback->overlay)导致Qt跨线程崩溃! 修复: 键盘热键callback包装为QTimer.singleShot(0, cb)转到主线程执行; 鼠标热键本身是Qt信号自动主线程无需改
+- 修复2: DistanceMeter新增get_status_text()方法返回完整状态文本(未启用/未标定|请按记录热键标定/标定中|请记录第2点/已标定|XXX像素=XXXm/测距中|请记录目标第2点/已标定|距离:XXXm), 悬浮窗口启动时立即调用_update_overlay_state显示状态, 不再空白
+- 修复3: 移除设置页'比例尺标定'按钮及_on_start_calibration方法, 标定流程完全通过热键完成(启用->记录热键2次), 设置页只保留比例尺输入+3热键绑定+悬浮位置
+- 验证: 12项逻辑测试全通过(新增get_status_text各状态测试)
+- commit: 9fa70c1e
+- 版本号不变(原型不并入主程序)
