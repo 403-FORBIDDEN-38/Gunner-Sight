@@ -230,12 +230,14 @@ class AngleMeterTab(QWidget):
         self.hk_reset = HotkeyLineEdit()
         self.hk_reset.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("reset", k))
         reset_row.addWidget(self.hk_reset, 1)
-        param_row.addLayout(reset_row, 1)
-        # UI-2: 归零键注释
+        # UI-2: 归零键注释放在归零键正下方
+        reset_col = QVBoxLayout()
+        reset_col.addLayout(reset_row)
         reset_hint = QLabel("适用于开火后角度归于水平的武器")
         reset_hint.setFont(QFont("Consolas", 8))
         reset_hint.setObjectName("hint_text")
-        cfg_v.addWidget(reset_hint)
+        reset_col.addWidget(reset_hint)
+        param_row.addLayout(reset_col, 1)
         cfg_v.addLayout(param_row)
         sep_param = QFrame(); sep_param.setFrameShape(QFrame.HLine); sep_param.setObjectName("angle_meter_sep")
         cfg_v.addWidget(sep_param)
@@ -420,12 +422,6 @@ class AngleMeterTab(QWidget):
                 continue
             parts = []
             # FEATURE-1: 校准状态
-            active = self.config.get_active_calibration_point_count(name)
-            cal_pts = self.config.get_angle_meter_calibration_points(name, active)
-            if cal_pts:
-                parts.append("已校准(%d点)" % active)
-            else:
-                parts.append("未校准")
             if vehicles:
                 parts.append(f"载具:{','.join(vehicles)}")
             if tags_eff:
@@ -535,6 +531,12 @@ class AngleMeterTab(QWidget):
             self.angle_display.setText("--.-")
 
     # === 关联载具 ===
+    def on_vehicle_data_changed(self):
+        """BUG-5: 载具页数据变更（标签/载具）时刷新关联载具列表和配置列表"""
+        if self.config.get_current_angle_meter_profile():
+            self._refresh_linked_vehicles()
+            self._refresh_profile_list()
+
     def _refresh_linked_vehicles(self):
         name = self.config.get_current_angle_meter_profile()
         if not name:

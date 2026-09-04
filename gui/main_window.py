@@ -401,6 +401,7 @@ class MainWindow(QMainWindow):
         elif index == 1:  # vehicle
             widget.connect_signals()
             widget.data_changed.connect(self.overview_tab.refresh_vehicle_list)
+            widget.data_changed.connect(self.angle_meter_tab.on_vehicle_data_changed)
         elif index == 2:  # hotkey
             widget.connect_signals(on_global_hotkey_changed=self._on_global_hotkey_changed)
         elif index == 3:  # rangefinder
