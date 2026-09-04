@@ -234,11 +234,6 @@ class OverlayWindow(QWidget):
         painter.drawPixmap(draw_x, draw_y, scaled_pixmap)
         painter.end()
 
-    def showEvent(self, event):
-        """显示事件 - 重新应用窗口样式"""
-        super().showEvent(event)
-        QTimer.singleShot(50, self._apply_click_through)
-
     def resizeEvent(self, event):
         """大小变化事件"""
         super().resizeEvent(event)

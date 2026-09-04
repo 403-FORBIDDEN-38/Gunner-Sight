@@ -34,9 +34,9 @@ def _press(vk, delay=0.015):
 def _paste():
     """Ctrl+V 粘贴"""
     _key_down(VK_CONTROL)
-    time.sleep
+    time.sleep(0.01)
     _press(VK_V, 0.01)
-    time.sleep
+    time.sleep(0.01)
     _key_up(VK_CONTROL)
 
 
@@ -68,7 +68,7 @@ def activate_window(hwnd):
         return False
     try:
         _user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-        time.sleep
+        time.sleep(0.05)
         _user32.SetForegroundWindow(hwnd)
         return True
     except Exception:
@@ -78,9 +78,9 @@ def activate_window(hwnd):
 def alt_tab():
     """模拟 Alt+Tab 切换到下一个窗口"""
     _key_down(0x12)  # VK_MENU (Alt)
-    time.sleep
+    time.sleep(0.02)
     _press(0x09, 0.02)  # Tab
-    time.sleep
+    time.sleep(0.02)
     _key_up(0x12)
 
 
