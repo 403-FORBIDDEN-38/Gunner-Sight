@@ -368,3 +368,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 15项逻辑测试全通过(新增标定/测距独立+多次标定测距2项, 修复多次标定未清旧数据bug)
 - commit: e97bc599
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型六次修复3项（不并入主程序，不打包）
+- 修复1防打断提示统一: record_point中MEASURING_WAIT_D状态返回'interrupted'+提示'测距中，请先完成测距'; measure_point开头新增CALIBRATING_WAIT_B状态检查返回'interrupted'+提示'标定中，请先完成标定'; 两者都不改变状态机; tab层_on_meter_status识别临时提示(含'请先完成'/'比例尺已更改'等)显示2秒后自动恢复标准状态
+- 修复2(根因)比例尺更改呆住: set_scale_meters之前只清了calibrated_pixels/pixels_per_meter, 未重置_state/_calib_point_a/_measure_point_c/_last_result, 导致标定途中改比例尺后状态机混乱! 修复: 完整重置所有标定相关状态, enabled时回到ENABLED_UNCALIBRATED, 调用_notify通知悬浮窗口
+- 修复3悬浮文字精简: get_status_text重写为'比例尺|流程|提示/距离'四段格式, 示例: 300m|未标定|请按记录热键标定第1点 / 300m|标定中|请按记录热键标定第2点 / 300m|已标定|距离:600m; 移除像素距离/pixels_per_meter/标定方向等冗余信息
+- 验证: 17项逻辑测试全通过(新增防打断提示+标定途中改比例尺2项, 更新2项旧测试断言)
+- commit: 1ca3eb4b
+- 版本号不变(原型不并入主程序)
