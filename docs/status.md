@@ -485,3 +485,13 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 签名: CN=403 FORBIDDEN 自签名，UnknownError=NotTrusted正常
 - 发布版: C:\Users\suncheng\Doubao\chats\2026-07-30\new-chat\GunnerSight_Release\
 - commit: 0da9f73a
+
+### REFACTOR: Overlay点击穿透根治
+- 根因: 4个overlay穿透实现不一致，编辑模式状态跨hide/show保持，showEvent条件恢复穿透失败导致穿透丢失
+- 新建 core/overlay_base.py: ClickThroughOverlay统一基类，封装__init__双保险穿透、showEvent无条件恢复、hideEvent重置编辑模式、set_edit_mode统一实现、ESC退出+30秒超时兜底
+- overlay.py: OverlayWindow继承基类，删除自己的_apply_click_through和showEvent
+- rangefinder_overlay.py: RangefinderOverlay继承基类，重写set_edit_mode保留MouseHook点击外部退出逻辑，删除自己的showEvent
+- distance_overlay.py: DistanceOverlay继承基类，删除自己的set_edit_mode和showEvent
+- 附带修复: info_tab.py和test_distance_meter_logic.py的UTF-8 BOM导致static_scan解析失败
+- 验证: 32 config + 23 distance_meter测试全通过，static_scan 0 ERROR，py_compile通过
+- commit: 59582985
