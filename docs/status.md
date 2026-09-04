@@ -429,3 +429,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 22项逻辑测试全通过(无回归); grep确认无wheel/WM_MOUSEWHEEL/WH_MOUSE_LL/VK_CONTROL残留
 - commit: 503d7ad5
 - 版本号不变(原型不并入主程序)
+
+### FEATURE-3原型十二次修复：状态颜色优化+性能重构+附带清理（不并入主程序，不打包）
+- 修复1状态颜色优化: DistanceMeter新增get_status_parts()返回结构化数据{scale,state_word,state_color,hint,result,result_color}; DistanceOverlay重构为3方法set_scale(白色固定)/set_state_hint(状态词上色+提示白色)/set_result(结果绿色), 支持富文本(Qt.RichText), 幂等检查(文本未变化不更新); tab层_update_overlay_state用结构化数据分别设置
+- 修复2性能重构: (a)配置保存防抖: _save_debounced()用threading.Timer(500ms)合并多次写入, flush_save()强制立即保存(模块关闭时调用), 修复replace_all误把flush_save中_save替换为_save_debounced的bug; (b)overlay幂等检查: set_scale/set_state_hint/set_result文本相同则跳过; (c)性能测量日志: 键盘钩子/鼠标钩子/_update_overlay_state中超过5ms打印耗时, 供用户收集瓶颈数据
+- 修复3附带清理: (a)删除start_calibration()和reset_calibration()死代码(标定/重置按钮已移除); (b)修复unregister_hotkey()空实现: 新增_name_to_key映射, register时记录, unregister时按映射移除回调; (c)_save()失败时打印错误日志(原静默pass); (d)更新过时注释(ctrl+滚轮→组合键+标定键)
+- 验证: 22项逻辑测试全通过(删除test_start_calibration, 持久化测试加flush_save, 斜线修正测试用set_scale_meters重置)
+- commit: f7b0a2c5
+- 版本号不变(原型不并入主程序)

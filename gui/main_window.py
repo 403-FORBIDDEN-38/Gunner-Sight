@@ -29,6 +29,7 @@ from gui.tabs.squad_macro_tab import SquadMacroTab
 from gui.tabs.resource_tab import ResourceTab
 from gui.tabs.info_tab import InfoTab
 from gui.tabs.angle_meter_tab import AngleMeterTab
+from gui.tabs.distance_meter_tab import DistanceMeterTab
 
 
 class MainWindow(QMainWindow):
@@ -236,7 +237,7 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(content_with_nav, 1)
         main_layout.addWidget(nav_container)
 
-        self._nav_pages = ["全局设置", "载具配置", "热键设置", "信息数显", "角度仪", "建队宏", "资源库", "信息"]
+        self._nav_pages = ["全局设置", "载具配置", "热键设置", "信息数显", "标定测距", "角度仪", "建队宏", "资源库", "信息"]
         self.nav_list.currentRowChanged.connect(self._on_nav_changed)
 
         # P0-1: Tab懒加载 - 工厂映射，首次访问时创建
@@ -245,6 +246,7 @@ class MainWindow(QMainWindow):
             1: lambda: VehicleConfigTab(config=self.config, state=self.state, resources=self.resources),
             2: lambda: HotkeyTab(config=self.config, state=self.state, hotkey=self.hotkey),
             3: lambda: RangefinderTab(config=self.config, hotkey=self.hotkey),
+            4: lambda: DistanceMeterTab(config=self.config, hotkey=self.hotkey),
             4: lambda: AngleMeterTab(config=self.config, hotkey=self.hotkey),
             5: lambda: SquadMacroTab(config=self.config, hotkey=self.hotkey),
             6: lambda: ResourceTab(config=self.config, resources=self.resources),
@@ -316,6 +318,10 @@ class MainWindow(QMainWindow):
     @property
     def rangefinder_tab(self):
         return self._ensure_tab(3)
+
+    @property
+    def distance_meter_tab(self):
+        return self._get_tab(4)
 
     @property
     def angle_meter_tab(self):
@@ -496,7 +502,7 @@ class MainWindow(QMainWindow):
             print(f"[性能] 关闭-窗口隐藏 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
 
             # P0-1: 只对已创建的tab执行shutdown
-            _shutdown_map = {3: "数显模块", 4: "角度仪", 5: "建队宏"}
+            _shutdown_map = {3: "数显模块", 4: "标定测距", 5: "角度仪", 6: "建队宏"}
             _shutdown_fns = []
             for _idx, _name in _shutdown_map.items():
                 if _idx in self._tab_cache:
