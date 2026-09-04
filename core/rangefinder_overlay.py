@@ -1,7 +1,6 @@
 """Rangefinder 结果 Overlay - 透明置顶鼠标穿透窗口"""
 import ctypes
 from core.win32_utils import user32  # 统一 Win32 入口
-from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont
 
@@ -19,9 +18,6 @@ class RangefinderOverlay(ClickThroughOverlay):
 
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFixedSize(300, 80)
         self._pixmap = None
         self._drag_pos = None

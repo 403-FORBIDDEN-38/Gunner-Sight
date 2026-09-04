@@ -739,6 +739,17 @@ class RangefinderTab(QWidget):
             self._data_loaded = True
         if self.config.is_rangefinder_enabled() and self.rangefinder_engine is None:
             QTimer.singleShot(0, self._init_rangefinder)
+        # BUG-9兜底：切回时如果overlay仍在编辑模式（异常情况），强制退出
+        for ov in (self.rangefinder_overlay, self.rangefinder_overlay2):
+            if ov and ov._edit_mode:
+                ov.set_edit_mode(False)
+
+    def hideEvent(self, event):
+        """BUG-9：切tab时如果overlay在编辑模式，自动退出（overlay是独立顶层窗口，切tab不会hide）"""
+        super().hideEvent(event)
+        for ov in (self.rangefinder_overlay, self.rangefinder_overlay2):
+            if ov and ov._edit_mode:
+                ov.set_edit_mode(False)
 
     def switch_profile(self, name):
         """切换到指定配置并刷新UI（供 main_window 跨页调用）"""
