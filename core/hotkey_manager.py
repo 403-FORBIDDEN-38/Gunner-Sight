@@ -199,11 +199,18 @@ class HotkeyManager(QObject):
                     if key:
                         self._register_hotkey(key, "keydown", down_cb, f"am_{action}_down")
                         self._register_hotkey(key, "keyup", up_cb, f"am_{action}_up")
-            # 距离测算热键（FEATURE-3）
+            # 距离测算热键（FEATURE-3）：toggle始终注册（可随时启用模块），record/measure仅启用时注册
+            dm_hks = self.config.get_distance_meter_hotkeys()
+            # toggle热键无条件注册
+            for slot in (1, 2):
+                hk = dm_hks.get("toggle", {})
+                key = hk.get(f"key{slot}", "")
+                if key:
+                    trigger = hk.get(f"trigger{slot}", "keydown")
+                    self._register_hotkey(key, trigger, self._on_distance_meter_toggle, f"dm_toggle_{slot}")
+            # record/measure仅启用时注册
             if self.config.is_distance_meter_enabled():
-                dm_hks = self.config.get_distance_meter_hotkeys()
                 for action, cb in [
-                    ("toggle", self._on_distance_meter_toggle),
                     ("record", self._on_distance_meter_record),
                     ("measure", self._on_distance_meter_measure),
                 ]:

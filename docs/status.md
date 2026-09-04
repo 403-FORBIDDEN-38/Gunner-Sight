@@ -450,3 +450,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 验证: 32个原有测试全通过 + 23个距离测算逻辑测试全通过, 30个文件py_compile通过, static_scan 0 ERROR
 - commit: 905429e2
 - 版本: V0.0140300083
+
+### BUG-FIX: main_window.py tab导航index错位修复（8处）
+- 错误1: _tab_factories重复key=4（AngleMeter覆盖DistanceMeter），修正为4=DistanceMeter,5=AngleMeter,6=SquadMacro,7=Resource,8=Info
+- 错误2: distance_meter_tab调用不存在的_get_tab(4)，修正为_ensure_tab(4)
+- 错误3-6: angle_meter/squad_macro/resource/info_tab的property index分别从4/5/6/7修正为5/6/7/8
+- 错误7: _connect_tab_signals缺少index==4分支，index==5注释为squad_macro实际应为角度仪，修正为4=标定测距(pass),5=角度仪(pass,常闭模式_init_engine中连接),6=建队宏,7=资源库
+- 错误8: _shutdown_map已正确（3数显,4标定测距,5角度仪,6建队宏），无需修改
+- 验证: 9个导航项对应正确页面，32个原有测试+23个距离测算测试全通过，py_compile通过
+- commit: 1043b375
