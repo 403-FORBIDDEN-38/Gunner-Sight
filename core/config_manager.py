@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 # 配置版本号：迁移函数只在版本变化时执行，避免每次启动重复遍历
-CURRENT_CONFIG_VERSION = 3
+CURRENT_CONFIG_VERSION = 4
 
 
 def get_app_base_dir() -> Path:
@@ -27,16 +27,11 @@ def get_app_base_dir() -> Path:
 
 
 def _default_angle_meter_profile() -> Dict:
-    """R1: 角度仪默认配置单一工厂（最小骨架与 _ensure 共用，禁止两份字面量）"""
+    """FEATURE-1: 角度仪默认配置单一工厂。每载具单曲线，用户自选点数。"""
     return {
         "min_angle": -80.0, "max_angle": 80.0,
-        "calibration_type": "none",  # none/quick/full
-        "quick_calibration": None,   # 快速校准生成的7点曲线
-        "quick_min_delta": 0.0,      # 快速校准：用户实测最低角增量
-        "quick_mid_delta": None,     # 快速校准：用户实测中间角增量（None=旧2点配置，线性补全）
-        "quick_max_delta": 0.0,      # 快速校准：用户实测最高角增量
-        "full_calibration": None,    # 单独校准生成的7点曲线
-        "calibration": None,         # 兼容旧字段，迁移后不再使用
+        "calibration_points": None,   # 载具校准曲线（[[delta, angle], ...]），None=未校准
+        "calibration_point_count": 7, # 用户自选校准点数（3/5/7/9/11）
         "linked_vehicles": [], "auto_reset": False
     }
 
@@ -128,7 +123,6 @@ class ConfigManager:
             },
             "squad_macro": {"enabled": False, "hotkey": {"key1": "", "trigger1": "keydown"}, "squad_name": "", "locked": True, "interval_ms": 100},
             "angle_meter": _default_angle_meter_segment(),
-            "angle_meter_global_calibration": {"calibrated": False, "points": None},
             "current_state": {"vehicle": None, "ammo_type": None, "magnification_index": 0}
         }
 
@@ -212,25 +206,34 @@ class ConfigManager:
             print("[ConfigManager] 配置迁移: 角度仪热键 单键→双键 已迁移")
 
     def _migrate_angle_meter_calibration(self):
-        """旧profile有calibration但无calibration_type → 标记为full，数据移入full_calibration"""
+        """FEATURE-1: 旧 quick_calibration/full_calibration → calibration_points。
+        优先级: full_calibration > quick_calibration > calibration(旧字段)。
+        全局校准数据丢弃（不再需要）。"""
         am = self._config.get("angle_meter", {})
         profiles = am.get("profiles", {})
         changed = False
         for pname, pdata in profiles.items():
-            if "calibration_type" not in pdata:
-                old_cal = pdata.get("calibration")
+            # 旧格式迁移：有calibration_type或quick/full字段但无calibration_points
+            if "calibration_points" not in pdata:
+                old_cal = (pdata.get("full_calibration")
+                           or pdata.get("quick_calibration")
+                           or pdata.get("calibration"))
                 if old_cal:
-                    pdata["full_calibration"] = old_cal
-                    pdata["calibration_type"] = "full"
-                    print(f"[ConfigManager] 配置迁移: 角度仪profile '{pname}' 旧calibration→full_calibration")
+                    pdata["calibration_points"] = old_cal
+                    print(f"[ConfigManager] 配置迁移: 角度仪profile '{pname}' 旧校准→calibration_points ({len(old_cal)}点)")
                 else:
-                    pdata["calibration_type"] = "none"
-                pdata.setdefault("quick_calibration", None)
-                pdata.setdefault("quick_min_delta", 0.0)
-                pdata.setdefault("quick_mid_delta", None)  # 旧2点配置为None，使用时线性补全
-                pdata.setdefault("quick_max_delta", 0.0)
-                pdata.setdefault("full_calibration", None)
+                    pdata["calibration_points"] = None
+                pdata.setdefault("calibration_point_count", 7)
+                # 清理旧字段
+                for k in ("calibration_type", "quick_calibration", "quick_min_delta",
+                          "quick_mid_delta", "quick_max_delta", "full_calibration", "calibration"):
+                    pdata.pop(k, None)
                 changed = True
+        # 丢弃全局校准数据
+        if "angle_meter_global_calibration" in self._config:
+            del self._config["angle_meter_global_calibration"]
+            changed = True
+            print("[ConfigManager] 配置迁移: 丢弃 angle_meter_global_calibration")
         if changed:
             self.request_save()
 
@@ -1153,119 +1156,20 @@ class ConfigManager:
     # --- 热键（单键：toggle=开始/停止, pause=暂离, calibrate=校准确认, reset=归零）---
 
     # === 全局校准 ===
-    def is_global_calibrated(self) -> bool:
-        return self._config.get("angle_meter_global_calibration", {}).get("calibrated", False)
+    def get_angle_meter_calibration_points(self, name: str):
+        """FEATURE-1: 获取载具校准曲线点列表，None=未校准"""
+        return self.get_angle_meter_profile(name).get("calibration_points")
 
-    def get_global_calibration_points(self):
-        """返回用户全局校准7点数组，未校准返回None（空房子原则：无出厂兜底）"""
-        gc = self._config.get("angle_meter_global_calibration", {})
-        if gc.get("calibrated") and gc.get("points"):
-            return gc["points"]
-        return None
-
-    def set_global_calibration(self, points):
-        """保存用户全局校准7点曲线，并触发所有载具快校重新生成"""
-        self._config.setdefault("angle_meter_global_calibration", {})["calibrated"] = True
-        self._config["angle_meter_global_calibration"]["points"] = points
-        self.request_save()
-        self._regenerate_all_quick_calibrations()
-
-    def _regenerate_all_quick_calibrations(self):
-        """重校全局后，遍历所有载具profile，有min_delta的快校自动重新生成"""
-        from core.angle_meter import AngleCalibration
-        global_points = self.get_global_calibration_points()
-        if not global_points:
-            return
-        global_cal = AngleCalibration(global_points)
-        profiles = self.get_angle_meter_profiles()
-        for pname, pdata in profiles.items():
-            if pdata.get("calibration_type") != "quick":
-                continue
-            min_d = pdata.get("quick_min_delta", 0)
-            mid_d = pdata.get("quick_mid_delta")  # 可能为None（旧2点配置）
-            max_d = pdata.get("quick_max_delta", 0)
-            if max_d <= min_d:
-                continue  # 无有效min_delta，保留旧曲线
-            # 用新全局曲线+三个端点重新生成快校
-            pdata["quick_calibration"] = self._generate_quick_calibration(
-                global_cal, pdata.get("min_angle", -80), pdata.get("max_angle", 80),
-                min_d, mid_d, max_d)
-
-    @staticmethod
-    def _generate_quick_calibration(global_cal, min_angle, max_angle, min_delta, mid_delta, max_delta):
-        """3-point quick calibration: segmented mapping.
-        [min,mid] segment and [mid,max] segment, each uses global curve angle_to_delta.
-        mid_delta=None (old 2-point config) uses linear interpolation for mid point."""
-        vehicle_total = max_delta - min_delta
-        if vehicle_total == 0:
-            return None
-        mid_angle = (min_angle + max_angle) / 2.0
-        if mid_delta is None:
-            mid_delta = (min_delta + max_delta) / 2.0
-        generated = []
-        for i in range(7):
-            veh_angle = min_angle + i / 6 * (max_angle - min_angle)
-            if veh_angle <= mid_angle:
-                seg_min_d, seg_max_d = min_delta, mid_delta
-                seg_min_a, seg_max_a = min_angle, mid_angle
-            else:
-                seg_min_d, seg_max_d = mid_delta, max_delta
-                seg_min_a, seg_max_a = mid_angle, max_angle
-            seg_total = seg_max_d - seg_min_d
-            if seg_total == 0:
-                veh_delta = seg_min_d
-            else:
-                g_delta_at_angle = global_cal.angle_to_delta(veh_angle)
-                g_seg_min_d = global_cal.angle_to_delta(seg_min_a)
-                g_seg_max_d = global_cal.angle_to_delta(seg_max_a)
-                g_seg_range = g_seg_max_d - g_seg_min_d
-                if g_seg_range == 0:
-                    rel_in_seg = (veh_angle - seg_min_a) / (seg_max_a - seg_min_a) if seg_max_a != seg_min_a else 0
-                else:
-                    rel_in_seg = (g_delta_at_angle - g_seg_min_d) / g_seg_range
-                veh_delta = seg_min_d + rel_in_seg * seg_total
-            generated.append([round(veh_delta, 1), round(veh_angle, 1)])
-        return generated
-
-    # === 载具profile校准字段 ===
-    def get_angle_meter_calibration_type(self, name: str) -> str:
-        return self.get_angle_meter_profile(name).get("calibration_type", "none")
-
-    def set_angle_meter_calibration_type(self, name: str, ctype: str):
+    def set_angle_meter_calibration_points(self, name: str, points, point_count: int = 7):
+        """FEATURE-1: 保存载具校准曲线"""
         profile = self.get_angle_meter_profile(name)
-        profile["calibration_type"] = ctype
-        self.request_save()
-
-    def get_angle_meter_quick_calibration(self, name: str):
-        return self.get_angle_meter_profile(name).get("quick_calibration")
-
-    def set_angle_meter_quick_calibration(self, name: str, points, min_delta=0.0, mid_delta=None, max_delta=0.0):
-        profile = self.get_angle_meter_profile(name)
-        profile["quick_calibration"] = points
-        profile["quick_min_delta"] = min_delta
-        profile["quick_mid_delta"] = mid_delta
-        profile["quick_max_delta"] = max_delta
-        profile["calibration_type"] = "quick"
-        self.request_save()
-
-    def get_angle_meter_full_calibration(self, name: str):
-        return self.get_angle_meter_profile(name).get("full_calibration")
-
-    def set_angle_meter_full_calibration(self, name: str, points):
-        profile = self.get_angle_meter_profile(name)
-        profile["full_calibration"] = points
-        profile["calibration_type"] = "full"
-        self.request_save()
+        profile["calibration_points"] = points
+        profile["calibration_point_count"] = point_count
+        self.set_angle_meter_profile(name, profile)
 
     def get_effective_angle_meter_calibration(self, name: str):
-        """根据calibration_type返回当前生效的7点曲线，无则返回None（用全局出厂）"""
-        profile = self.get_angle_meter_profile(name)
-        ctype = profile.get("calibration_type", "none")
-        if ctype == "quick" and profile.get("quick_calibration"):
-            return profile["quick_calibration"]
-        if ctype == "full" and profile.get("full_calibration"):
-            return profile["full_calibration"]
-        return None
+        """FEATURE-1: 直接返回载具自己的calibration_points，无全局兜底"""
+        return self.get_angle_meter_profile(name).get("calibration_points")
 
     def get_angle_meter_hotkeys(self) -> Dict:
         # 统一为双键结构（key1/trigger1/key2/trigger2），与全局热键一致；角度仪 UI 只用 key1
