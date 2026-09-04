@@ -209,3 +209,10 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 测试: 32 passed
 - commit: 129e101e
 - 打包: onedir + 签名，发布版 GunnerSight_Release 已更新
+
+### V0.0140300074 - BUG-3修复
+- BUG-3: 角度仪俯仰范围输入框无法输入数字和滚轮调节。根因: min_spin/max_spin被设为Qt.NoFocus，无法获得焦点导致键盘输入和滚轮事件失效。修复: 从NoFocus列表移除，改为Qt.ClickFocus。
+- CFG校准数据: 已保留(全局校准7点 + 2个载具配置各7点)，未覆盖。
+- 测试: 32 passed
+- commit: 02555202
+- 打包: onedir + 签名，发布版已更新

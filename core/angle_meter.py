@@ -1,25 +1,28 @@
 """
 角度仪核心模块 — 纯逻辑，无 UI 依赖。
 
+FEATURE-1: 取消全局校准，每载具单曲线（用户自选X点）。
+每个载具有且只有一条校准曲线，用户自选校准点数（3/5/7/9/11）。
+
 GS 接入方式:
     from core.angle_meter import RawInputReader, AngleTracker, Calibrator, AngleCalibration
 
     raw = RawInputReader()
     raw.register()
     tracker = AngleTracker(raw)
-    calibrator = Calibrator(raw, global_cal)  # global_cal 由用户全局校准提供
+    calibrator = Calibrator(raw)
 
     # 设置当前载具配置（由 GS ConfigManager 提供）
-    tracker.set_vehicle_config(min_angle=-20, max_angle=30, calibration=None)
+    tracker.set_vehicle_config(min_angle=-20, max_angle=30, calibration=cal)
 
     # 使用
     tracker.start()      # 开始（用户已调到最低角）
     tracker.update()     # 每帧调用（GS 定时器）
     tracker.stop()       # 停止
 
-    # 校准
-    calibrator.start("quick", -20, 30)
-    calibrator.next_point()  # F6 确认
+    # 校准（用户自选点数）
+    calibrator.start(num_points=7, min_angle=-20, max_angle=30)
+    calibrator.next_point()  # 确认键
     calibrator.done.connect(lambda cal: tracker.set_calibration(cal))
 """
 import ctypes
@@ -68,7 +71,6 @@ class RawInputReader(QWidget):
         self._registered = False
 
     def register(self):
-        # 确保原生窗口已创建（winId() 会强制创建）
         hwnd = int(self.winId())
         dev = _RAWINPUTDEVICE()
         dev.usUsagePage = 1
@@ -100,7 +102,6 @@ class RawInputReader(QWidget):
         if cpy == sz.value:
             raw = _RAWINPUT.from_buffer(buf)
             if raw.header.dwType == 0:  # RIM_TYPEMOUSE
-                bf = raw.mouse.ulButtons & 0xFFFF
                 if not (raw.mouse.usFlags & 0x01) and raw.mouse.lLastY != 0:
                     self._delta_y += raw.mouse.lLastY
 
@@ -115,10 +116,8 @@ class RawInputReader(QWidget):
 # 2. AngleCalibration — 不可变校准曲线
 # ============================================================
 class AngleCalibration:
-    """不可变校准曲线：增量→角度的分段线性映射。"""
-    NUM_POINTS = 7
-    # 全局校准目标角度（功能参数，非用户数据）
-    GLOBAL_TARGETS = [-80.0, -53.2, -26.6, 0.0, 26.6, 53.2, 80.0]
+    """不可变校准曲线：增量→角度的分段线性映射。
+    FEATURE-1: 点数不固定，由用户自选（3/5/7/9/11）。"""
 
     def __init__(self, points):
         if points is None or len(points) < 2:
@@ -128,6 +127,10 @@ class AngleCalibration:
     @property
     def points(self):
         return self._points
+
+    @property
+    def point_count(self):
+        return len(self._points)
 
     @property
     def min_delta(self):
@@ -161,7 +164,7 @@ class AngleCalibration:
         return self._points[-1][1]
 
     def angle_to_delta(self, angle):
-        """角度→增量（反查，用于确定载具范围在全局曲线中的位置）"""
+        """角度→增量（反查）"""
         if angle <= self._points[0][1]:
             return self._points[0][0]
         if angle >= self._points[-1][1]:
@@ -186,10 +189,11 @@ class AngleCalibration:
 
 
 # ============================================================
-# 3. AngleTracker — 使用状态机（无载具管理，由外部注入配置）
+# 3. AngleTracker — 使用状态机
 # ============================================================
 class AngleTracker(QObject):
-    """角度追踪器。只管使用状态，不管校准流程和载具列表。"""
+    """角度追踪器。只管使用状态，不管校准流程和载具列表。
+    FEATURE-1: calibration必须是载具自己的曲线，无全局校准兜底。"""
     STATE_IDLE = "IDLE"
     STATE_CALIBRATING = "CALIBRATING"
     STATE_ACTIVE = "ACTIVE"
@@ -205,15 +209,13 @@ class AngleTracker(QObject):
         super().__init__()
         self.raw = raw_reader
         self.state = self.STATE_IDLE
-        # 当前载具配置（由外部注入）
         self._min_angle = -80.0
         self._max_angle = 80.0
-        self._calibration = None  # None = 使用全局出厂校准
-        # 使用状态
+        self._calibration = None  # FEATURE-1: 必须是载具自己的曲线，None=未校准
         self._cumulative_delta = 0.0
-        self._base_delta = 0.0  # 载具最低角在全局曲线中的增量位置
-        self._min_abs = 0.0     # 缓存：载具范围下限的绝对增量
-        self._max_abs = 0.0     # 缓存：载具范围上限的绝对增量
+        self._base_delta = 0.0
+        self._min_abs = 0.0
+        self._max_abs = 0.0
         self.current_angle = -80.0
 
     def set_vehicle_config(self, min_angle, max_angle, calibration=None):
@@ -226,31 +228,24 @@ class AngleTracker(QObject):
             self.angle_changed.emit(self.current_angle)
 
     def set_calibration(self, cal):
-        """设置载具单独校准曲线（None = 全局出厂）"""
+        """设置载具校准曲线（None=未校准）"""
         self._calibration = cal
 
     @property
     def active_calibration(self):
-        return self._calibration  # 可能为 None（空房子原则：无出厂兜底）
+        return self._calibration
 
     def start(self):
         if self.state != self.STATE_IDLE:
             return
-        cal = self.active_calibration
+        cal = self._calibration
         if cal is None:
-            self.log.emit("[角度仪] 错误：无校准曲线，请先做全局校准或载具校准")
+            self.log.emit("[角度仪] 错误：当前载具未校准，请先做载具校准")
             return
-        # 确定基准增量：载具最低角对应的绝对增量
-        if self._calibration is None:
-            # 使用全局校准：载具范围是全局的子区间
-            self._base_delta = cal.angle_to_delta(self._min_angle)
-            self._min_abs = self._base_delta
-            self._max_abs = cal.angle_to_delta(self._max_angle)
-        else:
-            # 使用载具单独校准：曲线本身就是载具范围
-            self._base_delta = cal.min_delta
-            self._min_abs = cal.min_delta
-            self._max_abs = cal.max_delta
+        # FEATURE-1: 载具曲线本身就是载具范围，直接用端点
+        self._base_delta = cal.min_delta
+        self._min_abs = cal.min_delta
+        self._max_abs = cal.max_delta
         self._cumulative_delta = 0.0
         self.raw.consume_delta_y()
         self.current_angle = self._min_angle
@@ -270,7 +265,7 @@ class AngleTracker(QObject):
             self._set_state(self.STATE_PAUSED)
             self.log.emit("[角度仪] 已暂离")
         elif self.state == self.STATE_PAUSED:
-            self.raw.consume_delta_y()  # 暂离期间的鼠标移动不计入
+            self.raw.consume_delta_y()
             self._set_state(self.STATE_ACTIVE)
             self.log.emit("[角度仪] 已恢复")
 
@@ -278,17 +273,15 @@ class AngleTracker(QObject):
         """归零：将当前位置设为0度基准"""
         if self.state != self.STATE_ACTIVE:
             return
-        cal = self.active_calibration
+        cal = self._calibration
         if cal is None:
             return
         zero_delta = cal.angle_to_delta(0.0)
-        # 调整 cumulative 使当前角度=0
         current_abs = self._base_delta + self._cumulative_delta
         self._cumulative_delta += (zero_delta - current_abs)
         self.current_angle = 0.0
         self.angle_changed.emit(0.0)
         self.log.emit("[角度仪] 归零")
-
 
     def update(self):
         """每帧调用。IDLE/PAUSED 时直接返回。"""
@@ -299,14 +292,13 @@ class AngleTracker(QObject):
             return
         self._cumulative_delta += delta
         abs_delta = self._base_delta + self._cumulative_delta
-        # 钳定到载具范围（用绝对增量比较，避免角度浮点边界问题）
         if abs_delta <= self._min_abs:
             self._cumulative_delta = self._min_abs - self._base_delta
             abs_delta = self._min_abs
         elif abs_delta >= self._max_abs:
             self._cumulative_delta = self._max_abs - self._base_delta
             abs_delta = self._max_abs
-        cal = self.active_calibration
+        cal = self._calibration
         if cal is None:
             return
         angle = cal.delta_to_angle(abs_delta)
@@ -320,224 +312,86 @@ class AngleTracker(QObject):
 
 
 # ============================================================
-# 4. Calibrator — 校准流程控制器
+# 4. Calibrator — 校准流程控制器（FEATURE-1: 单模式，用户自选点数）
 # ============================================================
 class Calibrator(QObject):
-    """校准流程控制器。独立于 AngleTracker。"""
+    """校准流程控制器。FEATURE-1: 单模式，用户自选点数（3/5/7/9/11），直接采集N点。"""
     progress = pyqtSignal(int, int)
     hint = pyqtSignal(int, int, float)
     done = pyqtSignal(object)
     cancelled = pyqtSignal()
     log = pyqtSignal(str)
 
-    MODE_QUICK = "quick"
-    MODE_FULL = "full"
+    VALID_POINT_COUNTS = (3, 5, 7, 9, 11)
 
-    def __init__(self, raw_reader, global_cal=None):
+    def __init__(self, raw_reader):
         super().__init__()
         self.raw = raw_reader
-        self.global_cal = global_cal  # 可能为 None（用户未做全局校准时）
-        self._mode = None
+        self._num_points = 7
         self._step = 0
         self._min_angle = -80.0
         self._max_angle = 80.0
         self._points = []
-        self._quick_min_delta = 0.0
-        self._quick_mid_delta = 0.0
+        self._calibrating = False
 
     @property
     def is_calibrating(self):
-        return self._mode is not None
+        return self._calibrating
 
-    def start(self, mode, min_angle, max_angle):
-        if self.is_calibrating:
+    def start(self, num_points=7, min_angle=-80.0, max_angle=80.0):
+        """开始校准。num_points必须在VALID_POINT_COUNTS中。"""
+        if self._calibrating:
             return
-        self._mode = mode
+        if num_points not in self.VALID_POINT_COUNTS:
+            self.log.emit(f"[校准] 错误：点数{num_points}无效，可选{self.VALID_POINT_COUNTS}")
+            return
+        self._calibrating = True
+        self._num_points = num_points
         self._step = 0
         self._points = []
         self._min_angle = float(min_angle)
         self._max_angle = float(max_angle)
         self.raw.consume_delta_y()
-
-        if mode == self.MODE_QUICK:
-            self.log.emit(f"[快速校准] 开始，范围 {min_angle}°~{max_angle}°（3点）")
-            self.progress.emit(0, 3)
-            self._emit_hint(0, 3, min_angle, "最低角")
-        else:
-            self.log.emit(f"[7点校准] 开始，范围 {min_angle}°~{max_angle}°")
-            self.progress.emit(0, 7)
-            target = self._target_for_step(0)
-            self._emit_hint(0, 7, target, "最低角")
+        self.log.emit(f"[校准] 开始，{num_points}点，范围 {min_angle}°~{max_angle}°")
+        self.progress.emit(0, num_points)
+        target = self._target_for_step(0)
+        self._emit_hint(0, num_points, target, "最低角")
 
     def next_point(self):
-        if not self.is_calibrating:
+        if not self._calibrating:
             return
         delta_step = -self.raw.consume_delta_y()
-        if self._mode == self.MODE_QUICK:
-            self._next_quick(delta_step)
-        else:
-            self._next_full(delta_step)
-
-    def cancel(self):
-        if self.is_calibrating:
-            self._mode = None
-            self.cancelled.emit()
-            self.log.emit("[校准] 已取消")
-
-    def _next_quick(self, delta_step):
-        if self._step == 0:
-            # 第1点：最低角
-            self._quick_min_delta = 0.0
-            self._step = 1
-            self.progress.emit(1, 3)
-            self.log.emit("[快速校准] 第1点已记录（最低角）")
-            mid_angle = (self._min_angle + self._max_angle) / 2.0
-            self._emit_hint(1, 3, mid_angle, "中间角")
-        elif self._step == 1:
-            # 第2点：中间角
-            self._quick_mid_delta = delta_step
-            self._step = 2
-            self.progress.emit(2, 3)
-            self.log.emit(f"[快速校准] 第2点已记录（中间角），增量={delta_step:.0f}")
-            self._emit_hint(2, 3, self._max_angle, "最高角")
-        else:
-            # 第3点：最高角
-            max_delta = self._quick_mid_delta + delta_step
-            self.log.emit(f"[快速校准] 第3点已记录（最高角），总增量={max_delta:.0f}")
-            if max_delta <= 0:
-                self.log.emit("[快速校准] 失败：总增量为0，请确保从最低角移动到最高角")
-                self._mode = None
-                self.cancelled.emit()
-                return
-            cal = self._generate_from_endpoints(
-                self._quick_min_delta, self._quick_mid_delta, max_delta)
-            self._finish(cal)
-
-    def _generate_from_endpoints(self, min_delta, mid_delta, max_delta):
-        """3点快校：分段映射。
-        [最低角,中间角]一段，[中间角,最高角]一段，每段内用全局曲线angle_to_delta反查相对位置。
-        无全局校准时退化为线性插值。
-        旧2点配置兼容：mid_delta=None时用线性插值补全中间点。"""
-        vehicle_total = max_delta - min_delta
-        mid_angle = (self._min_angle + self._max_angle) / 2.0
-        # 旧2点兼容：无mid_delta时线性补全
-        if mid_delta is None:
-            mid_delta = (min_delta + max_delta) / 2.0
-        print("=== 快校调试(3点) ===")
-        print(f"载具角度范围: {self._min_angle}° ~ {mid_angle}° ~ {self._max_angle}°")
-        print(f"快校端点: min={min_delta}, mid={mid_delta}, max={max_delta}")
-        if self.global_cal:
-            print(f"全局曲线点: {self.global_cal.points}")
-        else:
-            print("全局校准: None（线性兜底）")
-
-        def _map_segment(seg_min_d, seg_max_d, seg_min_a, seg_max_a, global_cal):
-            """单段映射：将全局曲线中[seg_min_a, seg_max_a]范围映射到载具[seg_min_d, seg_max_d]"""
-            seg_total = seg_max_d - seg_min_d
-            if global_cal is None or seg_total == 0:
-                return []
-            g_min_d = global_cal.angle_to_delta(seg_min_a)
-            g_max_d = global_cal.angle_to_delta(seg_max_a)
-            g_range = g_max_d - g_min_d
-            if g_range == 0:
-                return []
-            pts = []
-            # 在该角度段内均匀取点（前4点在第一段，后4点在第二段，中间点共享）
-            return pts
-
-        if self.global_cal is None:
-            # 无全局校准：线性插值兜底
-            generated = []
-            for i in range(AngleCalibration.NUM_POINTS):
-                rel = i / (AngleCalibration.NUM_POINTS - 1)
-                veh_angle = self._min_angle + rel * (self._max_angle - self._min_angle)
-                veh_delta = min_delta + rel * vehicle_total
-                generated.append((round(veh_delta, 1), round(veh_angle, 1)))
-            result = AngleCalibration(generated)
-            print("无全局校准，线性兜底生成:")
-            for i, (d, a) in enumerate(result.points):
-                print(f"  点[{i}]: delta={d}, angle={a}°")
-            print("=== 快校调试结束 ===")
-            return result
-
-        # 分段映射：前半段[最低角,中间角]，后半段[中间角,最高角]
-        # 7个点：点0-3在第一段（含中间点），点3-6在第二段（含中间点）
-        global_min_angle = self.global_cal.min_angle
-        global_max_angle = self.global_cal.max_angle
-        global_angle_range = global_max_angle - global_min_angle
-
-        generated = []
-        for i in range(AngleCalibration.NUM_POINTS):
-            # 该点在载具角度范围中的比例
-            veh_angle = self._min_angle + i / (AngleCalibration.NUM_POINTS - 1) * (self._max_angle - self._min_angle)
-            # 确定该点属于哪一段
-            if veh_angle <= mid_angle:
-                # 第一段：[最低角,中间角]
-                seg_min_d, seg_max_d = min_delta, mid_delta
-                seg_min_a, seg_max_a = self._min_angle, mid_angle
-            else:
-                # 第二段：[中间角,最高角]
-                seg_min_d, seg_max_d = mid_delta, max_delta
-                seg_min_a, seg_max_a = mid_angle, self._max_angle
-
-            seg_total = seg_max_d - seg_min_d
-            if seg_total == 0:
-                veh_delta = seg_min_d
-            else:
-                # 用全局曲线反查该角度对应的增量在全局范围的相对位置
-                # 再映射到该段的载具增量范围
-                g_delta_at_angle = self.global_cal.angle_to_delta(veh_angle)
-                g_seg_min_d = self.global_cal.angle_to_delta(seg_min_a)
-                g_seg_max_d = self.global_cal.angle_to_delta(seg_max_a)
-                g_seg_range = g_seg_max_d - g_seg_min_d
-                if g_seg_range == 0:
-                    rel_in_seg = (veh_angle - seg_min_a) / (seg_max_a - seg_min_a) if seg_max_a != seg_min_a else 0
-                else:
-                    rel_in_seg = (g_delta_at_angle - g_seg_min_d) / g_seg_range
-                veh_delta = seg_min_d + rel_in_seg * seg_total
-
-            generated.append((round(veh_delta, 1), round(veh_angle, 1)))
-
-        result = AngleCalibration(generated)
-        print("生成的3点快校曲线:")
-        for i, (d, a) in enumerate(result.points):
-            print(f"  点[{i}]: delta={d}, angle={a}°, delta_to_angle={result.delta_to_angle(d):.1f}°")
-        print("=== 快校调试结束 ===")
-        return result
-
-    def _next_full(self, delta_step):
         if self._step == 0:
             abs_delta = 0.0
         else:
             abs_delta = self._points[-1][0] + delta_step
         target = self._target_for_step(self._step)
         self._points.append((abs_delta, target))
-        self.log.emit(f"[7点校准] 点{self._step+1}/7: 总增量={abs_delta:.0f}, 角度={target:.1f}°")
+        self.log.emit(f"[校准] 点{self._step+1}/{self._num_points}: 总增量={abs_delta:.0f}, 角度={target:.1f}°")
         self._step += 1
-        self.progress.emit(self._step, 7)
-        if self._step >= 7:
+        self.progress.emit(self._step, self._num_points)
+        if self._step >= self._num_points:
             cal = AngleCalibration(self._points)
             self._finish(cal)
         else:
             target = self._target_for_step(self._step)
-            self._emit_hint(self._step, 7, target)
+            self._emit_hint(self._step, self._num_points, target)
+
+    def cancel(self):
+        if self._calibrating:
+            self._calibrating = False
+            self.cancelled.emit()
+            self.log.emit("[校准] 已取消")
 
     def _target_for_step(self, step):
-        if abs(self._min_angle - (-80.0)) < 0.01 and abs(self._max_angle - 80.0) < 0.01:
-            return AngleCalibration.GLOBAL_TARGETS[step]
-        return self._min_angle + step * (self._max_angle - self._min_angle) / 6
+        """均匀分布在min_angle~max_angle之间"""
+        return self._min_angle + step * (self._max_angle - self._min_angle) / (self._num_points - 1)
 
     def _finish(self, cal):
-        mode_name = "快速校准" if self._mode == self.MODE_QUICK else "7点校准"
-        if self._mode == self.MODE_FULL and abs(self._min_angle - (-80.0)) < 0.01 and abs(self._max_angle - 80.0) < 0.01:
-            print("=== 全局校准完成 ===")
-            print(f"全局曲线点: {cal.points}")
-            print(f"min_delta={cal.min_delta}, max_delta={cal.max_delta}")
-            print("=== 全局校准完成结束 ===")
-        self.log.emit(f"[{mode_name}] 完成！")
+        self.log.emit(f"[校准] 完成！{cal.point_count}点分段线性")
         for i, (d, a) in enumerate(cal.points):
             self.log.emit(f"  点{i+1}: 增量={d:.0f}, 角度={a:.1f}°")
-        self._mode = None
+        self._calibrating = False
         self.done.emit(cal)
 
     def _emit_hint(self, step, total, target, label=""):
