@@ -552,3 +552,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 关键: 二选一判断唯一在get_effective_overlay，旧配置无opacity默认1.0
 - 测试: 新增10个opacity测试，总数79全通过
 - commit: aeb68287
+
+### BUG-12 overview_tab缺少opacity槽函数
+- 根因: FEATURE-4中信号连接了_on_opacity_slider/_on_opacity_spin但方法定义未成功添加（脚本pattern未匹配），拖动滑块抛AttributeError
+- 修复: 添加_on_opacity_slider(同步数值框+应用)、_on_opacity_spin(同步滑块+应用)、_apply_global_opacity(config.set_overlay_opacity + overlay._update_effective_overlay实时更新)
+- 验证: 编译通过，79测试全通过
+- commit: ebcf9fa9

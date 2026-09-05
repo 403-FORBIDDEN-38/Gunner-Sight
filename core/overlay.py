@@ -240,6 +240,9 @@ class OverlayRenderer:
             self._update_crosshair()
             self._update_scale()
             self._update_offset()
+            # BUG-13: 创建后兜底设置全局opacity，再调用_update_effective_overlay覆盖为二选一配置
+            self.overlay.setWindowOpacity(self.config.get_overlay_opacity())
+            self._update_effective_overlay()
             self.overlay.set_visible(self.state.overlay_visible)
         return self.overlay
 
@@ -258,6 +261,8 @@ class OverlayRenderer:
         ammo = self.state.current_ammo_type
         mag_idx = self.state.current_magnification_index
         if not vehicle or not ammo:
+            # BUG-13: 无载具时兜底设置全局opacity，不直接return
+            self.overlay.setWindowOpacity(self.config.get_overlay_opacity())
             return
         effective = self.config.get_effective_overlay(vehicle, ammo, mag_idx)
         self.overlay.set_scale(effective["scale"])
