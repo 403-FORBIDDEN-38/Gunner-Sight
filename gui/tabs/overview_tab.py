@@ -187,7 +187,7 @@ class OverviewTab(QWidget):
     def _apply_global_opacity(self, percent):
         self.config.set_overlay_opacity(percent / 100.0)
         if self.overlay:
-            self.overlay._update_effective_overlay()
+            self.overlay.refresh()
 
     def _ensure_vehicle_filter(self):
         """优化4: 首次调用时创建VehicleFilterWidget并连接延迟信号"""

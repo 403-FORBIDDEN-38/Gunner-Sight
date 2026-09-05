@@ -833,12 +833,12 @@ class ConfigManager:
         self.request_save()
 
     def get_squad_macro_hotkey(self) -> Dict:
-        return self._config.get("squad_macro", {}).get("hotkey", {"key1": "", "trigger1": "keydown"})
+        return self._config.get("squad_macro", {}).get("hotkey", {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"})
 
-    def set_squad_macro_hotkey(self, key: str, trigger: str = "keydown"):
-        hk = self._config.setdefault("squad_macro", {}).setdefault("hotkey", {})
-        hk["key1"] = key
-        hk["trigger1"] = trigger
+    def set_squad_macro_hotkey(self, key: str, trigger: str = "keydown", slot: int = 1):
+        hk = self._config.setdefault("squad_macro", {}).setdefault("hotkey", {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"})
+        hk[f"key{slot}"] = key
+        hk[f"trigger{slot}"] = trigger
         self.request_save()
 
     def get_squad_macro_name(self) -> str:

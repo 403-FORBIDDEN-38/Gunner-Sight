@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QApplication
 from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
 from gui.widgets import VehicleFilterWidget
-from gui.hotkey_widgets import HotkeyLineEdit
+from gui.hotkey_widgets import HotkeyPairWidget
 
 
 class SquadMacroTab(QWidget):
@@ -151,8 +151,9 @@ class SquadMacroTab(QWidget):
             self._shutdown_macro()
         self.hotkey.reload_hotkeys()
 
-    def _on_hotkey_captured(self, key):
-        self.config.set_squad_macro_hotkey(key if key else "", "keydown")
+    def _on_hotkey_captured(self, hk_dict):
+        self.config.set_squad_macro_hotkey(hk_dict.get("key1", ""), hk_dict.get("trigger1", "keydown"), slot=1)
+        self.config.set_squad_macro_hotkey(hk_dict.get("key2", ""), hk_dict.get("trigger2", "keydown"), slot=2)
         self.hotkey.reload_hotkeys()
 
     def _on_name_changed(self):

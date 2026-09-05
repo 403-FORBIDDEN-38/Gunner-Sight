@@ -293,6 +293,7 @@ class MainWindow(QMainWindow):
                 widget = self._tab_factories[index]()
                 self._tab_cache[index] = widget
                 self.tab_stack.insertWidget(index, widget)
+                self._disable_control_focus(widget)
                 self._connect_tab_signals(index, widget)
             except Exception as e:
                 import traceback

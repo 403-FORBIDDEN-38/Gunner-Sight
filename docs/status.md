@@ -570,3 +570,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: 添加close()方法，用RIDEV_REMOVE标志(0x00000001)显式调用RegisterRawInputDevices注销鼠标设备，设置_registered=False
 - 验证: 编译通过，79测试全通过
 - commit: 9554d7c8
+
+### UI一致性修复（布局+数值框输入）
+- 问题1: 全局缩放行滑块在左数值框在右，与透明度行/偏移行不一致
+- 修复1: overview_tab全局缩放行改为数值框在前、滑块在后，统一数据先左对齐
+- 问题2: 信息数显页所有数值框无法键盘输入，只能点上下按钮
+- 根因2: rangefinder_tab一刀切把所有控件设Qt.NoFocus（补丁式防热键拦截），导致QSpinBox也失去键盘焦点
+- 修复2: 排除QAbstractSpinBox类型，数值框保留键盘输入能力，热键框/按钮/复选框仍NoFocus
+- 验证: 编译通过，79测试全通过
+- commit: 80dde8ed

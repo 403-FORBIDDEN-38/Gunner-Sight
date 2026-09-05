@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame,
     QGroupBox, QLabel, QCheckBox, QSpinBox, QPushButton, QComboBox,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QInputDialog,
-    QAbstractItemView, QApplication, QDialog, QAbstractSpinBox
+    QAbstractItemView, QApplication, QDialog
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QImage
@@ -288,24 +288,6 @@ class RangefinderTab(QWidget):
         self.save_btn.clicked.connect(self._on_save_profile)
         scroll.setWidget(content)
         outer.addWidget(scroll)
-
-    def _disable_focus(self):
-        widgets = [self.enable_check, self.search, self.tag_filter,
-                   self.add_btn, self.rename_btn, self.delete_btn, self.save_btn,
-                   self.pick_roi_btn, self.pick_ui_btn, self.drag_btn,
-                   self.hk_pair.trigger1, self.hk_pair.trigger2,
-                   self.roi_x, self.roi_y, self.roi_w, self.roi_h,
-                   self.ui_x, self.ui_y, self.disp_x, self.disp_y,
-                   self.disp_w, self.disp_h, self.disp_op,
-                   self.roi2_enabled, self.roi2_x, self.roi2_y, self.roi2_w, self.roi2_h,
-                   self.pick_roi2_btn, self.disp2_x, self.disp2_y, self.drag2_btn,
-                   self.toggle_ui_enable_check, self.toggle_ui_pair.trigger1,
-                   self.toggle_ui_pair.trigger2,
-                   self.link_vf.search, self.link_vf.tag_combo]
-        for w in widgets:
-            # 数值框需要键盘输入，不设NoFocus；热键绑定框/按钮/复选框设NoFocus避免拦截热键
-            if not isinstance(w, QAbstractSpinBox):
-                w.setFocusPolicy(Qt.NoFocus)
 
     def _load_hotkeys(self):
         self.toggle_ui_pair.set_hotkey(self.hotkey.config.get_hotkey("toggle_ui"))

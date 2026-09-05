@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from core.config_manager import ConfigManager
 from core.resource_manager import ResourceManager
 from core.state_machine import StateMachine
-from gui.widgets import OptimizedListWidget
+from gui.widgets import OptimizedListWidget, NoWheelSlider
 
 
 class VehicleConfigTab(QWidget):
@@ -134,7 +134,7 @@ class VehicleConfigTab(QWidget):
         # 缩放滑块
         scale_layout = QHBoxLayout()
         scale_layout.addWidget(QLabel("缩放:"))
-        self.vo_scale_slider = QSlider(Qt.Horizontal)
+        self.vo_scale_slider = NoWheelSlider(Qt.Horizontal)
         self.vo_scale_slider.setRange(1, 1000)
         self.vo_scale_slider.setValue(100)
         self.vo_scale_spin = QSpinBox()
@@ -159,7 +159,8 @@ class VehicleConfigTab(QWidget):
         # 透明度
         opacity_layout = QHBoxLayout()
         opacity_layout.addWidget(QLabel("透明度:"))
-        self.vo_opacity_slider = QSlider(Qt.Horizontal)
+        self.vo_opacity_minus_btn = QPushButton("-"); self.vo_opacity_minus_btn.setFixedWidth(30)
+        self.vo_opacity_slider = NoWheelSlider(Qt.Horizontal)
         self.vo_opacity_slider.setRange(10, 100)
         self.vo_opacity_slider.setValue(100)
         self.vo_opacity_spin = QSpinBox()
@@ -167,8 +168,11 @@ class VehicleConfigTab(QWidget):
         self.vo_opacity_spin.setSuffix("%")
         self.vo_opacity_spin.setValue(100)
         self.vo_opacity_spin.setFixedWidth(80)
-        opacity_layout.addWidget(self.vo_opacity_slider, 1)
+        self.vo_opacity_plus_btn = QPushButton("+"); self.vo_opacity_plus_btn.setFixedWidth(30)
+        opacity_layout.addWidget(self.vo_opacity_minus_btn)
         opacity_layout.addWidget(self.vo_opacity_spin)
+        opacity_layout.addWidget(self.vo_opacity_slider, 1)
+        opacity_layout.addWidget(self.vo_opacity_plus_btn)
         vo_layout.addLayout(opacity_layout)
         # 说明文字
         vo_hint = QLabel('倍率选"载具"时使用此配置')
@@ -215,6 +219,8 @@ class VehicleConfigTab(QWidget):
         self.vo_offset_y.valueChanged.connect(self._on_vehicle_offset_changed)
         self.vo_opacity_slider.valueChanged.connect(self._on_vehicle_opacity_slider)
         self.vo_opacity_spin.valueChanged.connect(self._on_vehicle_opacity_spin)
+        self.vo_opacity_minus_btn.clicked.connect(lambda: self.vo_opacity_spin.setValue(max(10, self.vo_opacity_spin.value() - 5)))
+        self.vo_opacity_plus_btn.clicked.connect(lambda: self.vo_opacity_spin.setValue(min(100, self.vo_opacity_spin.value() + 5)))
 
     # === 标签 ===
     def _refresh_tag_list(self):
