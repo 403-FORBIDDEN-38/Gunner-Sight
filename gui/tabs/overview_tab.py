@@ -88,8 +88,8 @@ class OverviewTab(QWidget):
         self.scale_minus_btn = QPushButton("-"); self.scale_minus_btn.setFixedWidth(30)
         self.scale_plus_btn = QPushButton("+"); self.scale_plus_btn.setFixedWidth(30)
         scale_row.addWidget(self.scale_minus_btn)
-        scale_row.addWidget(self.scale_slider)
         scale_row.addWidget(self.scale_spin)
+        scale_row.addWidget(self.scale_slider)
         scale_row.addWidget(self.scale_plus_btn)
         crosshair_layout.addRow("全局缩放:", scale_row)
 
