@@ -527,3 +527,10 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 第三层rangefinder_tab: 添加hideEvent切tab时自动退出编辑模式，showEvent兜底强制退出
 - 验证: 3文件编译通过，69测试全通过
 - commit: 00a8615e
+
+### BUG-9 全overlay斩草除根修复（补全）
+- 第二层补全: overlay.py(准星)和distance_overlay.py(测距)删除__init__中重复的setWindowFlags/setAttribute，基类为所有3个overlay的唯一窗口标志来源
+- 第四层: _on_measure_done末尾两个overlay强制ensure_click_through()额外保险
+- 第一层(overlay_base重写)和第三层(rangefinder_tab hideEvent)已于上轮commit 00a8615e完成
+- 验证: 5文件编译通过，69测试全通过
+- commit: 47537939
