@@ -606,3 +606,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 
 - 验证: 编译通过，79测试全通过
 - commit: 4398d40a
+
+### BUG-15/BUG-16 回归修复
+- BUG-15: 验证不存在。OverlayRenderer.refresh()已包含self._update_effective_overlay()调用，全局透明度调节正常
+- BUG-16: 已修复。squad_macro_tab的import已改为HotkeyPairWidget但控件创建仍用HotkeyLineEdit（OPT-1脚本pattern未匹配），导致与双键回调不匹配。已替换为HotkeyPairWidget + set_hotkey(dict) + hotkey_changed信号
+- 验证: 编译通过，79测试全通过
+- commit: cd7ed0a6
