@@ -18,7 +18,7 @@ class MascotWidget(QWidget):
         self.mascot_dir = os.path.join(resources_dir, "mascot")
 
         self.char_size = 150
-        self.setFixedSize(self.char_size + 20, self.char_size + 20)
+        self.setFixedSize(self.char_size + 20, self.char_size)
 
         # 加载素材
         self.idle_pix = self._load_static(os.path.join(self.mascot_dir, "M38.png"))
@@ -32,7 +32,7 @@ class MascotWidget(QWidget):
         self.char_label.setFixedSize(self.char_size, self.char_size)
         self.char_label.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
         self.char_label.setPixmap(self.idle_pix)
-        self.char_label.move(10, 10)
+        self.char_label.move(10, 0)
         self.char_label.setCursor(Qt.OpenHandCursor)
         self.char_label.mousePressEvent = self._on_press
         self.char_label.mouseMoveEvent = self._on_move

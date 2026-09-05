@@ -75,14 +75,14 @@ class InfoTab(QWidget):
 
     def _create_mascot(self):
         from gui.mascot_widget import MascotWidget
-        self._mascot = MascotWidget(str(self.resources.get_resources_dir()), self)
+        self._mascot = MascotWidget(str(self.resources.get_resources_dir()), self.window())
         self._mascot.show()
         QTimer.singleShot(0, self._position_mascot)
 
     def _position_mascot(self):
         if self._mascot:
             m = self._mascot
-            m.move(self.width() - m.width() - 15, self.height() - m.height() - 10)
+            m.move(self.window().width() - m.width() - 15, self.window().height() - m.height())
             m.raise_()
 
     def resizeEvent(self, event):
