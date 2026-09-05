@@ -544,3 +544,11 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 新增测试: test_quick_measure_interrupts_while_measuring, test_clear_calibration_resets_state
 - 验证: 距离测算25/25全通过，pytest 69全通过
 - commit: a214e70f
+
+### FEATURE-4 炮镜叠加层透明度设置（全局+载具级，二选一不叠加）
+- 配置层: global_settings默认overlay_opacity=1.0，_default_vehicle_overlay含opacity=1.0，set_vehicle_overlay加可选opacity参数(None=保留当前值)，get_effective_overlay返回含opacity字典，新增get/set_overlay_opacity(clamp[0.1,1.0])
+- 逻辑层: overlay.py _update_effective_overlay中从effective取opacity调用setWindowOpacity（overlay_base重写已保护穿透）
+- UI层: overview_tab全局准星参数加透明度行(滑块10-100+数值框%)，vehicle_config_tab载具缩放偏移加透明度行
+- 关键: 二选一判断唯一在get_effective_overlay，旧配置无opacity默认1.0
+- 测试: 新增10个opacity测试，总数79全通过
+- commit: aeb68287

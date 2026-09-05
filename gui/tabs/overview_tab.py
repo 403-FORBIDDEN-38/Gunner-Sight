@@ -172,6 +172,23 @@ class OverviewTab(QWidget):
         else:
             self.config.set_global_offset_y(value)
 
+    def _on_opacity_slider(self, value):
+        self.opacity_spin.blockSignals(True)
+        self.opacity_spin.setValue(value)
+        self.opacity_spin.blockSignals(False)
+        self._apply_global_opacity(value)
+
+    def _on_opacity_spin(self, value):
+        self.opacity_slider.blockSignals(True)
+        self.opacity_slider.setValue(value)
+        self.opacity_slider.blockSignals(False)
+        self._apply_global_opacity(value)
+
+    def _apply_global_opacity(self, percent):
+        self.config.set_overlay_opacity(percent / 100.0)
+        if self.overlay:
+            self.overlay._update_effective_overlay()
+
     def _ensure_vehicle_filter(self):
         """优化4: 首次调用时创建VehicleFilterWidget并连接延迟信号"""
         if self._vf_created:
