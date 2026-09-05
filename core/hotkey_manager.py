@@ -169,10 +169,11 @@ class HotkeyManager(QObject):
             # 注册建队宏热键（仅启用时注册，关闭时不占用热键资源）
             if self.config.is_squad_macro_enabled():
                 sm_hk = self.config.get_squad_macro_hotkey()
-                sm_key = sm_hk.get("key1", "")
-                sm_trigger = sm_hk.get("trigger1", "keydown")
-                if sm_key:
-                    self._register_hotkey(sm_key, sm_trigger, self._on_squad_macro, "squad_macro")
+                for slot in (1, 2):
+                    sm_key = sm_hk.get(f"key{slot}", "")
+                    if sm_key:
+                        sm_trigger = sm_hk.get(f"trigger{slot}", "keydown")
+                        self._register_hotkey(sm_key, sm_trigger, self._on_squad_macro, f"squad_macro_{slot}")
 
             # 注册角度仪热键（仅启用时注册，4个动作各单键）
             if self.config.is_angle_meter_enabled():
@@ -185,20 +186,22 @@ class HotkeyManager(QObject):
                 ]
                 for action, callback in am_actions:
                     hk = am_hks.get(action, {})
-                    key = hk.get("key1", "")
-                    trigger = hk.get("trigger1", "keydown")
-                    if key:
-                        self._register_hotkey(key, trigger, callback, f"am_{action}")
+                    for slot in (1, 2):
+                        key = hk.get(f"key{slot}", "")
+                        if key:
+                            trigger = hk.get(f"trigger{slot}", "keydown")
+                            self._register_hotkey(key, trigger, callback, f"am_{action}_{slot}")
                 # up/down 微调热键：同时注册 keydown 和 keyup（用于长按连续输出）
                 for action, down_cb, up_cb in [
                     ("up", self._on_angle_meter_up_down, self._on_angle_meter_up_up),
                     ("down", self._on_angle_meter_down_down, self._on_angle_meter_down_up),
                 ]:
                     hk = am_hks.get(action, {})
-                    key = hk.get("key1", "")
-                    if key:
-                        self._register_hotkey(key, "keydown", down_cb, f"am_{action}_down")
-                        self._register_hotkey(key, "keyup", up_cb, f"am_{action}_up")
+                    for slot in (1, 2):
+                        key = hk.get(f"key{slot}", "")
+                        if key:
+                            self._register_hotkey(key, "keydown", down_cb, f"am_{action}_down_{slot}")
+                            self._register_hotkey(key, "keyup", up_cb, f"am_{action}_up_{slot}")
             # 距离测算热键（FEATURE-3）：toggle始终注册（可随时启用模块），record/measure仅启用时注册
             dm_hks = self.config.get_distance_meter_hotkeys()
             # toggle热键无条件注册

@@ -14,7 +14,7 @@ from core.config_manager import ConfigManager
 from core.hotkey_manager import HotkeyManager
 from core.angle_meter import RawInputReader, AngleTracker, Calibrator, AngleCalibration
 from gui.widgets import VehicleFilterWidget, OptimizedListWidget
-from gui.hotkey_widgets import HotkeyLineEdit
+from gui.hotkey_widgets import HotkeyPairWidget
 
 
 from core.win32_utils import send_mouse_input
@@ -145,25 +145,25 @@ class AngleMeterTab(QWidget):
         hk_grid.setSpacing(6)
         # 左列
         hk_grid.addWidget(QLabel("开始/停止:"), 0, 0)
-        self.hk_toggle = HotkeyLineEdit()
-        self.hk_toggle.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("toggle", k))
+        self.hk_toggle = HotkeyPairWidget()
+        self.hk_toggle.hotkey_changed.connect(lambda d: self._on_hotkey_captured("toggle", d))
         hk_grid.addWidget(self.hk_toggle, 0, 1)
         hk_grid.addWidget(QLabel("暂离:"), 1, 0)
-        self.hk_pause = HotkeyLineEdit()
-        self.hk_pause.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("pause", k))
+        self.hk_pause = HotkeyPairWidget()
+        self.hk_pause.hotkey_changed.connect(lambda d: self._on_hotkey_captured("pause", d))
         hk_grid.addWidget(self.hk_pause, 1, 1)
         hk_grid.addWidget(QLabel("校准确认:"), 2, 0)
-        self.hk_calibrate = HotkeyLineEdit()
-        self.hk_calibrate.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("calibrate", k))
+        self.hk_calibrate = HotkeyPairWidget()
+        self.hk_calibrate.hotkey_changed.connect(lambda d: self._on_hotkey_captured("calibrate", d))
         hk_grid.addWidget(self.hk_calibrate, 2, 1)
         # 右列
         hk_grid.addWidget(QLabel("上移微调:"), 0, 2)
-        self.hk_up = HotkeyLineEdit()
-        self.hk_up.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("up", k))
+        self.hk_up = HotkeyPairWidget()
+        self.hk_up.hotkey_changed.connect(lambda d: self._on_hotkey_captured("up", d))
         hk_grid.addWidget(self.hk_up, 0, 3)
         hk_grid.addWidget(QLabel("下移微调:"), 1, 2)
-        self.hk_down = HotkeyLineEdit()
-        self.hk_down.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("down", k))
+        self.hk_down = HotkeyPairWidget()
+        self.hk_down.hotkey_changed.connect(lambda d: self._on_hotkey_captured("down", d))
         hk_grid.addWidget(self.hk_down, 1, 3)
         hk_grid.setColumnStretch(1, 1)
         hk_grid.setColumnStretch(3, 1)
@@ -226,8 +226,8 @@ class AngleMeterTab(QWidget):
         self.auto_reset_check.toggled.connect(self._on_auto_reset_toggled)
         reset_row.addWidget(self.auto_reset_check)
         reset_row.addWidget(QLabel("归零热键:"))
-        self.hk_reset = HotkeyLineEdit()
-        self.hk_reset.hotkeyCaptured.connect(lambda k: self._on_hotkey_captured("reset", k))
+        self.hk_reset = HotkeyPairWidget()
+        self.hk_reset.hotkey_changed.connect(lambda d: self._on_hotkey_captured("reset", d))
         reset_row.addWidget(self.hk_reset, 1)
         # UI-2: 归零键注释放在归零键正下方
         reset_col = QVBoxLayout()
@@ -292,20 +292,6 @@ class AngleMeterTab(QWidget):
         self.cal_toggle_btn.clicked.connect(self._on_cal_toggle)
         self.toggle_use_btn.clicked.connect(self._on_toggle_use)
         self.pause_btn.clicked.connect(self._on_pause)
-
-        # 焦点禁用（SpinBox保留ClickFocus以支持键盘输入和滚轮调节）
-        for w in [self.enable_check, self.profile_search,
-                  self.add_profile_btn, self.rename_profile_btn, self.delete_profile_btn,
-                  self.cal_toggle_btn,
-                  self.toggle_use_btn, self.pause_btn,
-                  self.hk_toggle, self.hk_pause, self.hk_calibrate, self.hk_reset,
-                  self.hk_up, self.hk_down]:
-            w.setFocusPolicy(Qt.NoFocus)
-        for btn in self.cal_scheme_buttons.values():
-            btn.setFocusPolicy(Qt.NoFocus)
-        # BUG-3: 俯仰范围输入框需要可输入+可滚轮，设为ClickFocus
-        self.min_spin.setFocusPolicy(Qt.ClickFocus)
-        self.max_spin.setFocusPolicy(Qt.ClickFocus)
 
     # === 启用/禁用 ===
         scroll.setWidget(content)
@@ -715,14 +701,11 @@ class AngleMeterTab(QWidget):
         for action, widget in [("toggle", self.hk_toggle), ("pause", self.hk_pause),
                                ("calibrate", self.hk_calibrate), ("reset", self.hk_reset),
                                ("up", self.hk_up), ("down", self.hk_down)]:
-            # 统一双键结构，角度仪 UI 只用 key1（单键绑定）
-            key = hks.get(action, {}).get("key1", "")
-            widget._key = key
-            widget.setText(HotkeyManager.get_key_name(key) if key else "")
+            widget.set_hotkey(hks.get(action, {}))
 
-    def _on_hotkey_captured(self, action, key):
-        # 统一双键结构，角度仪只用 slot=1（单键绑定）
-        self.config.set_angle_meter_hotkey(action, key, "keydown", slot=1)
+    def _on_hotkey_captured(self, action, hk_dict):
+        self.config.set_angle_meter_hotkey(action, hk_dict.get("key1", ""), hk_dict.get("trigger1", "keydown"), slot=1)
+        self.config.set_angle_meter_hotkey(action, hk_dict.get("key2", ""), hk_dict.get("trigger2", "keydown"), slot=2)
         self.hotkey.reload_hotkeys()
 
     def _on_hotkey_toggle(self):

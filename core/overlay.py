@@ -271,6 +271,10 @@ class OverlayRenderer:
         opacity = effective.get("opacity", 1.0)
         self.overlay.setWindowOpacity(max(0.1, min(1.0, opacity)))
 
+    def refresh(self):
+        """OPT-4: 公共方法，强制刷新overlay的缩放/偏移/透明度（供外部模块调用，避免访问私有方法）"""
+        self._update_effective_overlay()
+
     def _on_overlay_toggled(self, visible: bool):
         """Overlay显示状态变化"""
         self._ensure_overlay()
