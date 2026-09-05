@@ -618,3 +618,12 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: 删除重复的refresh()，合并为单一refresh()包含_ensure_overlay + _update_crosshair + _update_effective_overlay（含opacity+载具级二选一）+ overlay.update()
 - 验证: 确认仅1个refresh()方法，编译通过，79测试全通过
 - commit: f7d5870a
+
+### 发布 V0.0140300085
+- 版本号: info_tab.py APP_VERSION V0.0140300085, version_info.txt (0,1,4,85)
+- code-review.md已清理（所有问题移至status.md）
+- 所有Python文件无BOM确认
+- config/resources已同步到GunnerSight_Release
+- PyInstaller onedir打包完成，已签名（CN=403 FORBIDDEN，UnknownError=自签名预期）
+- 启动日志确认: QApplication 33ms, ConfigManager 7ms, MainWindow 1ms, 主窗口显示 133ms, 启动总耗时 215ms, 热键注册 20ms，无崩溃
+- commit: e15aa700
