@@ -579,3 +579,30 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复2: 排除QAbstractSpinBox类型，数值框保留键盘输入能力，热键框/按钮/复选框仍NoFocus
 - 验证: 编译通过，79测试全通过
 - commit: 80dde8ed
+
+### REFACTOR-1 焦点策略统一 + OPT-1~4 全部执行
+
+**REFACTOR-1（根源修复）**:
+- main_window._ensure_tab对每个新创建的tab调用_disable_control_focus(widget)，确保9个页面统一焦点策略
+- 删除angle_meter_tab手动硬编码焦点策略（13控件列表+min/max_spin例外）
+- 删除rangefinder_tab手动硬编码焦点策略（24控件列表+QAbstractSpinBox例外）+空方法+无用import
+- 根因：rangefinder数值框无法输入是补丁式NoFocus一刀切导致，统一方法可避免
+
+**OPT-1 热键控件统一**:
+- angle_meter_tab 6个HotkeyLineEdit→HotkeyPairWidget
+- squad_macro_tab 1个HotkeyLineEdit→HotkeyPairWidget
+- config_manager: set_squad_macro_hotkey加slot参数
+- hotkey_manager: 角度仪4动作+up/down+squad_macro均注册key1和key2
+
+**OPT-2 滑块统一**:
+- vehicle_config_tab的vo_scale_slider和vo_opacity_slider从QSlider→NoWheelSlider
+
+**OPT-3 UI一致性**:
+- vehicle_config_tab透明度行添加-/+按钮（步进5%）
+
+**OPT-4 封装**:
+- OverlayRenderer添加公共refresh()方法
+- overview_tab调用公共refresh()而非私有_update_effective_overlay()
+
+- 验证: 编译通过，79测试全通过
+- commit: 4398d40a
