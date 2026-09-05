@@ -564,3 +564,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: _ensure_overlay创建后先setWindowOpacity(全局opacity)兜底，再调用_update_effective_overlay覆盖为二选一配置；_update_effective_overlay无载具时也设置全局opacity不直接return
 - 验证: 编译通过，79测试全通过
 - commit: 886a5c33
+
+### BUG-14 RawInputReader缺少close()方法
+- 根因: angle_meter_tab._shutdown_engine调用self.raw.close()，但RawInputReader类无close()方法，抛AttributeError（被closeEvent捕获不崩溃，但RawInput设备未显式注销）
+- 修复: 添加close()方法，用RIDEV_REMOVE标志(0x00000001)显式调用RegisterRawInputDevices注销鼠标设备，设置_registered=False
+- 验证: 编译通过，79测试全通过
+- commit: 9554d7c8

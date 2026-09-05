@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QFrame,
     QGroupBox, QLabel, QCheckBox, QSpinBox, QPushButton, QComboBox,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QInputDialog,
-    QAbstractItemView, QApplication, QDialog
+    QAbstractItemView, QApplication, QDialog, QAbstractSpinBox
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap, QImage
@@ -303,7 +303,9 @@ class RangefinderTab(QWidget):
                    self.toggle_ui_pair.trigger2,
                    self.link_vf.search, self.link_vf.tag_combo]
         for w in widgets:
-            w.setFocusPolicy(Qt.NoFocus)
+            # 数值框需要键盘输入，不设NoFocus；热键绑定框/按钮/复选框设NoFocus避免拦截热键
+            if not isinstance(w, QAbstractSpinBox):
+                w.setFocusPolicy(Qt.NoFocus)
 
     def _load_hotkeys(self):
         self.toggle_ui_pair.set_hotkey(self.hotkey.config.get_hotkey("toggle_ui"))
