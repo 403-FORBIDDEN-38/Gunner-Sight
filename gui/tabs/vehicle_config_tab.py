@@ -156,6 +156,20 @@ class VehicleConfigTab(QWidget):
         self.vo_offset_y.setRange(-500, 500)
         offset_layout.addWidget(self.vo_offset_y)
         vo_layout.addLayout(offset_layout)
+        # 透明度
+        opacity_layout = QHBoxLayout()
+        opacity_layout.addWidget(QLabel("透明度:"))
+        self.vo_opacity_slider = QSlider(Qt.Horizontal)
+        self.vo_opacity_slider.setRange(10, 100)
+        self.vo_opacity_slider.setValue(100)
+        self.vo_opacity_spin = QSpinBox()
+        self.vo_opacity_spin.setRange(10, 100)
+        self.vo_opacity_spin.setSuffix("%")
+        self.vo_opacity_spin.setValue(100)
+        self.vo_opacity_spin.setFixedWidth(80)
+        opacity_layout.addWidget(self.vo_opacity_slider, 1)
+        opacity_layout.addWidget(self.vo_opacity_spin)
+        vo_layout.addLayout(opacity_layout)
         # 说明文字
         vo_hint = QLabel('倍率选"载具"时使用此配置')
         vo_hint.setStyleSheet("color: gray; font-size: 11px;")
@@ -199,6 +213,8 @@ class VehicleConfigTab(QWidget):
         self.vo_scale_spin.valueChanged.connect(self._on_vehicle_scale_spin_changed)
         self.vo_offset_x.valueChanged.connect(self._on_vehicle_offset_changed)
         self.vo_offset_y.valueChanged.connect(self._on_vehicle_offset_changed)
+        self.vo_opacity_slider.valueChanged.connect(self._on_vehicle_opacity_slider)
+        self.vo_opacity_spin.valueChanged.connect(self._on_vehicle_opacity_spin)
 
     # === 标签 ===
     def _refresh_tag_list(self):
@@ -570,14 +586,21 @@ class VehicleConfigTab(QWidget):
             self.vo_scale_spin.blockSignals(True)
             self.vo_offset_x.blockSignals(True)
             self.vo_offset_y.blockSignals(True)
+            self.vo_opacity_slider.blockSignals(True)
+            self.vo_opacity_spin.blockSignals(True)
             self.vo_scale_slider.setValue(int(overlay["scale"]))
             self.vo_scale_spin.setValue(int(overlay["scale"]))
             self.vo_offset_x.setValue(overlay["offset_x"])
             self.vo_offset_y.setValue(overlay["offset_y"])
+            op = int(overlay.get("opacity", 1.0) * 100)
+            self.vo_opacity_slider.setValue(op)
+            self.vo_opacity_spin.setValue(op)
             self.vo_scale_slider.blockSignals(False)
             self.vo_scale_spin.blockSignals(False)
             self.vo_offset_x.blockSignals(False)
             self.vo_offset_y.blockSignals(False)
+            self.vo_opacity_slider.blockSignals(False)
+            self.vo_opacity_spin.blockSignals(False)
         else:
             self.vehicle_overlay_group.setTitle("载具缩放偏移")
 
@@ -612,6 +635,28 @@ class VehicleConfigTab(QWidget):
         overlay = self.config.get_vehicle_overlay(vehicle)
         self.config.set_vehicle_overlay(vehicle, overlay["scale"],
                                          self.vo_offset_x.value(), self.vo_offset_y.value())
+        self._update_overlay_preview()
+
+    def _on_vehicle_opacity_slider(self, value):
+        self.vo_opacity_spin.blockSignals(True)
+        self.vo_opacity_spin.setValue(value)
+        self.vo_opacity_spin.blockSignals(False)
+        self._apply_vehicle_opacity(value)
+
+    def _on_vehicle_opacity_spin(self, value):
+        self.vo_opacity_slider.blockSignals(True)
+        self.vo_opacity_slider.setValue(value)
+        self.vo_opacity_slider.blockSignals(False)
+        self._apply_vehicle_opacity(value)
+
+    def _apply_vehicle_opacity(self, percent):
+        vehicle = self._get_selected_vehicle()
+        if not vehicle:
+            return
+        overlay = self.config.get_vehicle_overlay(vehicle)
+        self.config.set_vehicle_overlay(vehicle, overlay["scale"],
+                                         overlay["offset_x"], overlay["offset_y"],
+                                         opacity=percent / 100.0)
         self._update_overlay_preview()
 
     def _update_overlay_preview(self):

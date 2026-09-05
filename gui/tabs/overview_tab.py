@@ -108,6 +108,18 @@ class OverviewTab(QWidget):
         offset_y_row.addWidget(self.offset_y_minus_btn); offset_y_row.addWidget(self.offset_y_spin)
         offset_y_row.addWidget(self.offset_y_plus_btn); offset_y_row.addStretch()
         crosshair_layout.addRow("Y轴偏移:", offset_y_row)
+
+        opacity_row = QHBoxLayout()
+        self.opacity_slider = NoWheelSlider(Qt.Horizontal)
+        self.opacity_slider.setRange(10, 100)
+        self.opacity_slider.setValue(100)
+        self.opacity_spin = QSpinBox(); self.opacity_spin.setRange(10, 100); self.opacity_spin.setSuffix(" %")
+        self.opacity_minus_btn = QPushButton("-"); self.opacity_minus_btn.setFixedWidth(30)
+        self.opacity_plus_btn = QPushButton("+"); self.opacity_plus_btn.setFixedWidth(30)
+        opacity_row.addWidget(self.opacity_minus_btn); opacity_row.addWidget(self.opacity_spin)
+        opacity_row.addWidget(self.opacity_slider)
+        opacity_row.addWidget(self.opacity_plus_btn); opacity_row.addStretch()
+        crosshair_layout.addRow("叠加层透明度:", opacity_row)
         layout.addWidget(crosshair_group)
         layout.addStretch()
 
@@ -123,6 +135,10 @@ class OverviewTab(QWidget):
         self.offset_x_plus_btn.clicked.connect(lambda: self.offset_x_spin.setValue(self.offset_x_spin.value() + 1))
         self.offset_y_minus_btn.clicked.connect(lambda: self.offset_y_spin.setValue(self.offset_y_spin.value() - 1))
         self.offset_y_plus_btn.clicked.connect(lambda: self.offset_y_spin.setValue(self.offset_y_spin.value() + 1))
+        self.opacity_slider.valueChanged.connect(self._on_opacity_slider)
+        self.opacity_spin.valueChanged.connect(self._on_opacity_spin)
+        self.opacity_minus_btn.clicked.connect(lambda: self.opacity_spin.setValue(self.opacity_spin.value() - 5))
+        self.opacity_plus_btn.clicked.connect(lambda: self.opacity_spin.setValue(self.opacity_spin.value() + 5))
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
@@ -223,6 +239,13 @@ class OverviewTab(QWidget):
         self.offset_y_spin.blockSignals(True)
         self.offset_y_spin.setValue(oy)
         self.offset_y_spin.blockSignals(False)
+        op = int(self.config.get_overlay_opacity() * 100)
+        self.opacity_slider.blockSignals(True)
+        self.opacity_slider.setValue(op)
+        self.opacity_slider.blockSignals(False)
+        self.opacity_spin.blockSignals(True)
+        self.opacity_spin.setValue(op)
+        self.opacity_spin.blockSignals(False)
 
     def refresh_preview(self):
         """刷新准星预览（多条目 QPixmap 缓存，循环切换不重复加载）"""
