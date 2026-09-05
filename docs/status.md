@@ -627,3 +627,10 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - PyInstaller onedir打包完成，已签名（CN=403 FORBIDDEN，UnknownError=自签名预期）
 - 启动日志确认: QApplication 33ms, ConfigManager 7ms, MainWindow 1ms, 主窗口显示 133ms, 启动总耗时 215ms, 热键注册 20ms，无崩溃
 - commit: e15aa700
+
+### DOC-1/DOC-2/DOC-3 文档与吉祥物修复
+- DOC-1 吉祥物: mascot_widget高度改为char_size(去上下空白), char_label.move(10,0); info_tab中parent改为self.window()(main_window), 定位坐标相对于main_window, y去掉-10下边距。吉祥物所有页面显示且限于GS窗口内
+- DOC-2 README: 按GitHub标准重写(徽章+截图占位+目录+9模块特性+快速开始+界面导览+配置数据+FAQ+开发+贡献指南+许可证+免责), 版本号V0.0140300085
+- DOC-3 用户手册: 8→9页签(新增标定测距), 新增标定测距完整章节(原理/标定/测距/快速测距/状态), 角度仪更新为每载具独立曲线/3-11点/方案可切换/更改范围归未校准/微调热键三档, 其他模块核对
+- 验证: 编译通过, 79测试全通过
+- commit: 5a4c759c
