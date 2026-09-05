@@ -36,7 +36,6 @@ class RangefinderTab(QWidget):
         self._data_loaded = False
         self._build_ui()
         self._connect_config_signals()
-        self._disable_focus()
         self._load_hotkeys()  # 热键注册必须在__init__（启动时可用）
 
     def _build_ui(self):
