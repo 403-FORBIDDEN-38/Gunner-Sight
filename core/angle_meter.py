@@ -111,6 +111,18 @@ class RawInputReader(QWidget):
         self._delta_y = 0
         return v
 
+    def close(self):
+        """BUG-14: 显式注销RegisterRawInputDevices注册的鼠标设备，避免RawInput设备残留"""
+        if self._registered:
+            dev = _RAWINPUTDEVICE()
+            dev.usUsagePage = 1
+            dev.usUsage = 2
+            dev.dwFlags = 0x00000001  # RIDEV_REMOVE
+            dev.hwndTarget = None
+            user32.RegisterRawInputDevices(
+                ctypes.byref(dev), 1, ctypes.sizeof(dev))
+            self._registered = False
+
 
 # ============================================================
 # 2. AngleCalibration — 不可变校准曲线

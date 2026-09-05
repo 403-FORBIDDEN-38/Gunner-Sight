@@ -558,3 +558,9 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 修复: 添加_on_opacity_slider(同步数值框+应用)、_on_opacity_spin(同步滑块+应用)、_apply_global_opacity(config.set_overlay_opacity + overlay._update_effective_overlay实时更新)
 - 验证: 编译通过，79测试全通过
 - commit: ebcf9fa9
+
+### BUG-13 overlay创建后opacity未设置
+- 根因: _ensure_overlay创建overlay后只同步crosshair/scale/offset/visible，未设置opacity；_update_effective_overlay在无载具/弹种时直接return也不设opacity。5条创建路径（显示/隐藏热键、全局缩放/偏移滑块、强制刷新）后opacity默认1.0
+- 修复: _ensure_overlay创建后先setWindowOpacity(全局opacity)兜底，再调用_update_effective_overlay覆盖为二选一配置；_update_effective_overlay无载具时也设置全局opacity不直接return
+- 验证: 编译通过，79测试全通过
+- commit: 886a5c33
