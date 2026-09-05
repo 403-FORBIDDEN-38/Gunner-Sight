@@ -211,3 +211,94 @@ class TestPersistence:
         assert overlay["offset_y"] == 0
         # 旧倍率无 use_vehicle_overlay 字段，应默认全局（false）
         assert cfg.get_magnification_overlay_mode("旧载具", "旧弹种", 0) is False
+
+
+
+class TestOverlayOpacity:
+    """FEATURE-4: 叠加层透明度设置测试"""
+
+    def test_default_vehicle_opacity_is_one(self, config):
+        """新载具默认opacity为1.0"""
+        config.add_vehicle("测试载具")
+        overlay = config.get_vehicle_overlay("测试载具")
+        assert overlay["opacity"] == 1.0
+
+    def test_set_vehicle_opacity(self, config):
+        """设置载具opacity后能读取"""
+        config.add_vehicle("测试载具")
+        config.set_vehicle_overlay("测试载具", 100.0, 0, 0, opacity=0.5)
+        overlay = config.get_vehicle_overlay("测试载具")
+        assert abs(overlay["opacity"] - 0.5) < 0.01
+
+    def test_set_vehicle_opacity_none_preserves_current(self, config):
+        """opacity=None时保留当前值，不重置为1.0"""
+        config.add_vehicle("测试载具")
+        config.set_vehicle_overlay("测试载具", 100.0, 0, 0, opacity=0.3)
+        # 不传opacity，只改scale，opacity应保留
+        config.set_vehicle_overlay("测试载具", 150.0, 10, 10)
+        overlay = config.get_vehicle_overlay("测试载具")
+        assert overlay["scale"] == 150.0
+        assert abs(overlay["opacity"] - 0.3) < 0.01
+
+    def test_opacity_clamped_to_range(self, config):
+        """opacity被限制在0.1-1.0范围内"""
+        config.add_vehicle("测试载具")
+        config.set_vehicle_overlay("测试载具", 100.0, 0, 0, opacity=0.0)
+        assert config.get_vehicle_overlay("测试载具")["opacity"] == 0.1
+        config.set_vehicle_overlay("测试载具", 100.0, 0, 0, opacity=2.0)
+        assert config.get_vehicle_overlay("测试载具")["opacity"] == 1.0
+
+    def test_global_opacity_default(self, config):
+        """全局opacity默认为1.0"""
+        assert config.get_overlay_opacity() == 1.0
+
+    def test_global_opacity_set_get(self, config):
+        """设置全局opacity后能读取"""
+        config.set_overlay_opacity(0.7)
+        assert abs(config.get_overlay_opacity() - 0.7) < 0.01
+
+    def test_global_opacity_clamped(self, config):
+        """全局opacity被限制在0.1-1.0"""
+        config.set_overlay_opacity(0.0)
+        assert config.get_overlay_opacity() == 0.1
+        config.set_overlay_opacity(1.5)
+        assert config.get_overlay_opacity() == 1.0
+
+    def test_effective_overlay_contains_opacity_global(self, config):
+        """get_effective_overlay全局模式返回含opacity的字典"""
+        config.add_vehicle("测试载具")
+        config.add_ammo_type("测试载具", "测试弹种")
+        config.set_overlay_opacity(0.6)
+        effective = config.get_effective_overlay("测试载具", "测试弹种", 0)
+        assert "opacity" in effective
+        assert abs(effective["opacity"] - 0.6) < 0.01
+
+    def test_effective_overlay_contains_opacity_vehicle(self, config):
+        """get_effective_overlay载具模式返回载具opacity"""
+        config.add_vehicle("测试载具")
+        config.add_ammo_type("测试载具", "测试弹种")
+        config.add_magnification("测试载具", "测试弹种", "1x")
+        config.set_vehicle_overlay("测试载具", 100.0, 0, 0, opacity=0.4)
+        config.set_magnification_overlay_mode("测试载具", "测试弹种", 0, True)
+        effective = config.get_effective_overlay("测试载具", "测试弹种", 0)
+        assert "opacity" in effective
+        assert abs(effective["opacity"] - 0.4) < 0.01
+
+    def test_old_config_no_opacity_defaults_to_one(self, config, tmp_path):
+        """旧配置无opacity字段默认1.0"""
+        import json
+        config_dir = tmp_path / "old_config"
+        config_dir.mkdir()
+        old_config = {
+            "config_version": 5,
+            "vehicles": {"旧载具": {"name": "旧载具", "tags": [], "ammo_types": {},
+                        "overlay": {"scale": 100.0, "offset_x": 0, "offset_y": 0}}},
+            "global_settings": {"scale": 100.0, "offset_x": 0, "offset_y": 0, "overlay_visible": True},
+            "hotkeys": {}, "current_state": {}, "rangefinder": {}, "squad_macro": {},
+            "angle_meter": {}, "distance_meter": {}
+        }
+        (config_dir / "config.json").write_text(json.dumps(old_config, ensure_ascii=False), encoding="utf-8")
+        cfg = ConfigManager(config_dir=str(config_dir))
+        overlay = cfg.get_vehicle_overlay("旧载具")
+        assert overlay.get("opacity", 1.0) == 1.0
+        assert cfg.get_overlay_opacity() == 1.0

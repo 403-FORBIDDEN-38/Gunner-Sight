@@ -124,7 +124,7 @@ class ConfigManager:
         return {
             "version": "1.0",
             "config_version": CURRENT_CONFIG_VERSION,
-            "global_settings": {"scale": 100.0, "offset_x": 0, "offset_y": 0, "overlay_visible": True},
+            "global_settings": {"scale": 100.0, "offset_x": 0, "offset_y": 0, "overlay_visible": True, "overlay_opacity": 1.0},
             "hotkeys": {
                 "toggle_overlay": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
                 "cycle_magnification": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
@@ -392,6 +392,13 @@ class ConfigManager:
         self._config["global_settings"]["offset_y"] = int(offset_y)
         self.request_save()
 
+    def get_overlay_opacity(self) -> float:
+        return self._config["global_settings"].get("overlay_opacity", 1.0)
+
+    def set_overlay_opacity(self, opacity: float):
+        self._config["global_settings"]["overlay_opacity"] = max(0.1, min(1.0, float(opacity)))
+        self.request_save()
+
     def get_overlay_visible(self) -> bool:
         """获取Overlay显示状态"""
         return self._config["global_settings"]["overlay_visible"]
@@ -423,15 +430,19 @@ class ConfigManager:
             return vehicle["overlay"]
         return self._default_vehicle_overlay()
 
-    def set_vehicle_overlay(self, vehicle_name: str, scale: float, offset_x: int, offset_y: int):
-        """设置载具缩放偏移配置，防抖保存"""
+    def set_vehicle_overlay(self, vehicle_name: str, scale: float, offset_x: int, offset_y: int, opacity=None):
+        """设置载具缩放偏移配置，防抖保存。opacity=None保留当前值（避免现有调用点重置透明度）"""
         vehicle = self._config["vehicles"].get(vehicle_name)
         if not vehicle:
             return
+        current_opacity = vehicle.get("overlay", {}).get("opacity", 1.0)
+        if opacity is not None:
+            current_opacity = max(0.1, min(1.0, float(opacity)))
         vehicle["overlay"] = {
             "scale": max(1.0, min(1000.0, float(scale))),
             "offset_x": int(offset_x),
-            "offset_y": int(offset_y)
+            "offset_y": int(offset_y),
+            "opacity": current_opacity
         }
         self.request_save()
 
@@ -470,13 +481,14 @@ class ConfigManager:
         return {
             "scale": self.get_global_scale(),
             "offset_x": self.get_global_offset_x(),
-            "offset_y": self.get_global_offset_y()
+            "offset_y": self.get_global_offset_y(),
+            "opacity": self.get_overlay_opacity()
         }
 
     @staticmethod
     def _default_vehicle_overlay() -> Dict:
         """载具缩放偏移默认值（单一工厂方法，不散落多处）"""
-        return {"scale": 100.0, "offset_x": 0, "offset_y": 0}
+        return {"scale": 100.0, "offset_x": 0, "offset_y": 0, "opacity": 1.0}
 
     def add_vehicle(self, name: str) -> bool:
         """添加新载具"""

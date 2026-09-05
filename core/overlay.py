@@ -262,6 +262,9 @@ class OverlayRenderer:
         effective = self.config.get_effective_overlay(vehicle, ammo, mag_idx)
         self.overlay.set_scale(effective["scale"])
         self.overlay.set_offset(effective["offset_x"], effective["offset_y"])
+        # FEATURE-4: 透明度设置（overlay_base已重写setWindowOpacity自动恢复穿透）
+        opacity = effective.get("opacity", 1.0)
+        self.overlay.setWindowOpacity(max(0.1, min(1.0, opacity)))
 
     def _on_overlay_toggled(self, visible: bool):
         """Overlay显示状态变化"""

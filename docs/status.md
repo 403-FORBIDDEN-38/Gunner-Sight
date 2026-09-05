@@ -534,3 +534,13 @@ V0.0140300061（3点快校+微调三档+性能日志完成）
 - 第一层(overlay_base重写)和第三层(rangefinder_tab hideEvent)已于上轮commit 00a8615e完成
 - 验证: 5文件编译通过，69测试全通过
 - commit: 47537939
+
+### BUG-10 测算模块禁用时不清理标定数据
+- 根因: _shutdown_engine只断开热键/设meter=None/隐藏overlay，未调用config.clear_distance_meter_calibration()
+- 修复: _shutdown_engine中设置meter=None前调用clear_distance_meter_calibration()，只清理calibration段，不清理热键配置和悬浮位置
+### BUG-11 quick_measure测距中不检查覆盖进行中测距
+- 根因: quick_measure检查了CALIBRATING_WAIT_B但未检查MEASURING_WAIT_D，测距中按组合键+测算键会覆盖正在进行的测距
+- 修复: quick_measure中CALIBRATING_WAIT_B检查后添加MEASURING_WAIT_D检查，返回interrupted提示测距中，请先完成测距，与record_point保持一致
+- 新增测试: test_quick_measure_interrupts_while_measuring, test_clear_calibration_resets_state
+- 验证: 距离测算25/25全通过，pytest 69全通过
+- commit: a214e70f
