@@ -28,6 +28,29 @@ class VehicleConfigTab(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self.refresh()
+        self._restore_current_selection()
+
+    def _restore_current_selection(self):
+        """FEATURE-6: 切回载具页时恢复当前使用的载具/弹种/倍率选中状态"""
+        cur_vehicle = self.state.current_vehicle
+        cur_ammo = self.state.current_ammo_type
+        cur_mag_idx = self.state.current_magnification_index
+
+        # 选中载具
+        if cur_vehicle:
+            for i in range(self.vehicle_list.count()):
+                if self.vehicle_list.item(i).data(Qt.UserRole) == cur_vehicle:
+                    self.vehicle_list.setCurrentRow(i)
+                    break
+        # 选中弹种
+        if cur_ammo:
+            for i in range(self.ammo_list.count()):
+                if self.ammo_list.item(i).data(Qt.UserRole) == cur_ammo:
+                    self.ammo_list.setCurrentRow(i)
+                    break
+        # 选中倍率
+        if cur_mag_idx is not None and 0 <= cur_mag_idx < self.mag_list.count():
+            self.mag_list.setCurrentRow(cur_mag_idx)
 
     def _build_ui(self):
         layout = QHBoxLayout(self)
@@ -104,10 +127,8 @@ class VehicleConfigTab(QWidget):
         mag_layout.addWidget(self.mag_list, 1)
         mag_btn_layout = QHBoxLayout()
         self.add_mag_btn = QPushButton("添加")
-        self.rename_mag_btn = QPushButton("重命名")
         self.remove_mag_btn = QPushButton("删除")
         mag_btn_layout.addWidget(self.add_mag_btn)
-        mag_btn_layout.addWidget(self.rename_mag_btn)
         mag_btn_layout.addWidget(self.remove_mag_btn)
         mag_layout.addLayout(mag_btn_layout)
         mag_detail_layout = QVBoxLayout()
@@ -206,7 +227,6 @@ class VehicleConfigTab(QWidget):
         self.ammo_list.currentItemChanged.connect(self._on_ammo_selected)
         # 倍率
         self.add_mag_btn.clicked.connect(self._on_add_mag)
-        self.rename_mag_btn.clicked.connect(self._on_rename_mag)
         self.remove_mag_btn.clicked.connect(self._on_remove_mag)
         self.mag_list.currentItemChanged.connect(self._on_mag_selected)
         self.mag_list.itemDoubleClicked.connect(lambda _item: self._on_bind_crosshair())
@@ -247,6 +267,9 @@ class VehicleConfigTab(QWidget):
             self._refresh_vehicle_list()
         else:
             self._refresh_vehicle_list(tag_filter=tag)
+        # FEATURE-7: 级联自动选中第一辆载具
+        if self.vehicle_list.count() > 0:
+            self.vehicle_list.setCurrentRow(0)
 
     def _on_tag_check_changed(self, item):
         self._tag_check_just_changed = True
@@ -272,6 +295,11 @@ class VehicleConfigTab(QWidget):
         if name and self.config.add_tag(name):
             self.tag_input.clear()
             self._refresh_tag_list()
+            # FEATURE-8: 自动选中新标签
+            for i in range(self.tag_list.count()):
+                if self.tag_list.item(i).data(Qt.UserRole) == name:
+                    self.tag_list.setCurrentRow(i)
+                    break
 
     def _on_rename_tag(self):
         item = self.tag_list.currentItem()
@@ -347,6 +375,9 @@ class VehicleConfigTab(QWidget):
         self._refresh_ammo_list()
         self._refresh_mag_list()
         self._update_vehicle_overlay_ui()
+        # FEATURE-7: 级联自动选中第一个弹种
+        if self.ammo_list.count() > 0:
+            self.ammo_list.setCurrentRow(0)
 
     def _on_add_vehicle(self):
         name, ok = QInputDialog.getText(self, "添加载具", "载具名称:")
@@ -426,6 +457,9 @@ class VehicleConfigTab(QWidget):
 
     def _on_ammo_selected(self, current, _previous):
         self._refresh_mag_list()
+        # FEATURE-7: 级联自动选中第一倍率
+        if self.mag_list.count() > 0:
+            self.mag_list.setCurrentRow(0)
 
     def _on_add_ammo(self):
         vehicle = self._get_selected_vehicle()
@@ -435,6 +469,11 @@ class VehicleConfigTab(QWidget):
         if ok and name.strip():
             self.config.add_ammo_type(vehicle, name.strip())
             self._refresh_ammo_list()
+            # FEATURE-8: 自动选中新弹种
+            for i in range(self.ammo_list.count()):
+                if self.ammo_list.item(i).data(Qt.UserRole) == name.strip():
+                    self.ammo_list.setCurrentRow(i)
+                    break
 
     def _on_rename_ammo(self):
         vehicle = self._get_selected_vehicle()
@@ -523,6 +562,9 @@ class VehicleConfigTab(QWidget):
             return
         self.config.add_magnification(vehicle, ammo)
         self._refresh_mag_list()
+        # FEATURE-8: 自动选中新倍率（最后一个）
+        if self.mag_list.count() > 0:
+            self.mag_list.setCurrentRow(self.mag_list.count() - 1)
 
     def _on_remove_mag(self):
         vehicle = self._get_selected_vehicle()
@@ -552,22 +594,6 @@ class VehicleConfigTab(QWidget):
         mode = "载具" if mag.get("use_vehicle_overlay", False) else "全局"
         ch_part = ch if ch else "未绑定"
         item.setText(f"{label}  —  {ch_part}  —  [{mode}]")
-
-    def _on_rename_mag(self):
-        vehicle = self._get_selected_vehicle()
-        ammo = self._get_selected_ammo()
-        item = self.mag_list.currentItem()
-        if not vehicle or not ammo or not item:
-            return
-        idx = item.data(Qt.UserRole)
-        mags = self.config.get_magnifications(vehicle, ammo)
-        if idx >= len(mags):
-            return
-        old_label = mags[idx].get("label", f"倍率{idx+1}")
-        new_label, ok = QInputDialog.getText(self, "重命名倍率", "新名称:", text=old_label)
-        if ok and new_label.strip() and new_label.strip() != old_label:
-            self.config.update_magnification(vehicle, ammo, idx, label=new_label.strip())
-            self._update_mag_item_text(idx)
 
     def _on_overlay_mode_changed(self, _state):
         """缩放偏移模式切换：勾选框状态变化"""

@@ -10,6 +10,29 @@ import time
 import traceback
 from core.win32_utils import shell32
 
+
+class _LibpngFilter:
+    """过滤 stderr 中的 libpng bKGD/iCCP 警告（libpng 直接写 stderr 不走 Qt 日志）"""
+    def __init__(self, stream):
+        self._stream = stream
+        self._buf = ""
+
+    def write(self, s):
+        self._buf += s
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if not any(k in line for k in ("libpng", "bKGD", "iCCP")):
+                self._stream.write(line + "\n")
+
+    def flush(self):
+        if self._buf and not any(k in self._buf for k in ("libpng", "bKGD", "iCCP")):
+            self._stream.write(self._buf)
+        self._buf = ""
+        self._stream.flush()
+
+
+sys.stderr = _LibpngFilter(sys.stderr)
+
 # 版本号唯一权威来源（info_tab.py），QApplication 与信息页共享同一值
 from gui.tabs.info_tab import APP_VERSION as _APP_VERSION
 
@@ -95,13 +118,13 @@ def get_app_icon_path():
 def load_custom_fonts(app):
     """加载自定义字体并设置应用程序默认字体
 
-    P0-6: 只加载 Norwester（英文），中文字符自动回退系统默认字体。
-    去掉思源黑体加载（5-15MB文件解析耗时，系统字体已足够）。
+    Norwester（英文标题）+ Noto Sans SC Light（中文细体，静态字体）。
     """
     resources_dir = get_app_base_dir() / "resources"
-    fonts_dir = resources_dir / 'fonts'
+    fonts_dir = resources_dir / 'assets/fonts'
 
     font_norwester = None
+    font_noto = None
 
     # 加载 Norwester（英文）
     norwester_path = os.path.join(fonts_dir, 'NORWESTER.ttf')
@@ -116,9 +139,27 @@ def load_custom_fonts(app):
     else:
         print(f"[Main] Norwester 字体文件不存在: {norwester_path}")
 
-    if font_norwester:
+    # 加载 Noto Sans SC（中文，可变字体）
+    noto_path = os.path.join(fonts_dir, 'NotoSansSC-Light.ttf')
+    if os.path.exists(noto_path):
+        font_id = QFontDatabase.addApplicationFont(noto_path)
+        if font_id >= 0:
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families:
+                font_noto = families[0]
+        else:
+            print(f"[Main] Noto Sans SC 字体加载失败: {noto_path}")
+    else:
+        print(f"[Main] Noto Sans SC 字体文件不存在: {noto_path}")
+
+    if font_norwester or font_noto:
         font = QFont()
-        font.setFamilies([font_norwester, "Source Han Sans CN"])
+        families = []
+        if font_norwester:
+            families.append(font_norwester)
+        if font_noto:
+            families.append(font_noto)
+        font.setFamilies(families)
         font.setPointSize(10)
         font.setStyleStrategy(QFont.PreferDefault)
         app.setFont(font)
@@ -172,6 +213,9 @@ def _main():
         atexit.register(lambda: _u.BlockInput(False))
     except Exception:
         pass
+
+    # 抑制 libpng bKGD/iCCP 等警告输出（必须在 QApplication 创建前）
+    os.environ["QT_LOGGING_RULES"] = "*.warning=false"
 
     # 高DPI支持
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)

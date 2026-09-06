@@ -33,7 +33,11 @@ class ResourceManager:
         result = []
         for f in self.resources_dir.rglob("*"):
             if f.is_file() and f.suffix.lower() in extensions:
-                result.append(str(f.relative_to(self.resources_dir)))
+                rel = f.relative_to(self.resources_dir)
+                # 排除 assets/ 目录（mascot/fonts 等内部资源，不进资源库）
+                if rel.parts and rel.parts[0] == "assets":
+                    continue
+                result.append(str(rel))
         return sorted(result)
 
     def get_resource_path(self, filename: str) -> Optional[str]:

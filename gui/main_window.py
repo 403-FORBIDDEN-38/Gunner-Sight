@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
             5: lambda: AngleMeterTab(config=self.config, hotkey=self.hotkey),
             6: lambda: SquadMacroTab(config=self.config, hotkey=self.hotkey),
             7: lambda: ResourceTab(config=self.config, resources=self.resources),
-            8: lambda: InfoTab(resources=self.resources),
+            8: lambda: InfoTab(config=self.config, resources=self.resources),
         }
         self._tab_cache = {}  # index -> widget
 

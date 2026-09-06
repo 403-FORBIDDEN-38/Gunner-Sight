@@ -49,7 +49,16 @@ class RangefinderTab(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        # === 第一行：UI切换（独立隔板）===
+        layout.addWidget(self._build_ui_toggle_section())
+        self._build_enable_switch(layout)
+        self._build_settings_container(layout)
+        self._connect_ui_signals()
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+    def _build_ui_toggle_section(self) -> QGroupBox:
+        """第一行：UI切换（独立隔板）"""
         ui_toggle_group = QGroupBox("UI 切换（独立于信息数显模块）")
         ui_toggle_layout = QHBoxLayout(ui_toggle_group)
         ui_toggle_layout.setSpacing(8)
@@ -83,26 +92,44 @@ class RangefinderTab(QWidget):
         ui_h.addStretch()
         ui_coord_v.addLayout(ui_h)
         ui_toggle_layout.addLayout(ui_coord_v, 1)
-        layout.addWidget(ui_toggle_group)
+        return ui_toggle_group
 
-        # === 启用开关（单独，不受禁用影响）===
+    def _build_enable_switch(self, layout: QVBoxLayout):
+        """启用开关（单独，不受禁用影响）"""
         self.enable_check = QCheckBox("启用信息数显模块")
         self.enable_check.setChecked(self.config.is_rangefinder_enabled())
         self.enable_check.toggled.connect(self._on_enable_toggle)
         layout.addWidget(self.enable_check)
 
-        # === 设置容器（除启用开关外的所有控件，禁用时整体禁用）===
+    def _build_settings_container(self, layout: QVBoxLayout):
+        """设置容器（除启用开关外的所有控件，禁用时整体禁用）"""
         self.settings_container = QWidget()
         sc_layout = QVBoxLayout(self.settings_container)
         sc_layout.setContentsMargins(0, 0, 0, 0)
         sc_layout.setSpacing(8)
 
-        # === 第二~四行：信息数显设置（同一隔板）===
         settings_group = QGroupBox("信息数显设置")
         settings_v = QVBoxLayout(settings_group)
         settings_v.setSpacing(10)
 
-        # 行2：信息截取热键（左）+ 执行间隙（右）
+        self._build_hotkey_interval_row(settings_v)
+        sep1 = QFrame(); sep1.setFrameShape(QFrame.HLine); sep1.setObjectName("rangefinder_sep")
+        settings_v.addWidget(sep1)
+        self._build_roi_display_section(settings_v)
+        self._build_roi2_section(settings_v)
+        sep2 = QFrame(); sep2.setFrameShape(QFrame.HLine); sep2.setObjectName("rangefinder_sep")
+        settings_v.addWidget(sep2)
+        self._build_profile_link_section(settings_v)
+
+        sc_layout.addWidget(settings_group)
+        self.save_btn = QPushButton("保存当前配置")
+        sc_layout.addWidget(self.save_btn)
+        sc_layout.addStretch()
+        layout.addWidget(self.settings_container)
+        layout.addStretch()
+
+    def _build_hotkey_interval_row(self, settings_v: QVBoxLayout):
+        """行2：信息截取热键（左）+ 执行间隙（右）"""
         row2 = QHBoxLayout()
         row2.setSpacing(8)
         hk_v = QVBoxLayout()
@@ -111,7 +138,6 @@ class RangefinderTab(QWidget):
         self.hk_pair.hotkey_changed.connect(self._on_hotkey_changed)
         hk_v.addWidget(self.hk_pair)
         row2.addLayout(hk_v, 1)
-        # 执行间隙（右对齐）
         interval_v = QVBoxLayout()
         interval_v.setSpacing(4)
         interval_row = QHBoxLayout()
@@ -127,10 +153,8 @@ class RangefinderTab(QWidget):
         row2.addLayout(interval_v)
         settings_v.addLayout(row2)
 
-        sep1 = QFrame(); sep1.setFrameShape(QFrame.HLine); sep1.setObjectName("rangefinder_sep")
-        settings_v.addWidget(sep1)
-
-        # 行3：ROI + 结果显示
+    def _build_roi_display_section(self, settings_v: QVBoxLayout):
+        """行3：ROI + 结果显示"""
         settings_v.addWidget(QLabel("截取区域与结果显示"))
         roi_disp_row = QHBoxLayout()
         roi_disp_row.setSpacing(8)
@@ -177,7 +201,8 @@ class RangefinderTab(QWidget):
         roi_disp_row.addLayout(disp_v, 1)
         settings_v.addLayout(roi_disp_row)
 
-        # 第二截取区域（弹药数量等）
+    def _build_roi2_section(self, settings_v: QVBoxLayout):
+        """第二截取区域（弹药数量等）"""
         roi2_row = QHBoxLayout()
         roi2_row.setSpacing(8)
         self.roi2_enabled = QCheckBox("启用第二截取区域")
@@ -203,7 +228,7 @@ class RangefinderTab(QWidget):
         self.pick_roi2_btn = QPushButton("框选区域2"); self.pick_roi2_btn.setMaximumWidth(100)
         roi2_v.addWidget(self.pick_roi2_btn)
         roi2_disp_row.addLayout(roi2_v, 1)
-        # 右：结果2显示位置（大小/透明度共用区域1）
+        # 右：结果2显示位置
         disp2_v = QVBoxLayout()
         disp2_v.setSpacing(4)
         self.disp2_x = QSpinBox(); self.disp2_x.setRange(0, 9999); self.disp2_x.setMaximumWidth(90)
@@ -219,10 +244,8 @@ class RangefinderTab(QWidget):
         roi2_disp_row.addLayout(disp2_v, 1)
         settings_v.addLayout(roi2_disp_row)
 
-        sep2 = QFrame(); sep2.setFrameShape(QFrame.HLine); sep2.setObjectName("rangefinder_sep")
-        settings_v.addWidget(sep2)
-
-        # 行4：配置 + 关联载具
+    def _build_profile_link_section(self, settings_v: QVBoxLayout):
+        """行4：配置列表 + 关联载具"""
         settings_v.addWidget(QLabel("信息数显列表与关联载具"))
         cfg_link_row = QHBoxLayout()
         cfg_link_row.setSpacing(8)
@@ -261,16 +284,8 @@ class RangefinderTab(QWidget):
         cfg_link_row.addLayout(link_v, 1)
         settings_v.addLayout(cfg_link_row)
 
-        sc_layout.addWidget(settings_group)
-
-        # 第五行：保存
-        self.save_btn = QPushButton("保存当前配置")
-        sc_layout.addWidget(self.save_btn)
-        sc_layout.addStretch()
-        layout.addWidget(self.settings_container)
-        layout.addStretch()
-
-        # 信号
+    def _connect_ui_signals(self):
+        """连接所有UI控件信号"""
         self.search.textChanged.connect(self._refresh_profile_list)
         self.tag_filter.currentIndexChanged.connect(self._refresh_profile_list)
         self.profile_list.currentItemChanged.connect(self._on_list_select)
@@ -285,8 +300,6 @@ class RangefinderTab(QWidget):
         self.roi2_enabled.toggled.connect(self._on_roi2_toggled)
         self.disp_op.valueChanged.connect(self._on_opacity)
         self.save_btn.clicked.connect(self._on_save_profile)
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
 
     def _load_hotkeys(self):
         self.toggle_ui_pair.set_hotkey(self.hotkey.config.get_hotkey("toggle_ui"))

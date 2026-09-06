@@ -8,16 +8,23 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QCheckBox
 from PyQt5.QtCore import Qt, QTimer
 
 from core.resource_manager import ResourceManager
+from gui.mascot import MascotWidget, ChatBubble, SoundPlayer
 
-APP_VERSION = "V0.0140300086"
+APP_VERSION = "V0.0140300090"
 
 
 class InfoTab(QWidget):
-    def __init__(self, resources: ResourceManager, parent=None):
+    def __init__(self, config, resources: ResourceManager, parent=None):
         super().__init__(parent)
+        self.config = config
         self.resources = resources
         self._mascot = None
+        self._bubble = None
+        self._sound = None
+        self._follow_timer = None
         self._build_ui()
+        # 从配置加载吉祥物启用状态
+        self.mascot_enable_check.setChecked(self.config.is_mascot_enabled())
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -67,23 +74,81 @@ class InfoTab(QWidget):
             self._create_mascot()
 
     def _on_mascot_toggled(self, enabled):
+        self.config.set_mascot_enabled(enabled)
         if enabled and self._mascot is None:
             self._create_mascot()
         elif not enabled and self._mascot is not None:
-            self._mascot.deleteLater()
-            self._mascot = None
+            self._shutdown_mascot()
 
     def _create_mascot(self):
-        from gui.mascot_widget import MascotWidget
-        self._mascot = MascotWidget(str(self.resources.get_resources_dir()), self.window())
+        res_dir = str(self.resources.get_resources_dir())
+        parent = self.window()
+
+        self._sound = SoundPlayer(res_dir, volume=0.1125)
+        self._bubble = ChatBubble(res_dir, parent=parent)
+
+        self._mascot = MascotWidget(res_dir, parent=parent)
+        self._mascot.pressed.connect(self._sound.press_down)
+        self._mascot.released.connect(self._sound.press_up)
+        self._mascot.clicked.connect(self._on_mascot_clicked)
+
+        self._position_mascot()
         self._mascot.show()
-        QTimer.singleShot(0, self._position_mascot)
+        self._mascot.raise_()
+
+        # 16ms QTimer跟随气泡（≈60fps），气泡显示时start，隐藏时stop（零消耗）
+        self._follow_timer = QTimer(self)
+        self._follow_timer.setInterval(16)
+        self._follow_timer.timeout.connect(self._follow_mascot)
+        self._bubble.visibility_changed.connect(self._on_bubble_visibility)
+
+    def _shutdown_mascot(self):
+        if self._follow_timer:
+            self._follow_timer.stop()
+            self._follow_timer = None
+        if self._bubble:
+            self._bubble.hide()
+            self._bubble.deleteLater()
+            self._bubble = None
+        if self._mascot:
+            self._mascot.hide()
+            self._mascot.deleteLater()
+            self._mascot = None
+        if self._sound:
+            self._sound.stop_all()
+            self._sound = None
+
+    def _on_mascot_clicked(self):
+        if self._bubble and self._mascot:
+            ax, ay = self._anchor()
+            self._bubble.show_bubble(ax, ay)
+            self._bubble.shake()
+
+    def _anchor(self):
+        """气泡锚点：角色水平中心，char_label顶部（随动幅度减半）。"""
+        m = self._mascot
+        ax = m.x() + m.char_label.x() + m.char_label.width() // 2
+        # char_label.y()按压时0→30，取一半使气泡随动幅度减半
+        ay = m.y() + int(m.char_label.y() * 0.5)
+        return ax, ay
+
+    def _on_bubble_visibility(self, visible):
+        """气泡显示时启动跟随定时器，隐藏时停止（零消耗）。"""
+        if self._follow_timer:
+            if visible:
+                self._follow_timer.start()
+            else:
+                self._follow_timer.stop()
+
+    def _follow_mascot(self):
+        if self._bubble and self._bubble.isVisible() and self._mascot:
+            ax, ay = self._anchor()
+            self._bubble.update_position(ax, ay)
 
     def _position_mascot(self):
         if self._mascot:
             m = self._mascot
             m.move(self.window().width() - m.width() - 15, self.window().height() - m.height())
-            m.raise_()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

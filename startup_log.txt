@@ -1,0 +1,20 @@
+[性能] QApplication创建 耗时=14ms
+[性能] ConfigManager初始化 耗时=8ms
+[性能] StateMachine初始化 耗时=0ms
+[性能] ResourceManager初始化 耗时=0ms
+[性能] OverlayRenderer初始化 耗时=0ms
+[性能] HotkeyManager初始化 耗时=0ms
+[性能] MainWindow创建(UI创建) 耗时=1ms
+[性能] 主窗口显示 耗时=119ms
+[性能] 启动总耗时(不含字体)=180ms
+[性能] UI框架创建 耗时=355ms
+[性能] 字体加载 耗时=33ms
+[性能] 热键注册 耗时=72ms
+[Overlay] 准星图片不存在: USMC&USA M2\M2 5X.png
+[Overlay] 准星图片不存在: USMC&USA M2\M2 1X.png
+[性能] 关闭-窗口隐藏 耗时=6ms
+[性能] 关闭-数显模块 耗时=0ms
+[性能] 关闭-角度仪 耗时=0ms
+[性能] 关闭-热键 耗时=0ms
+[性能] 关闭-配置保存 耗时=1ms
+[性能] 关闭总耗时=21ms
