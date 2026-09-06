@@ -1,7 +1,5 @@
 """ConfigManager 基础测试 15 例"""
 import json
-import pytest
-from pathlib import Path
 from core.config_manager import ConfigManager
 
 

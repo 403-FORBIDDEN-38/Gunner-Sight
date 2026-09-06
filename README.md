@@ -1,148 +1,195 @@
 # GunnerSight
 
-**Squad 载具炮手实战辅助工具**
+Squad 载具炮手辅助工具。透明叠加层显示自定义炮镜分划，不读游戏内存，不注入进程。
 
-自定义炮镜分划叠加 · 信息数显 · 地图标定测距 · 炮塔角度仪 · 建队宏
+## 功能
 
----
-
-## 这是什么
-
-GunnerSight 是一个运行在 Windows 桌面的透明叠加层工具，为 Squad 载具炮手提供：
-
-- **炮镜分划叠加** — 屏幕中央显示自定义准星，随载具/弹种/倍率自动切换
-- **信息数显** — 无UI模式下自动截图测距仪数值并贴回屏幕，兼得无UI视野与有UI武器信息
-- **地图标定测距** — 在游戏大地图上基于地图比例尺标定像素-米换算，任意两点距离实时测算
-- **炮塔角度仪** — 基于鼠标增量实时显示俯仰角，每武器站独立校准
+- **准星叠加** — 载具/弹种/倍率三级自动切换，全局或载具级缩放/偏移/透明度
+- **信息数显** — 无UI模式下自动截图测距仪数值并贴回屏幕
+- **标定测距** — 基于地图比例尺标定像素-米换算，任意两点距离实时测算
+- **炮塔角度仪** — RawInput 鼠标增量推算俯仰角，每武器站独立校准曲线
 - **建队宏** — 自动化控制台建队流程
-
-不读游戏内存，不注入进程，不修改游戏文件。本地运行，永久免费。
-
----
+- **吉祥物** — 桌面挂件，点击 Q 弹动画 + 音效 + 气泡反馈
 
 ## 快速开始
 
-### 环境
-
-- Windows 10 / 11
-- 游戏设为**窗口化**或**无边框窗口**（全屏独占模式下叠加层无法显示）
-
 ### 运行
 
-1. 右键 `GunnerSight.exe` → **以管理员身份运行**（信息数显的 BlockInput 需要管理员权限）
-2. 载具配置 → 新建载具 → 添加弹种/倍率 → 资源库导入炮镜图片 → 绑定
-3. 热键设置 → 绑定显示准星、切换倍率等热键
-4. 进游戏按热键测试
+```bash
+pip install PyQt5 mss keyboard pillow pytest
+py main.py
+```
 
-详见 [USER_GUIDE.md](USER_GUIDE.md)
+> Windows 上 `python` 可能指向 Store 占位符（静默零输出），用 `py` 启动器。
 
-### 源码运行
+需以管理员身份运行（信息数显的 BlockInput 需要管理员权限）。游戏设为窗口化或无边框窗口。
+
+### 配置
+
+- `config/config.json` — 全部用户配置（载具、热键、各模块参数）
+- `resources/` — 炮镜图片、字体、吉祥物素材
+- 删除 `config.json` 后重启即重置（程序本体无默认用户数据）
+
+## 架构
+
+```
+main.py
+├── core/                        # 业务逻辑层（无 UI 依赖，可独立测试）
+│   ├── config_manager.py        # 配置持久化
+│   ├── state_machine.py         # 载具/弹种/倍率三级状态机
+│   ├── overlay_base.py          # ClickThroughOverlay 穿透基类
+│   ├── overlay.py               # 准星叠加层
+│   ├── distance_overlay.py      # 测距悬浮窗口
+│   ├── rangefinder_overlay.py   # 数显叠加层
+│   ├── angle_meter.py           # RawInput + 校准曲线 + 角度追踪
+│   ├── distance_meter.py        # 像素-米比率 + 标定/测距状态机
+│   ├── rangefinder.py           # 截图 + BlockInput + 无UI切换
+│   ├── squad_macro.py           # 热键序列 + 后台线程
+│   ├── hotkey_manager.py        # 全局热键 + 双键 + 主线程转发
+│   ├── resource_manager.py      # 图片缓存 + 懒加载
+│   └── win32_utils.py           # Win32 API 封装（穿透/SendInput）
+├── gui/
+│   ├── main_window.py           # 主窗口（懒加载 9 个 tab）
+│   ├── widgets.py               # 通用组件
+│   ├── hotkey_widgets.py        # HotkeyPairWidget 双键组件
+│   ├── mascot/                  # 吉祥物模块
+│   └── tabs/                    # 9 个页签
+├── tests/                       # pytest 单元测试（104 用例）
+└── tools/                       # 静态扫描等开发工具
+```
+
+### 数据流
+
+```
+用户按热键
+  → hotkey_manager 捕获（keyboard 钩子，子线程）
+  → QTimer.singleShot(0, callback) 转主线程
+  → 更新 state_machine 状态
+  → 发射 changed 信号
+  → overlay / 各模块监听信号更新显示
+```
+
+状态唯一存储于 state_machine，其他模块不维护副本。
+
+## 核心实现
+
+### 叠加层穿透
+
+`ClickThroughOverlay` 基类同时设置 Qt 层面 `WA_TransparentForMouseEvents` 和 Win32 层面 `WS_EX_TRANSPARENT | WS_EX_LAYERED`。重写 `setWindowOpacity` 和 `setWindowFlags`，操作后自动调用 `ensure_click_through()` 恢复穿透——Windows 上设置透明度可能清除 `WS_EX_TRANSPARENT`。`showEvent` 中无条件恢复穿透。
+
+编辑模式通过 `set_edit_mode(True)` 临时关闭穿透允许拖动，ESC 退出，30 秒超时兜底，`hideEvent` 重置状态。
+
+三个叠加层（准星/测距/数显）全部继承此基类。
+
+### 角度仪
+
+使用 Windows Raw Input API（`RegisterRawInputDevices` + `WM_INPUT`）读取鼠标硬件原始增量，不受系统鼠标加速影响。`RawInputReader` 继承 QWidget，通过 `nativeEvent` 捕获消息。
+
+`AngleCalibration` 为不可变对象，存储校准点（增量累计值→角度，3-11 点），使用时分段线性插值。`AngleTracker`（使用状态）与 `Calibrator`（校准流程）分离。
+
+微调通过 `SendInput` 模拟真实鼠标移动，使校准和使用的增量来源一致。点按步长 1°，长按连续，长长按加速。
+
+一个角度仪配置可关联多辆载具（同一武器站多车共用）。
+
+### 标定测距
+
+用户在地图比例尺两端标定，软件记录像素距离，结合指定比例尺算出每像素对应的米数。任意两点像素距离 × 比率 = 实际距离。
+
+标定比例尺时判断主轴方向（横向/竖向），只取主轴距离，忽略手抖导致的另一轴偏移。
+
+模块启用（UI 复选框，控制对象创建/定时器）与流程激活（热键，控制是否响应标定/测距热键）为两层状态。标定与测距为独立状态机，互不打断。
+
+组合键 + 测距热键可沿用上一次测距点 1，直接指定本次点为点 2。
+
+### 热键系统
+
+使用 `keyboard` 库 `on_press`/`on_release` 全局监听，支持鼠标键和 CAPS LOCK 等特殊键。按下/松开触发独立配置。
+
+`HotkeyPairWidget` 统一双键绑定 UI，所有页面复用。配置格式 `{key1, trigger1, key2, trigger2}`。
+
+keyboard 钩子回调在子线程执行，Qt UI 操作必须在主线程。触发时用 `QTimer.singleShot(0, callback)` 转到主线程事件队列执行。
+
+### 配置管理
+
+保存时构造有序 dict，按 `version → global_settings → hotkeys → vehicles → angle_meter → distance_meter → squad_macro → mascot` 输出。
+
+保存热键时自动过滤旧格式字段 `key`/`trigger`，只输出 `key1`/`key2`。读取时兼容旧格式，内存中迁移到 `key1`，下次保存自动干净。
+
+配置变更后 500ms 防抖写入磁盘，`save_config()` 可强制立即保存。
+
+程序本体不含默认用户数据——删除 config 后重启，所有列表为空。
+
+### 吉祥物
+
+Q 弹动画用 `QPropertyAnimation` 动画 `char_label.geometry`，按压 `scaleY(0.80) scaleX(1.12)`，底边中心固定（缩放时 cx/bottom 不变）。`setScaledContents(True)` 使 pixmap 跟随 label 拉伸。cubic-bezier 缓动用 `QEasingCurve.setCustomType` + 牛顿迭代求解 `(.34,1.56,.64,1)`。
+
+气泡为三明治层级（尾巴→底→内容→框），内容区域用气泡底 alpha 通道做 `setMask` 剪切蒙版。shake 用 `pyqtProperty` 相对偏移叠加，不与位置跟随冲突。
+
+音效：短按 release 与 press 末尾重叠 100ms（按 press 剩余时长计算），长按松手时播 release。
+
+气泡隐藏时通过 `visibility_changed` 信号停止 16ms 跟随定时器，显示时启动。模块禁用时完整清理（deleteLater + 停止定时器）。
+
+### 资源管理
+
+三级缓存：文件列表缓存 + 缩略图缓存（上限 300）+ 原图缓存。缩略图异步分批加载，每次加载 2 个后交还事件循环，避免大量图片同时解码阻塞 UI。
+
+`list_resources()` 递归扫描时跳过 `assets/` 目录（mascot/fonts 等内部资源不进用户资源库）。
+
+导入图片时按文件大小 + MD5 检查是否已有相同内容，有则复用不创建副本。
+
+## 开发
+
+### 测试
 
 ```bash
-pip install PyQt5 mss keyboard pillow
-python main.py
+py -m pytest tests/ -v
 ```
 
----
+104 个测试用例，覆盖 config_manager、vehicle_overlay、distance_meter_logic、angle_meter、hotkey_manager。
 
-## 功能模块
+### 静态扫描
 
-### 准星叠加
-
-| 特性 | 说明 |
-|------|------|
-| 三级自动切换 | 载具 → 弹种 → 倍率，切换时准星图片自动对应 |
-| 全局/载具级参数 | 缩放、偏移X/Y、透明度，载具级可覆盖全局（二选一不叠加） |
-| 一键反色 | 深色地图用黑准星，浅色地图用白准星 |
-| 鼠标穿透 | 叠加层不拦截游戏鼠标操作 |
-
-### 信息数显
-
-无UI模式下按热键 → 自动恢复UI → 截图测距区域 → 恢复无UI → 数值截图贴在屏幕指定位置。
-
-- 双截取区域（测距区域 + 结果显示区域）
-- 执行间隙可调（10-1000ms），适应不同硬件响应速度
-- 独立的有/无UI快速切换热键（不需要启用测距模块也能用）
-
-### 地图标定测距
-
-在游戏大地图（M键）上使用：
-
-1. 地图上有已知比例尺线段（如 100m），在屏幕上量出该线段占多少像素
-2. 软件据此算出"每像素 = 多少米"的换算比例
-3. 之后任意两点在地图上的像素距离 × 比例尺 = 实际距离（米）
-
-- 4 档比例尺循环（33m / 100m / 300m / 900m），不同观测距离选不同档
-- 组合键 + 测算热键 = 快速测距（沿用上一次点1）
-- 悬浮窗口右下角显示结果，状态颜色区分
-- 可关闭，关闭后零消耗、标定数据自动清理
-
-### 炮塔角度仪
-
-基于 RawInput 鼠标增量实时推算炮塔俯仰角，不读游戏内存。
-
-- 每武器站独立校准曲线（3-11点可选），多套方案可切换
-- 一个配置可关联多辆载具（同一武器站被多车使用）
-- 微调热键：点按步长1 / 短长按慢速连续 / 长长按加速连续
-- 归零/暂离/重置，开火后自动归平可配置
-- 更改俯仰角范围后所有方案自动归为未校准
-
-### 建队宏
-
-- 自动化 Squad 控制台建队命令输入
-- 小队名称、锁队、循环间隔可配
-- 双键热键触发，执行时自动最小化切游戏窗口
-
----
-
-## 界面导览
-
-9 个页签，左侧导航 + 右侧 ▲/▼ 翻页按钮：
-
-| 页签 | 用途 |
-|------|------|
-| 全局设置 | 当前载具选择、准星预览、全局缩放/偏移/透明度、无UI间隙、吉祥物 |
-| 载具配置 | 载具/弹种/倍率管理、炮镜绑定、载具级参数覆盖 |
-| 热键设置 | 全部功能热键绑定（每功能双键槽位，按下/松开触发） |
-| 信息数显 | 截取区域框选、结果显示设置、执行间隙、热键 |
-| 标定测距 | 模块开关、比例尺标定、热键绑定、悬浮窗口偏移 |
-| 角度仪 | 配置列表、载具关联、校准设置、归零配置、热键 |
-| 建队宏 | 宏参数、热键绑定 |
-| 资源库 | 炮镜图片导入/管理 |
-| 信息 | 版本、文档入口、外部链接 |
-
----
-
-## 配置与数据
-
-```
-GunnerSight/
-├── config/config.json    ← 全部用户配置（载具、热键、各模块参数）
-├── resources/            ← 炮镜图片、字体、吉祥物素材
-└── GunnerSight.exe
+```bash
+py tools/static_scan.py
 ```
 
-- 退出自动保存，旧版本配置启动时自动迁移
-- 备份 = 复制 `config/` + `resources/`
-- 重置 = 删除 `config/config.json` 后重启
+检查：主线程裸 time.sleep、重复方法定义、except:pass 危险吞没、未使用 import。
 
----
+### 打包
+
+```bash
+pyinstaller --onedir --name GunnerSight main.py
+```
+
+`config/` 与 `resources/` 外置在 exe 同级，用户数据不随打包丢失。
+
+### 版本号
+
+唯一来源：`gui/tabs/info_tab.py` 的 `APP_VERSION`。
+
+## 扩展
+
+### 添加新模块
+
+1. `core/` 下创建逻辑层（无 UI 依赖，可独立测试）
+2. `gui/tabs/` 下创建页签（`__init__(config, resources, parent)`）
+3. `gui/main_window.py` 的 `_tab_factories` 中注册
+4. `config_manager.py` 中添加配置段（无默认用户数据）
+5. 需要热键时在 `hotkey_manager.py` 注册信号，回调走 `QTimer.singleShot(0)` 转主线程
+6. 写 pytest 测试
+
+### 添加热键
+
+1. `hotkey_manager.py` 添加信号和注册逻辑
+2. 对应 tab 用 `HotkeyPairWidget` 绑定
+3. `config_manager.py` 添加配置读写方法
 
 ## 技术栈
 
-Python 3 · PyQt5 · mss（截图）· keyboard（全局键盘钩子）· 自定义低级鼠标钩子 + RawInput · ctypes/Win32 API
-
-- 版本号唯一来源：`gui/tabs/info_tab.py` 的 `APP_VERSION`
-- 测试：`python -m pytest tests/ -v`
-- 打包：PyInstaller onedir，`config/` 与 `resources/` 外置在 exe 同级
-
----
+Python 3 · PyQt5 · mss · keyboard · RawInput · ctypes/Win32 API · pytest
 
 ## 免责声明
 
-- 本软件为免费工具，不收取任何费用
-- 本地运行，不读取游戏内存，不注入进程，不修改游戏文件
-- 使用者需自行承担使用后果，请遵守游戏用户协议
-- 若遇他人以「代下、安装、指导、内部版」等名义收费，谨防信息差
+本软件免费，不读取游戏内存，不注入进程，不修改游戏文件。使用者需自行承担使用后果，请遵守游戏用户协议。若遇他人以「代下、安装、指导、内部版」等名义收费，谨防信息差。
 
-联系方式 QQ：3117023693（注明来意）
+联系方式 QQ：3117023693

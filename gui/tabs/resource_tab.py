@@ -138,6 +138,9 @@ class ResourceTab(QWidget):
                     reader.setScaledSize(QSize(32, 32))
                     img = reader.read()
                     if not img.isNull():
+                        # 图标缓存上限 300，超过则清空（简单 LRU 替代）
+                        if len(self._icon_cache) >= 300:
+                            self._icon_cache.clear()
                         self._icon_cache[name] = QIcon(QPixmap.fromImage(img))
                         # 更新对应 item 的图标
                         for i in range(self.resource_list.count()):
