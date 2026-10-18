@@ -1,7 +1,40 @@
+# 构建产物
 build/
 dist/
-__pycache__/
-*.pyc
-config/config.json
+*.spec
+
+# 备份（本地快照，不进版本控制）
+backups/
+
+# 日志
+logs/
+*.log
+startup_log.txt
 crash_log.txt
 *.corrupt
+
+# 构建临时输出
+build_err.txt
+build_out.txt
+nuitka_build.log
+nuitka_err.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

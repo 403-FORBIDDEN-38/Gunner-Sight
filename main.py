@@ -1,14 +1,28 @@
+from core.logger import logger
+
 """
-GunnerSight Overlay - 屏幕准星辅助软件
+Gunner Sight - 屏幕准星辅助软件
 主入口文件
 """
 
-import sys
-import atexit
 import os
+import sys
 import time
 import traceback
-from core.win32_utils import shell32
+
+
+# 诊断：测量进程启动到 main.py 执行的时间（PyInstaller bootloader 开销）
+if getattr(sys, 'frozen', False):
+    import ctypes
+    from ctypes import wintypes
+    _kernel32 = ctypes.windll.kernel32
+    _creation_time = wintypes.FILETIME()
+    _kernel32.GetProcessTimes(_kernel32.GetCurrentProcess(), ctypes.byref(_creation_time), None, None, None)
+    _boot_start = (_creation_time.dwHighDateTime << 32) | _creation_time.dwLowDateTime
+    _boot_now = time.time()
+    _boot_start_sec = _boot_start / 10_000_000 - 11644473600
+    _boot_elapsed = _boot_now - _boot_start_sec
+    logger.info(f"[诊断] 进程启动到 main.py 执行: {_boot_elapsed*1000:.0f}ms (PyInstaller bootloader + Python 初始化)")
 
 
 class _LibpngFilter:
@@ -33,53 +47,15 @@ class _LibpngFilter:
 
 sys.stderr = _LibpngFilter(sys.stderr)
 
-# 版本号唯一权威来源（info_tab.py），QApplication 与信息页共享同一值
-from gui.tabs.info_tab import APP_VERSION as _APP_VERSION
-
-# 请求管理员权限（BlockInput / UI 自动化需要）
-def _request_admin():
-    try:
-        if shell32.IsUserAnAdmin():
-            return True
-    except Exception:
-        pass
-    try:
-        # 打包后：直接重新运行当前 exe
-        if getattr(sys, 'frozen', False):
-            exe_path = sys.executable
-            params = " ".join(f'"{a}"' for a in sys.argv[1:]) if len(sys.argv) > 1 else ""
-            work_dir = os.path.dirname(exe_path)
-            ret = shell32.ShellExecuteW(None, "runas", exe_path, params, work_dir, 1)
-        else:
-            # 开发环境：用 python 运行 main.py
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            script_path = os.path.join(script_dir, "main.py")
-            params = f'"{script_path}"'
-            if len(sys.argv) > 1:
-                params += " " + " ".join(f'"{a}"' for a in sys.argv[1:])
-            ret = shell32.ShellExecuteW(None, "runas", sys.executable, params, script_dir, 1)
-        # ShellExecuteW 返回值 <=32 表示失败（含用户拒绝 UAC），给明确提示
-        if ret <= 32:
-            print("[Main] 需要管理员权限才能运行（BlockInput / UI 自动化），用户拒绝或提权失败，程序退出")
-    except Exception as e:
-        print(f"[Main] 提权请求异常: {e}，程序退出")
-    sys.exit(0)
-
-# 优化5: _request_admin移到main()中，避免import时触发提权
 
 # 将项目根目录添加到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QIcon, QFont, QFontDatabase
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QPixmap
+from PyQt5.QtWidgets import QApplication, QSplashScreen
 
-from core.config_manager import ConfigManager, get_app_base_dir
-from core.state_machine import StateMachine
-from core.overlay import OverlayRenderer
-from core.hotkey_manager import HotkeyManager
-from core.resource_manager import ResourceManager
-from gui.main_window import MainWindow
+from core.config_manager import get_app_base_dir
 
 
 def get_app_icon_path():
@@ -135,9 +111,9 @@ def load_custom_fonts(app):
             if families:
                 font_norwester = families[0]
         else:
-            print(f"[Main] Norwester 字体加载失败: {norwester_path}")
+            logger.info(f"[Main] Norwester 字体加载失败: {norwester_path}")
     else:
-        print(f"[Main] Norwester 字体文件不存在: {norwester_path}")
+        logger.info(f"[Main] Norwester 字体文件不存在: {norwester_path}")
 
     # 加载 Noto Sans SC（中文，可变字体）
     noto_path = os.path.join(fonts_dir, 'NotoSansSC-Light.ttf')
@@ -148,47 +124,69 @@ def load_custom_fonts(app):
             if families:
                 font_noto = families[0]
         else:
-            print(f"[Main] Noto Sans SC 字体加载失败: {noto_path}")
+            logger.info(f"[Main] Noto Sans SC 字体加载失败: {noto_path}")
     else:
-        print(f"[Main] Noto Sans SC 字体文件不存在: {noto_path}")
+        logger.info(f"[Main] Noto Sans SC 字体文件不存在: {noto_path}")
 
     if font_norwester or font_noto:
+        # 根源修复：弃用 setFamilies() 回退链（Qt5 对自定义字体+可变字体回退不可靠）。
+        # 改用 insertSubstitution：为 Norwester 注册中文替代字体，
+        # 英文/数字强制走 Norwester，只有中文字符才回退 NotoSansSC。
         font = QFont()
-        families = []
         if font_norwester:
-            families.append(font_norwester)
-        if font_noto:
-            families.append(font_noto)
-        font.setFamilies(families)
-        font.setPointSize(10)
-        font.setStyleStrategy(QFont.PreferDefault)
+            # 主字体用 Norwester
+            font.setFamily(font_norwester)
+            font.setPointSize(10)
+            # 为 Norwester 注册中文替代字体（中文字符自动回退）
+            if font_noto:
+                QFont.insertSubstitution(font_norwester, font_noto)
+            logger.info(f"[Main] 字体设置: 主字体={font_norwester}, 中文替代={font_noto}")
+        else:
+            # Norwester 加载失败时才用 Noto 作为主字体
+            font.setFamily(font_noto)
+            font.setPointSize(10)
+            logger.info(f"[Main] 字体设置: Norwester 不可用，使用 {font_noto}")
         app.setFont(font)
-        app.setFont(font, "QWidget")
-        app.setFont(font, "QMainWindow")
-        app.setFont(font, "QDialog")
         return True
     else:
-        print("[Main] 未加载任何自定义字体，使用系统默认字体")
+        logger.info("[Main] 未加载任何自定义字体，使用系统默认字体")
         return False
 
 
 def main():
-    _request_admin()  # 优化5: 提权移到main入口
     # 控制台输出同时写入文件，窗口闪太快也能在文件里看
     _log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
     _log_file = open(os.path.join(_log_dir, "startup_log.txt"), "w", encoding="utf-8")
     class _Tee:
+        """行缓冲Tee：只在写入包含换行符时flush，减少磁盘IO。
+        性能优化：原实现每次write都flush，控制台输出频繁时（如热键调试日志）
+        会导致大量磁盘IO，影响性能。改为行缓冲后，只有换行时才flush，
+        既保证日志行级完整性，又大幅减少flush次数。"""
         def __init__(self, *files): self.files = [f for f in files if f is not None]
         def write(self, obj):
             for f in self.files:
-                try: f.write(obj); f.flush()
-                except Exception: pass
+                try:
+                    f.write(obj)
+                    f.flush()  # segfault高发期：每次write都flush，保证崩溃前日志落盘
+                except Exception:
+                    # 这里是刻意吞掉：写日志失败绝不能反过来把程序搞崩。
+                    # （吞的是"日志写不出去"，不是"程序出错了"——不掩盖任何 bug）
+                    pass
         def flush(self):
             for f in self.files:
-                try: f.flush()
-                except Exception: pass
+                try:
+                    f.flush()
+                except Exception:
+                    pass  # 同上：日志通道失败不应影响主流程
     sys.stdout = _Tee(sys.stdout, _log_file)
     sys.stderr = _Tee(sys.stderr, _log_file)
+    # 捕获异步回调（QTimer/signal）中的未处理异常，写入 crash_log.txt
+    _ex_log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+    def _excepthook(exc_type, exc_value, exc_tb):
+        with open(os.path.join(_ex_log_dir, "crash_log.txt"), "w", encoding="utf-8") as _f:
+            traceback.print_exception(exc_type, exc_value, exc_tb, file=_f)
+        traceback.print_exception(exc_type, exc_value, exc_tb)
+    sys.excepthook = _excepthook
     try:
         _main()
     except Exception:
@@ -206,14 +204,6 @@ def main():
 
 
 def _main():
-    # 启动时释放任何残留的 BlockInput（上次异常退出可能导致输入锁定）
-    try:
-        from core.win32_utils import user32 as _u
-        _u.BlockInput(False)
-        atexit.register(lambda: _u.BlockInput(False))
-    except Exception:
-        pass
-
     # 抑制 libpng bKGD/iCCP 等警告输出（必须在 QApplication 创建前）
     os.environ["QT_LOGGING_RULES"] = "*.warning=false"
 
@@ -223,38 +213,82 @@ def _main():
 
     _t0 = time.perf_counter()
     app = QApplication(sys.argv)
-    app.setApplicationName("GunnerSight Overlay")
+    app.setApplicationName("GUNNER SIGHT")
+
+    # 启动横幅
+    splash = None
+    _splash_assets = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "assets", "splash")
+    _SCAN_MS = 300.0
+    _full_img = os.path.join(_splash_assets, "full.png")
+    if os.path.exists(_full_img):
+        # 只加载整图，立即显示
+        splash = QSplashScreen(QPixmap(_full_img), Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+        splash.show()
+        app.processEvents()
+
+    # 横幅显示后再导入重型模块，每个import之间processEvents让横幅动画继续
+    from gui.tabs.info_tab import APP_VERSION as _APP_VERSION
+    app.processEvents()
+    from core.config_manager import ConfigManager
+    app.processEvents()
+    from core.hotkey_manager import HotkeyManager
+    app.processEvents()
+    from core.ammo_wheel_selector import AmmoWheelSelector
+    app.processEvents()
+    from core.overlay import OverlayRenderer
+    app.processEvents()
+    from core.resource_manager import ResourceManager
+    app.processEvents()
+    from core.state_machine import StateMachine
+    app.processEvents()
+    from gui.main_window import MainWindow
+    app.processEvents()
+
+    # 根源修复：Fusion style 完全由 Qt 绘制，不调用 Windows 原生 API。
+    # 默认 QWindowsVistaStyle 用 DrawThemeBackground 绘制原生下拉按钮/箭头，
+    # 原生绘制层在 QSS 之上，导致 QComboBox/SpinBox 三角箭头显示为矩形且 QSS 无法覆盖。
+    app.setStyle("Fusion")
+    from gui.wheel_filter import install_no_wheel_filter
+    # 必须用 install_no_wheel_filter 而不是 app.installEventFilter(NoWheelFilter())：
+    # PyQt5 不持有过滤器引用，临时对象会被立即回收，过滤器静默失效
+    install_no_wheel_filter(app)
+    # 根源修复：字体必须在所有控件创建之前加载，否则已创建的控件不会自动继承自定义字体
+    _t_font = time.perf_counter()
+    load_custom_fonts(app)
+    logger.info(f"[性能] 字体加载 耗时={(time.perf_counter()-_t_font)*1000:.0f}ms")
     app.setApplicationVersion(_APP_VERSION.lstrip("V"))  # 版本号唯一权威来源，与信息页一致
     app.setQuitOnLastWindowClosed(False)
-    print(f"[性能] QApplication创建 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
+    logger.info(f"[性能] QApplication创建 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
 
     # 设置应用程序图标（窗口左上角、任务栏等）
+    _t_icon = time.perf_counter()
     icon_path = get_app_icon_path()
     if icon_path:
         app.setWindowIcon(QIcon(icon_path))
     else:
-        print("[Main] 未找到应用程序图标文件")
+        logger.info("[Main] 未找到应用程序图标文件")
+    logger.info(f"[性能] 图标加载 耗时={(time.perf_counter()-_t_icon)*1000:.0f}ms")
 
     # 初始化各模块
     _t1 = time.perf_counter()
     config = ConfigManager()
-    print(f"[性能] ConfigManager初始化 耗时={(time.perf_counter()-_t1)*1000:.0f}ms")
+    logger.info(f"[性能] ConfigManager初始化 耗时={(time.perf_counter()-_t1)*1000:.0f}ms")
 
     _t2 = time.perf_counter()
     state = StateMachine(config)
-    print(f"[性能] StateMachine初始化 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
+    logger.info(f"[性能] StateMachine初始化 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
 
     _t3 = time.perf_counter()
     resources = ResourceManager()
-    print(f"[性能] ResourceManager初始化 耗时={(time.perf_counter()-_t3)*1000:.0f}ms")
+    logger.info(f"[性能] ResourceManager初始化 耗时={(time.perf_counter()-_t3)*1000:.0f}ms")
 
     _t4 = time.perf_counter()
     overlay = OverlayRenderer(config, state)
-    print(f"[性能] OverlayRenderer初始化 耗时={(time.perf_counter()-_t4)*1000:.0f}ms")
+    logger.info(f"[性能] OverlayRenderer初始化 耗时={(time.perf_counter()-_t4)*1000:.0f}ms")
 
     _t5 = time.perf_counter()
     hotkey = HotkeyManager(config, state)
-    print(f"[性能] HotkeyManager初始化 耗时={(time.perf_counter()-_t5)*1000:.0f}ms")
+    logger.info(f"[性能] HotkeyManager初始化 耗时={(time.perf_counter()-_t5)*1000:.0f}ms")
 
     # 如果有默认载具，设置当前状态
     vehicles = config.get_vehicle_names()
@@ -264,30 +298,136 @@ def _main():
     # 创建主窗口
     _t6 = time.perf_counter()
     window = MainWindow(config, state, overlay, hotkey, resources)
-    print(f"[性能] MainWindow创建(UI创建) 耗时={(time.perf_counter()-_t6)*1000:.0f}ms")
+    logger.info(f"[性能] MainWindow创建(UI创建) 耗时={(time.perf_counter()-_t6)*1000:.0f}ms")
 
     _t7 = time.perf_counter()
     window.show()
-    print(f"[性能] 主窗口显示 耗时={(time.perf_counter()-_t7)*1000:.0f}ms")
-    print(f"[性能] 启动总耗时(不含字体)={(time.perf_counter()-_t0)*1000:.0f}ms")
+    logger.info(f"[性能] 主窗口显示 耗时={(time.perf_counter()-_t7)*1000:.0f}ms")
+    logger.info(f"[性能] 启动总耗时(不含字体)={(time.perf_counter()-_t0)*1000:.0f}ms")
 
     # P1: 分阶段异步创建
-    # 阶段2a: UI框架（顶栏+导航+tab_stack+完整QSS+信号连接）
+    # 阶段2a: UI框架（顶栏+导航+tab_stack+信号连接）
     QTimer.singleShot(0, window._create_ui_frame)
     # 阶段2b: 第一个tab（OverviewTab+数据刷新）
     QTimer.singleShot(0, window._create_first_tab)
     # 阶段2c: 后台任务（延迟100ms，用户无感知）
     def _background_tasks():
         _bt = time.perf_counter()
-        load_custom_fonts(app)
-        print(f"[性能] 字体加载 耗时={(time.perf_counter()-_bt)*1000:.0f}ms")
-        window._ensure_tab(3).refresh()  # RangefinderTab（数显热键需要）
+        # 字体已在 QApplication 创建后立即加载（见上方），此处不再重复
         hotkey.initialize()
-        print(f"[性能] 热键注册 耗时={(time.perf_counter()-_bt)*1000:.0f}ms")
-        overlay._ensure_overlay()
+        logger.info(f"[性能] 热键注册 耗时={(time.perf_counter()-_bt)*1000:.0f}ms")
+        # 滚轮切换弹种模块（保存到 window 避免被 GC）
+        window.ammo_wheel = AmmoWheelSelector(state, config)
+        hotkey.pause1_triggered.connect(window.ammo_wheel.on_suspend_key1)
+        hotkey.pause2_triggered.connect(window.ammo_wheel.on_suspend_key2)
+        # 弹种热键命令 → 结束预选列表。必须额外接这一路：选中的就是当前弹种时
+        # state.ammo_type_changed 不发信号，只看状态变化会漏掉这次选择命令
+        hotkey.ammo_switch_triggered.connect(window.ammo_wheel.on_ammo_hotkey)
+        window.ammo_wheel.start()
+        # 暂离 → 准星不透明度降一半
+        def _on_suspend_changed(suspended):
+            try:
+                overlay.set_suspended(suspended)
+            except Exception as e:
+                logger.info(f"[Main] set_suspended failed: {e}")
+        window.ammo_wheel.suspend_changed.connect(_on_suspend_changed)
+        # 标定测距：暂离中激活，游戏中暂停
+        def _on_suspend_for_distance(suspended):
+            hotkey.set_distance_meter_active(suspended)
+            try:
+                tab = window.get_tab(window.TAB_DISTANCE_METER)
+                if tab is not None:
+                    tab.set_function_active(suspended)
+            except Exception as e:
+                logger.info(f"[Main] distance meter suspend sync failed: {e}")
+        window.ammo_wheel.suspend_changed.connect(_on_suspend_for_distance)
+        # 隐藏准星 → 连带隐藏滚轮模块
+        def _on_overlay_visible_changed(visible):
+            try:
+                if hasattr(window, 'ammo_wheel') and window.ammo_wheel:
+                    if visible:
+                        window.ammo_wheel.show_all()
+                    else:
+                        window.ammo_wheel.hide_all()
+            except Exception as e:
+                logger.info(f"[Main] ammo_wheel visibility sync failed: {e}")
+        state.overlay_toggled.connect(_on_overlay_visible_changed)
+        # 放大镜热键（tab 由 MainWindow._create_first_tab 在电闸开启时预创建）
+
+        def _mag(action):
+            """放大镜热键分发：只操作**已创建**的tab，不触发懒加载。
+
+            电闸关闭时 tab 不存在，热键直接不响应（空房子：模块未加载即无行为）。
+            """
+            tab = window.get_tab(window.TAB_MAGNIFIER)
+            if tab is None:
+                return
+            getattr(tab, action)()
+
+        hotkey.magnifier_toggle_triggered.connect(lambda: _mag("toggle"))
+        hotkey.magnifier_zoom_in_triggered.connect(lambda: _mag("zoom_in"))
+        hotkey.magnifier_zoom_out_triggered.connect(lambda: _mag("zoom_out"))
+        hotkey.magnifier_breath_hold_triggered.connect(lambda: _mag("breath_hold"))
+        # 暂离：只控制放大镜可视性
+        def _on_suspend_magnifier(suspended):
+            try:
+                tab = window.get_tab(window.TAB_MAGNIFIER)
+                if tab:
+                    tab.set_suspended(suspended)
+            except Exception:
+                pass
+        window.ammo_wheel.suspend_changed.connect(_on_suspend_magnifier)
+        # 暂离：角度仪停止读取鼠标增量
+        def _on_suspend_angle(suspended):
+            try:
+                tab = window.get_tab(window.TAB_ANGLE_METER)
+                if tab:
+                    tab.set_suspended(suspended)
+            except Exception:
+                pass
+        window.ammo_wheel.suspend_changed.connect(_on_suspend_angle)
+        # Overlay创建（带诊断日志，便于定位Nuitka下问题）
+        logger.info("[Overlay] 开始创建透明叠加窗口...")
+        try:
+            overlay._ensure_overlay()
+            logger.info("[Overlay] 透明叠加窗口创建成功")
+        except Exception as e:
+            logger.info(f"[Overlay] 创建失败(已捕获): {e}")
+            import traceback; traceback.print_exc()
+        # 所有初始化完成：从右向左扫描消失（延迟100ms再开始）
+        if splash:
+            frames = sorted(f for f in os.listdir(_splash_assets) if f.endswith(".png") and f != "full.png")
+            if frames:
+                _scan_idx = [0]
+                def _scan_step():
+                    if _scan_idx[0] >= len(frames):
+                        _scan_timer.stop()
+                        splash.close()
+                        return
+                    splash.setPixmap(QPixmap(os.path.join(_splash_assets, frames[_scan_idx[0]])))
+                    splash.update()
+                    _scan_idx[0] += 1
+                _scan_timer = QTimer(splash)
+                _scan_timer.timeout.connect(_scan_step)
+                QTimer.singleShot(100, lambda: _scan_timer.start(int(_SCAN_MS / len(frames))))
+            else:
+                splash.close()
     QTimer.singleShot(100, _background_tasks)
 
-    # 运行
+    # 退出兜底清理放大镜线程。
+    # 正常关闭走 MainWindow.closeEvent（同样只清理已创建的tab）；
+    # 这里是 closeEvent 未执行时的兜底，因此必须用无副作用的 get_tab()：
+    # 原实现访问 window.magnifier_tab（懒加载属性），会在退出时现场新建整个
+    # 放大镜tab（此时 tab_stack 已 deleteLater），是纯粹的浪费与隐患。
+    def _cleanup():
+        try:
+            tab = window.get_tab(window.TAB_MAGNIFIER)
+            if tab is not None:
+                tab.cleanup()
+        except Exception as e:
+            logger.warning(f"[Main] 退出清理放大镜失败: {e}")
+    app.aboutToQuit.connect(_cleanup)
+
     sys.exit(app.exec_())
 
 

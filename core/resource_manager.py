@@ -1,3 +1,5 @@
+from core.logger import logger
+
 """
 资源管理模块 (Resource Manager)
 
@@ -7,7 +9,6 @@
 
 import shutil
 from pathlib import Path
-from typing import List, Optional
 
 from core.config_manager import get_app_base_dir
 
@@ -15,19 +16,24 @@ from core.config_manager import get_app_base_dir
 class ResourceManager:
     """资源管理器 - 管理所有准星图片资源"""
 
-    def __init__(self, resources_dir: str = None):
+    def __init__(self, resources_dir: str | None = None):
         if resources_dir:
             self.resources_dir = Path(resources_dir)
         else:
             self.resources_dir = get_app_base_dir() / "resources"
         self.resources_dir.mkdir(parents=True, exist_ok=True)
+        self._resources_cache = None  # 资源列表缓存，None表示需要重新扫描
 
     def get_resources_dir(self) -> Path:
         return self.resources_dir
 
-    def list_resources(self) -> List[str]:
-        """列出所有资源文件名（递归扫描子文件夹，返回相对路径）"""
+    def list_resources(self) -> list[str]:
+        """列出所有资源文件名（递归扫描子文件夹，返回相对路径）。
+        性能优化：带缓存，资源目录变化时（import/remove/rename）才重新扫描。"""
+        if self._resources_cache is not None:
+            return self._resources_cache
         if not self.resources_dir.exists():
+            self._resources_cache = []
             return []
         extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}
         result = []
@@ -37,77 +43,55 @@ class ResourceManager:
                 # 排除 assets/ 目录（mascot/fonts 等内部资源，不进资源库）
                 if rel.parts and rel.parts[0] == "assets":
                     continue
-                result.append(str(rel))
-        return sorted(result)
+                result.append(str(rel).replace("\\", "/"))
+        self._resources_cache = sorted(result)
+        return self._resources_cache
 
-    def get_resource_path(self, filename: str) -> Optional[str]:
+    def _invalidate_resources_cache(self):
+        """清除资源列表缓存（资源目录变化时调用）"""
+        self._resources_cache = None
+
+    def get_resource_path(self, filename: str) -> str | None:
         """获取资源文件的完整路径"""
         path = self.resources_dir / filename
         if path.exists():
             return str(path)
         return None
 
-    def import_resource(self, source_path: str, new_name: str = None) -> Optional[str]:
+    def import_resource(self, source_path: str, new_name: str | None = None) -> str | None:
         """
         导入资源文件到资源目录。
-        若资源库中已存在内容完全相同的图片，直接复用，不创建副本。
+        - 若源文件已在资源目录内，直接返回其相对路径（尊重用户选择的具体文件）
+        - 若从外部导入，复制到资源根目录，同名直接覆盖
         """
         try:
-            source = Path(source_path)
+            source = Path(source_path).resolve()
             if not source.exists() or not source.is_file():
                 return None
             if source.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}:
                 return None
 
-            # 先比较文件大小快速排除，大小相同才计算 MD5（避免不必要的全文件读取）
-            source_size = source.stat().st_size
-            source_hash = self._file_md5(source)
-            for existing in self.resources_dir.rglob("*"):
-                if not (existing.is_file() and existing.suffix.lower() in
-                        {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'}):
-                    continue
-                if existing.stat().st_size != source_size:
-                    continue
-                if self._file_md5(existing) == source_hash:
-                    return existing.name
+            # 已在资源目录内 → 直接返回相对路径
+            # 注意：self.resources_dir 也要 resolve，否则 Windows 上路径格式不一致会导致 relative_to 失败
+            resources_dir = self.resources_dir.resolve()
+            try:
+                return source.relative_to(resources_dir).as_posix()
+            except ValueError:
+                logger.info(f"[import_resource] source不在资源目录内: source={source}, resources_dir={resources_dir}")
+                pass  # 不在资源目录内，继续外部导入
 
-            # 确定目标文件名
-            if new_name:
-                dest_name = new_name
-                if not Path(dest_name).suffix:
-                    dest_name += source.suffix
-            else:
-                dest_name = source.name
-
+            # 外部导入 → 复制到资源根目录，同名覆盖
+            dest_name = new_name if new_name else source.name
+            if not Path(dest_name).suffix:
+                dest_name += source.suffix
             dest = self.resources_dir / dest_name
-
-            # 处理重名文件（仅文件名重名但内容不同时才加后缀）
-            if dest.exists():
-                stem = Path(dest_name).stem
-                suffix = Path(dest_name).suffix
-                counter = 1
-                while True:
-                    dest = self.resources_dir / f"{stem}_{counter}{suffix}"
-                    if not dest.exists():
-                        break
-                    counter += 1
-
             shutil.copy2(source, dest)
-            return dest.name
+            self._invalidate_resources_cache()
+            return dest.relative_to(self.resources_dir).as_posix()
 
         except Exception as e:
-            print(f"导入资源失败: {e}")
+            logger.info(f"导入资源失败: {e}")
             return None
-
-    @staticmethod
-    def _file_md5(filepath: Path, chunk_size: int = 8192) -> str:
-        """计算文件 MD5 哈希"""
-        import hashlib
-        h = hashlib.md5()
-        with open(filepath, 'rb') as f:
-            while chunk := f.read(chunk_size):
-                h.update(chunk)
-        return h.hexdigest()
 
     def remove_resource(self, filename: str) -> bool:
         """删除资源文件"""
@@ -115,10 +99,11 @@ class ResourceManager:
             path = self.resources_dir / filename
             if path.exists():
                 path.unlink()
+                self._invalidate_resources_cache()
                 return True
             return False
         except Exception as e:
-            print(f"删除资源失败: {e}")
+            logger.info(f"删除资源失败: {e}")
             return False
 
     def rename_resource(self, old_name: str, new_name: str) -> bool:
@@ -133,7 +118,8 @@ class ResourceManager:
             if new_path.exists():
                 return False
             old_path.rename(new_path)
+            self._invalidate_resources_cache()
             return True
         except Exception as e:
-            print(f"重命名资源失败: {e}")
+            logger.info(f"重命名资源失败: {e}")
             return False

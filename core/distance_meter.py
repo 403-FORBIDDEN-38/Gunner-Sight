@@ -1,13 +1,15 @@
+from core.logger import logger
+
 """距离测算模块 - 逻辑层
 基于地图比例尺标定，测量任意两点间游戏内距离。
 状态机: DISABLED -> ENABLED_UNCALIBRATED -> CALIBRATING_WAIT_B -> CALIBRATED -> MEASURING_WAIT_D
 并入GS主程序，配置通过ConfigManager管理。
 """
+import ctypes
+from ctypes import wintypes
 from enum import Enum
-from typing import Optional, Tuple
 
 from core.win32_utils import user32
-import ctypes
 
 
 class DistanceState(Enum):
@@ -21,28 +23,28 @@ class DistanceState(Enum):
 # 比例尺预设列表（组合键+记录键循环切换，小到大：33→100→300→900→33）
 SCALE_PRESETS = [33, 100, 300, 900]
 
+from core.colors import (DISTANCE_DISABLED, DISTANCE_UNCALIBRATED, DISTANCE_CALIBRATING,
+                         DISTANCE_CALIBRATED, DISTANCE_MEASURING, OVERLAY_TEXT)
+
 # 状态颜色映射（悬浮窗口文本颜色）
 STATUS_COLORS = {
-    DistanceState.DISABLED: "#888888",           # 灰色：未启用
-    DistanceState.ENABLED_UNCALIBRATED: "#ff4444",  # 红色：未标定
-    DistanceState.CALIBRATING_WAIT_B: "#ffaa00",    # 橙色：标定中
-    DistanceState.CALIBRATED: "#00ff88",            # 绿色：已标定/测距完成
-    DistanceState.MEASURING_WAIT_D: "#00aaff",      # 青色：测距中
+    DistanceState.DISABLED: DISTANCE_DISABLED,
+    DistanceState.ENABLED_UNCALIBRATED: DISTANCE_UNCALIBRATED,
+    DistanceState.CALIBRATING_WAIT_B: DISTANCE_CALIBRATING,
+    DistanceState.CALIBRATED: DISTANCE_CALIBRATED,
+    DistanceState.MEASURING_WAIT_D: DISTANCE_MEASURING,
 }
 
 
-class _POINT(ctypes.Structure):
-    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-
-
-def get_cursor_pos() -> Tuple[int, int]:
-    """获取鼠标当前屏幕坐标"""
-    pt = _POINT()
+def get_cursor_pos() -> tuple[int, int]:
+    """获取鼠标当前屏幕坐标。必须用 wintypes.POINT，与 win32_utils 里 GetCursorPos 的 argtypes 一致，
+    否则 Nuitka 下类型不匹配会原生崩溃。"""
+    pt = wintypes.POINT()
     user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
 
-def pixel_distance(p1: Tuple[int, int], p2: Tuple[int, int]) -> float:
+def pixel_distance(p1: tuple[int, int], p2: tuple[int, int]) -> float:
     """两点间像素距离（欧几里得）"""
     return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
 
@@ -58,12 +60,12 @@ class DistanceMeter:
         """config: ConfigManager实例"""
         self._cfg = config
         self._state = DistanceState.DISABLED
-        self._calib_point_a: Optional[Tuple[int, int]] = None
-        self._measure_point_c: Optional[Tuple[int, int]] = None
-        self._last_measure_point_1: Optional[Tuple[int, int]] = None
-        self._last_result: Optional[float] = None
+        self._calib_point_a: tuple[int, int] | None = None
+        self._measure_point_c: tuple[int, int] | None = None
+        self._last_measure_point_1: tuple[int, int] | None = None
+        self._last_result: float | None = None
         self._status_callback = None
-        self._flow_active = False  # 第二层状态：流程启用（热键控制，不存config）
+        self._flow_active = False  # 暂离中才激活
 
     # === 状态查询 ===
     @property
@@ -89,17 +91,17 @@ class DistanceMeter:
     def set_flow_active(self, active: bool):
         self._flow_active = active
         if active:
-            # 进入流程：根据标定状态设置state
+            # 进入暂离：清除上次测距数据，按标定状态设置
+            self._measure_point_c = None
+            self._calib_point_a = None
             if self.calibrated:
                 self._state = DistanceState.CALIBRATED
             else:
                 self._state = DistanceState.ENABLED_UNCALIBRATED
             self._notify("流程已启用")
         else:
-            # 待机：不清理标定数据，只改state
+            # 回到游戏：显示暂离，保留测距数据
             self._state = DistanceState.DISABLED
-            self._calib_point_a = None
-            self._measure_point_c = None
             self._notify("已待机")
 
     def get_status_text(self) -> str:
@@ -109,15 +111,15 @@ class DistanceMeter:
         if self._state == DistanceState.DISABLED:
             return "待机 | 按启用热键开始"
         elif self._state == DistanceState.ENABLED_UNCALIBRATED:
-            return f"{scale_str} | 未标定 | 请按记录热键标定第1点"
+            return f"{scale_str} | 未标定 | 请按标定热键标定第1点"
         elif self._state == DistanceState.CALIBRATING_WAIT_B:
-            return f"{scale_str} | 标定中 | 请按记录热键标定第2点"
+            return f"{scale_str} | 标定中 | 请按标定热键标定第2点"
         elif self._state == DistanceState.CALIBRATED:
             if self._last_result is not None:
                 return f"{scale_str} | 已标定 | 距离：{self._last_result:.1f}m"
-            return f"{scale_str} | 已标定 | 请按测算热键测距第1点"
+            return f"{scale_str} | 已标定 | 请按测距热键测距第1点"
         elif self._state == DistanceState.MEASURING_WAIT_D:
-            return f"{scale_str} | 测距中 | 请按测算热键测距第2点"
+            return f"{scale_str} | 测距中 | 请按测距热键测距第2点"
         return f"{scale_str} | 未知状态"
 
     def get_status_parts(self) -> dict:
@@ -128,30 +130,30 @@ class DistanceMeter:
         # 待机状态（流程未启用）：记录/测算不响应
         if not self._flow_active:
             scale_str = f"{scale:.0f}m" if scale > 0 else "?"
-            return {"scale": scale_str, "state_word": "待机", "state_color": "#888888",
-                    "hint": "按启用热键开始", "result": None, "result_color": "#ffffff"}
+            return {"scale": scale_str, "state_word": "待机", "state_color": DISTANCE_DISABLED,
+                    "hint": "按启用热键开始", "result": None, "result_color": OVERLAY_TEXT}
         scale_str = f"{scale:.0f}m" if scale > 0 else "?"
         color = self.get_status_color()
         if self._state == DistanceState.DISABLED:
             return {"scale": scale_str, "state_word": "未启用", "state_color": color,
-                    "hint": "请按启用热键", "result": None, "result_color": "#ffffff"}
+                    "hint": "请按启用热键", "result": None, "result_color": OVERLAY_TEXT}
         elif self._state == DistanceState.ENABLED_UNCALIBRATED:
             return {"scale": scale_str, "state_word": "未标定", "state_color": color,
-                    "hint": "请按记录热键标定第1点", "result": None, "result_color": "#ffffff"}
+                    "hint": "请按标定热键标定第1点", "result": None, "result_color": OVERLAY_TEXT}
         elif self._state == DistanceState.CALIBRATING_WAIT_B:
             return {"scale": scale_str, "state_word": "标定中", "state_color": color,
-                    "hint": "请按记录热键标定第2点", "result": None, "result_color": "#ffffff"}
+                    "hint": "请按标定热键标定第2点", "result": None, "result_color": OVERLAY_TEXT}
         elif self._state == DistanceState.CALIBRATED:
             if self._last_result is not None:
                 return {"scale": scale_str, "state_word": "已标定", "state_color": color,
-                        "hint": None, "result": f"距离：{self._last_result:.1f}m", "result_color": "#00ff88"}
+                        "hint": None, "result": f"距离：{self._last_result:.1f}m", "result_color": DISTANCE_CALIBRATED}
             return {"scale": scale_str, "state_word": "已标定", "state_color": color,
-                    "hint": "请按测算热键测距第1点", "result": None, "result_color": "#ffffff"}
+                    "hint": "请按测距热键测距第1点", "result": None, "result_color": OVERLAY_TEXT}
         elif self._state == DistanceState.MEASURING_WAIT_D:
             return {"scale": scale_str, "state_word": "测距中", "state_color": color,
-                    "hint": "请按测算热键测距第2点", "result": None, "result_color": "#ffffff"}
+                    "hint": "请按测距热键测距第2点", "result": None, "result_color": OVERLAY_TEXT}
         return {"scale": scale_str, "state_word": "未知", "state_color": color,
-                "hint": "", "result": None, "result_color": "#ffffff"}
+                "hint": "", "result": None, "result_color": OVERLAY_TEXT}
 
     @property
     def scale_meters(self) -> float:
@@ -162,11 +164,11 @@ class DistanceMeter:
         return self._cfg.get_distance_meter_calibration()["pixels_per_meter"]
 
     @property
-    def last_result(self) -> Optional[float]:
+    def last_result(self) -> float | None:
         return self._last_result
 
     @property
-    def overlay_position(self) -> Tuple[int, int]:
+    def overlay_position(self) -> tuple[int, int]:
         return self._cfg.get_distance_meter_overlay_offset()
 
     def get_config(self) -> dict:
@@ -181,7 +183,7 @@ class DistanceMeter:
             try:
                 self._status_callback(self._state, message)
             except Exception as e:
-                print(f"[DistanceMeter] 状态回调异常: {e}")
+                logger.info(f"[DistanceMeter] 状态回调异常: {e}")
 
     # === 配置设置 ===
     def set_scale_meters(self, meters: float):
@@ -220,47 +222,77 @@ class DistanceMeter:
 
     def get_status_color(self) -> str:
         """获取当前状态对应的悬浮窗口文本颜色"""
-        return STATUS_COLORS.get(self._state, "#ffffff")
+        return STATUS_COLORS.get(self._state, OVERLAY_TEXT)
 
     def set_hotkey(self, name: str, key: str):
         """设置热键: toggle/record/measure/modifier"""
         self._cfg.set_distance_meter_hotkey(name, key)
 
+    # 键名 -> 虚拟键码（用于全局组合键检测）
+    _COMBO_VK_MAP = {
+        "ctrl": 0x11, "alt": 0x12, "shift": 0x10, "win": 0x5B,
+        "mouse_left": 0x01, "mouse_right": 0x02, "mouse_middle": 0x04,
+        "mouse_xbutton1": 0x05, "mouse_xbutton2": 0x06,
+    }
+
+    def _resolve_combo_vk(self, key_name):
+        """键名 -> 虚拟键码。支持修饰键、鼠标键、字母键、数字键、功能键。"""
+        if not key_name:
+            return None
+        key_lower = key_name.lower().strip()
+        vk = self._COMBO_VK_MAP.get(key_lower)
+        if vk is not None:
+            return vk
+        # 单字符字母/数字键
+        if len(key_lower) == 1:
+            return ord(key_lower.upper())
+        # 功能键 F1-F12
+        if key_lower.startswith("f") and key_lower[1:].isdigit():
+            fnum = int(key_lower[1:])
+            if 1 <= fnum <= 12:
+                return 0x70 + fnum - 1
+        # 其他常见键
+        other_map = {"space": 0x20, "enter": 0x0D, "esc": 0x1B, "tab": 0x09,
+                     "backspace": 0x08, "delete": 0x2E, "insert": 0x2D,
+                     "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
+                     "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+                     "capslock": 0x14, "numlock": 0x90, "scrolllock": 0x91}
+        return other_map.get(key_lower)
+
     def is_modifier_pressed(self) -> bool:
-        """检测组合键是否按下（key1和key2任一按下即返回True）"""
-        modifiers = self._cfg.get_distance_meter_modifiers()
-        if not modifiers:
+        """检测全局组合键是否按下（在热键绑定页统一设置）。
+        未设置组合键时返回 False（组合功能不触发）。
+        同时检查 key1 和 key2，任一按下即返回 True。"""
+        combo = self._cfg.get_hotkey("global_combo")
+        keys = [combo.get("key1", ""), combo.get("key2", "")]
+        has_any = any(k for k in keys)
+        if not has_any:
+            logger.info("[distance_meter] is_modifier_pressed: global_combo NOT configured (key1/key2 both empty)")
             return False
-        try:
-            import keyboard
-            return any(keyboard.is_pressed(k) for k in modifiers)
-        except Exception:
-            return False
+        for key_name in keys:
+            if not key_name:
+                continue
+            vk = self._resolve_combo_vk(key_name)
+            if vk is None:
+                logger.info(f"[distance_meter] is_modifier_pressed: unknown key '{key_name}', vk=None")
+                continue
+            state = user32.GetAsyncKeyState(vk)
+            pressed = bool(state & 0x8000)
+            logger.info(f"[distance_meter] is_modifier_pressed: key='{key_name}' vk=0x{vk:02X} GetAsyncKeyState=0x{state & 0xFFFF:04X} pressed={pressed}")
+            if pressed:
+                return True
+        return False
 
     def set_overlay_position(self, x: int, y: int):
         self._cfg.set_distance_meter_overlay_offset(int(x), int(y))
 
     # === 核心操作 ===
     def toggle(self) -> bool:
-        """切换流程启用状态（第二层状态，热键控制）。不碰模块开启状态，不销毁meter。"""
-        self._flow_active = not self._flow_active
-        if self._flow_active:
-            # 进入流程：根据标定状态设置state
-            if self.calibrated:
-                self._state = DistanceState.CALIBRATED
-            else:
-                self._state = DistanceState.ENABLED_UNCALIBRATED
-            self._notify("流程已启用")
-        else:
-            # 待机：不清理标定数据，只改state
-            self._state = DistanceState.DISABLED
-            self._calib_point_a = None
-            self._measure_point_c = None
-            self._notify("已待机")
+        """兼容接口：暂离控制在set_flow_active中处理"""
         return self._flow_active
 
-    def record_point(self) -> Optional[str]:
-        """记录热键：第1次记比例尺点A，第2次记点B并完成标定。
+    def record_point(self) -> str | None:
+        """标定热键：第1次记比例尺点A，第2次记点B并完成标定。
         返回状态消息，待机或非标定状态返回None。
         """
         if not self._flow_active:
@@ -279,7 +311,7 @@ class DistanceMeter:
                 self._last_result = None
             self._calib_point_a = pos
             self._state = DistanceState.CALIBRATING_WAIT_B
-            self._notify(f"标定中：点A已记录({pos[0]},{pos[1]})，请移到比例尺另一端按记录热键")
+            self._notify(f"标定中：点A已记录({pos[0]},{pos[1]})，请移到比例尺另一端按标定热键")
             return "calibrating"
 
         elif self._state == DistanceState.CALIBRATING_WAIT_B:
@@ -316,8 +348,8 @@ class DistanceMeter:
 
         return None
 
-    def measure_point(self) -> Optional[str]:
-        """测算热键：第1次记目标点C，第2次记点D并显示测距结果。
+    def measure_point(self) -> str | None:
+        """测距热键：第1次记目标点C，第2次记点D并显示测距结果。
         返回状态消息，待机或未标定返回None。
         """
         if not self._flow_active:
@@ -339,7 +371,7 @@ class DistanceMeter:
             # 第1次：记录点C
             self._measure_point_c = pos
             self._state = DistanceState.MEASURING_WAIT_D
-            self._notify(f"测距中：点C已记录({pos[0]},{pos[1]})，请移到目标另一端按测算热键")
+            self._notify(f"测距中：点C已记录({pos[0]},{pos[1]})，请移到目标另一端按测距热键")
             return "measuring"
 
         elif self._state == DistanceState.MEASURING_WAIT_D:
@@ -364,7 +396,7 @@ class DistanceMeter:
 
         return None
 
-    def quick_measure(self) -> Optional[str]:
+    def quick_measure(self) -> str | None:
         """组合键+测距键：沿用上一次测距点1，当前鼠标位置为点2，直接计算距离。
         不更新last_measure_point_1（支持连续环测）。
         返回状态消息，待机/未标定/无历史点1返回None或提示。
@@ -378,7 +410,7 @@ class DistanceMeter:
         if self._state == DistanceState.CALIBRATING_WAIT_B:
             self._notify("标定中，请先完成标定")
             return "interrupted"
-        # BUG-11: 测距途中不打断（与record_point保持一致）
+        # 测距途中不打断（与record_point保持一致）
         if self._state == DistanceState.MEASURING_WAIT_D:
             self._notify("测距中，请先完成测距")
             return "interrupted"
@@ -403,5 +435,5 @@ class DistanceMeter:
         return "quick_measured"
 
     @property
-    def last_measure_point_1(self) -> Optional[Tuple[int, int]]:
+    def last_measure_point_1(self) -> tuple[int, int] | None:
         return self._last_measure_point_1

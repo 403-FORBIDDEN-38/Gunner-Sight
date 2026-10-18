@@ -1,0 +1,42 @@
+[project]
+name = "gunnersight"
+version = "0.0140300174"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
+description = "Squad vehicle reticle overlay tool"
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt5>=5.15.11,<5.16",  # 和用户原环境 5.15.11 对齐
+    "pyqt5-qt5>=5.15.2,<5.15.14",  # 阿里云镜像 5.15.14+ 无 Windows wheel，上限写死
+    "Pillow>=9.0,<11.0",
+    "keyboard>=0.13,<1.0",
+    "loguru>=0.7,<1.0",
+    "mss>=9.0,<10.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",  # line too long - handled by formatter
+    "B008",  # function call in default argument - Qt patterns
+    "E702",  # multiple statements on one line (semicolon) - project style: lazy imports
+    "E701",  # multiple statements on one line (colon) - project style
+    "E402",  # module import not at top - project style: conditional/lazy imports
+    "SIM105",  # suppressible exception - cleanup paths intentionally swallow exceptions
+    "SIM102",  # collapsible-if - style preference
+    "SIM108",  # ternary-style - style preference
+    "UP031",   # printf-style formatting - project style
+    "B007",    # unused loop control - `for _ in range()` pattern
+    "SIM115",  # open without context - startup_log needs persistent handle
+    "I001",    # import sorting - lazy imports inside functions are project style
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E", "F"]
+"core/win32_utils.py" = ["F403", "F405"]  # ctypes wildcard imports
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

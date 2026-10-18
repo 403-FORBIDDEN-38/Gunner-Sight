@@ -1,3 +1,5 @@
+from core.logger import logger
+
 """
 吉祥物控件：单图Q弹缩放 + 拖动 + 点击信号。
 只用M38.png一张图，QPropertyAnimation动画char_label.geometry实现Q弹。
@@ -5,12 +7,12 @@ SCALE_X=1.12 / SCALE_Y=0.80，底边中心固定，220ms cubic-bezier(.34,1.56,.
 事件由widget自身处理，char_label设WA_TransparentForMouseEvents穿透。
 """
 import os
-from PyQt5.QtCore import (
-    Qt, QPoint, QPropertyAnimation, QEasingCurve, QRect, pyqtSignal
-)
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtWidgets import QWidget, QLabel
+from gui.mascot.paths import get_mascot_dir
+import time
 
+from PyQt5.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, Qt, pyqtSignal
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import QLabel, QWidget
 
 # 资源文件名常量
 CHAR_IMAGE = "M38.png"
@@ -53,7 +55,7 @@ class MascotWidget(QWidget):
 
     def __init__(self, resources_dir: str, parent=None):
         super().__init__(parent)
-        self.mascot_dir = os.path.join(resources_dir, "assets/mascot")
+        self.mascot_dir = get_mascot_dir(resources_dir)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setFixedSize(self.CHAR_SIZE + 20, self.CHAR_SIZE)
         self.setCursor(Qt.OpenHandCursor)
@@ -97,7 +99,7 @@ class MascotWidget(QWidget):
             qimg = QImage(data, self.CHAR_SIZE, self.CHAR_SIZE, self.CHAR_SIZE * 4, QImage.Format_RGBA8888)
             return QPixmap.fromImage(qimg)
         except Exception as e:
-            print(f"[mascot] 加载图片失败 {filepath}: {e}")
+            logger.info(f"[mascot] 加载图片失败 {filepath}: {e}")
             return QPixmap()
 
     def _squished_label_geometry(self, scale_x: float, scale_y: float) -> QRect:
@@ -126,7 +128,11 @@ class MascotWidget(QWidget):
             self._drag_offset = event.pos()
             self.grabMouse()
             self.setCursor(Qt.ClosedHandCursor)
-            self._animate_to(self.SCALE_X_PRESS, self.SCALE_Y_PRESS)
+            # 根源优化：高频点击时动画不频繁重启。如果距离上次按压 < 100ms，保持当前动画状态。
+            now = time.monotonic() * 1000
+            if not hasattr(self, '_last_press_time') or now - self._last_press_time >= 100:
+                self._animate_to(self.SCALE_X_PRESS, self.SCALE_Y_PRESS)
+            self._last_press_time = now
             self.pressed.emit()
 
     def mouseMoveEvent(self, event):

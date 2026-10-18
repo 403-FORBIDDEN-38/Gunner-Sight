@@ -1,11 +1,7 @@
-import json
-import os
-import sys
-import threading
-from pathlib import Path
-from typing import Dict, List, Optional
 
-from core.config.base import _default_angle_meter_segment, _default_angle_meter_profile
+from core.config.base import _default_angle_meter_profile, _default_angle_meter_segment
+from core.firing_table import query_distance as _ft_query_distance
+
 
 class ConfigAngleMeterMixin:
     """angle_meter 配置管理 mixin"""
@@ -27,19 +23,29 @@ class ConfigAngleMeterMixin:
         self._config.setdefault("angle_meter", {})["enabled"] = enabled
         self.request_save()
 
+    def get_angle_meter_overlay_pos(self) -> tuple:
+        d = self._config.get("angle_meter", {})
+        return d.get("overlay_x", None), d.get("overlay_y", None)
+
+    def set_angle_meter_overlay_pos(self, x: int, y: int):
+        d = self._config.setdefault("angle_meter", {})
+        d["overlay_x"] = x
+        d["overlay_y"] = y
+        self.request_save()
+
     # --- 配置列表（武器站级，一个配置可关联多个载具）---
 
 
-    def get_angle_meter_profiles(self) -> Dict[str, Dict]:
+    def get_angle_meter_profiles(self) -> dict[str, dict]:
         # 纯读取，无写副作用。默认值由最小骨架 + _ensure_angle_meter_defaults() 在初始化时确保（内存中，不写盘）。
         return self._config.get("angle_meter", {}).get("profiles", {})
 
 
-    def get_angle_meter_profile(self, name: str) -> Dict:
+    def get_angle_meter_profile(self, name: str) -> dict:
         return self.get_angle_meter_profiles().get(name, _default_angle_meter_profile())
 
 
-    def set_angle_meter_profile(self, name: str, profile: Dict):
+    def set_angle_meter_profile(self, name: str, profile: dict):
         self._config.setdefault("angle_meter", {}).setdefault("profiles", {})[name] = profile
         self.request_save()
 
@@ -96,6 +102,45 @@ class ConfigAngleMeterMixin:
         profile = self.get_angle_meter_profile(name)
         return profile.get("linked_vehicles", []) if profile else []
 
+    def get_firing_table(self, name: str) -> list[dict]:
+        """获取射表数据：[{"angle": float, "distance": float}, ...]"""
+        profile = self.get_angle_meter_profile(name)
+        return profile.get("firing_table", []) if profile else []
+
+    def set_firing_table(self, name: str, table: list[dict]):
+        """保存射表数据"""
+        profiles = self.get_angle_meter_profiles()
+        if name in profiles:
+            profiles[name]["firing_table"] = table
+            self.request_save()
+
+    def query_firing_distance(self, name: str, angle: float) -> float | None:
+        """根据角度查射表，PCHIP 插值+外推。超出外推范围返回 None。"""
+        table = self.get_firing_table(name)
+        if not table:
+            return None
+        return _ft_query_distance(table, angle)
+
+    def is_firing_extrapolation(self, name: str, angle: float) -> bool:
+        """判断角度是否超出标定范围（即当前结果为外推）。"""
+        from core.firing_table import is_extrapolation as _ft_is_extrap
+        table = self.get_firing_table(name)
+        if not table:
+            return False
+        return _ft_is_extrap(table, angle)
+
+    def get_height_diff(self, name: str) -> float:
+        """获取高度差（发射点-目标点，单位m）。"""
+        profile = self.get_angle_meter_profile(name)
+        return float(profile.get("height_diff", 0.0)) if profile else 0.0
+
+    def set_height_diff(self, name: str, value: float):
+        """设置高度差。"""
+        profiles = self.get_angle_meter_profiles()
+        if name in profiles:
+            profiles[name]["height_diff"] = float(value)
+            self.request_save()
+
 
     def get_angle_meter_profile_effective_tags(self, name: str) -> list:
         """从关联载具派生标签（所有关联载具标签的并集）"""
@@ -106,29 +151,36 @@ class ConfigAngleMeterMixin:
                     tags.append(t)
         return tags
 
-    # --- 热键（单键：toggle=开始/停止, pause=暂离, calibrate=校准确认, reset=归零）---
+    # --- 热键（单键：toggle=开始/停止, pause=暂离, calibrate=校准确认, reset=定角装填）---
 
     # === 全局校准 ===
 
-    def get_angle_meter_calibration_points(self, name: str, point_count: int = None):
-        """FEATURE-1补充: 获取指定点数的校准曲线，None=未校准。
+    def get_angle_meter_calibration_points(self, name: str, point_count: int | None = None):
+        """补充: 获取指定点数的校准曲线，None=未校准。
         point_count为None时用active_calibration_point_count。"""
         profile = self.get_angle_meter_profile(name)
         if point_count is None:
-            point_count = profile.get("active_calibration_point_count", 7)
+            point_count = profile.get("active_calibration_point_count", 5)
         return profile.get("calibrations", {}).get(str(point_count))
 
 
-    def set_angle_meter_calibration_points(self, name: str, points, point_count: int = 7):
-        """FEATURE-1补充: 保存指定点数的校准曲线，不覆盖其他方案"""
+    def set_angle_meter_calibration_points(self, name: str, points, point_count: int = 5):
+        """保存指定点数的校准曲线，附带校准时刻的灵敏度。
+
+        只快照灵敏度：原始计数"每格转多少度"只取决于游戏内灵敏度，
+        与鼠标 DPI 无关（DPI 只影响手移动 1cm 产生多少格，游戏看不到 DPI）。
+        """
         profile = self.get_angle_meter_profile(name)
-        profile.setdefault("calibrations", {})[str(point_count)] = points
+        profile.setdefault("calibrations", {})[str(point_count)] = {
+            "points": points,
+            "_cal_sens": self.get_angle_meter_sens(),
+        }
         profile["active_calibration_point_count"] = point_count
         self.set_angle_meter_profile(name, profile)
 
 
     def get_active_calibration_point_count(self, name: str) -> int:
-        return self.get_angle_meter_profile(name).get("active_calibration_point_count", 7)
+        return self.get_angle_meter_profile(name).get("active_calibration_point_count", 5)
 
 
     def set_active_calibration_point_count(self, name: str, count: int):
@@ -138,26 +190,53 @@ class ConfigAngleMeterMixin:
 
 
     def get_all_calibration_status(self, name: str) -> dict:
-        """返回各点数方案的校准状态: {3: bool, 5: bool, 7: bool, 9: bool, 11: bool}"""
+        """返回各点数方案的校准状态: {5: bool, 11: bool}"""
         cals = self.get_angle_meter_profile(name).get("calibrations", {})
-        return {c: bool(cals.get(str(c))) for c in (3, 5, 7, 9, 11)}
+        return {c: bool(cals.get(str(c))) for c in (2, 5, 11)}
 
 
     def clear_all_calibrations(self, name: str):
-        """FEATURE-1补充: 清空该载具所有精度方案的校准数据（范围变更时调用）"""
+        """补充: 清空该载具所有精度方案的校准数据（范围变更时调用）"""
         profile = self.get_angle_meter_profile(name)
         profile["calibrations"] = {}
         self.set_angle_meter_profile(name, profile)
 
 
     def get_effective_angle_meter_calibration(self, name: str):
-        """FEATURE-1补充: 返回active方案的校准曲线，无全局兜底"""
+        """返回active方案的校准曲线（points列表），按灵敏度变化换算格轴。
+
+        换算原理（"格" = Raw Input 原始计数 lLastY）：
+          游戏里"每格转多少度" ∝ 游戏内灵敏度，**与鼠标 DPI 无关**
+          （DPI 只决定手移动 1cm 产生多少格；游戏收到的是格数，看不到 DPI）。
+        所以把灵敏度从 S_cal 改成 S_cur 后，同一角度所需的格数变为
+          C_new = C_cal * (S_cal / S_cur)
+        即格轴乘以 校准时灵敏度 / 当前灵敏度。方向：灵敏度调高 → 每格转角变大
+        → 同一角度用更少的格 → 曲线左压。
+        """
         profile = self.get_angle_meter_profile(name)
-        count = profile.get("active_calibration_point_count", 7)
-        return profile.get("calibrations", {}).get(str(count))
+        count = profile.get("active_calibration_point_count", 5)
+        cal = profile.get("calibrations", {}).get(str(count))
+        if not cal:
+            return None
+        points = cal.get("points", [])
+        cal_sens = cal.get("_cal_sens")
+        cur_sens = self.get_angle_meter_sens()
+        # 任一侧灵敏度缺失（0/未填）就不换算：宁可保持原始校准，也不按 0 缩放
+        if cal_sens and cur_sens and cal_sens > 0 and cur_sens > 0:
+            ratio = cal_sens / cur_sens
+            if abs(ratio - 1.0) > 0.001:
+                points = [[int(d * ratio), a] for d, a in points]
+        return points
+
+    def get_angle_meter_sens(self) -> float:
+        return self._config.get("angle_meter", {}).get("sens", 0)
+
+    def set_angle_meter_sens(self, sens: float):
+        self._config.setdefault("angle_meter", {})["sens"] = sens
+        self.request_save()
 
 
-    def get_angle_meter_hotkeys(self) -> Dict:
+    def get_angle_meter_hotkeys(self) -> dict:
         # 统一为双键结构（key1/trigger1/key2/trigger2），与全局热键一致；角度仪 UI 只用 key1
         return self._config.get("angle_meter", {}).get("hotkeys", {
             "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},

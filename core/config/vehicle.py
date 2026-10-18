@@ -1,40 +1,35 @@
-import json
-import os
-import sys
-import threading
-from pathlib import Path
-from typing import Dict, List, Optional
 
 class ConfigVehicleMixin:
-    """vehicle 配置管理 mixin"""
+    """vehicle 配置管理 mixin
 
-    def get_vehicles(self) -> Dict[str, Dict]:
-        """获取所有载具配置"""
+    数据结构（v2 倍率公共化 + 弹种UI条件叠加）：
+    载具级:
+      magnifications: [{"label": "1x"}, ...]  公共倍率列表
+    弹种级:
+      ui: "路径"  弹种级 UI 叠加层（2K全屏整图，可选，缺失=未绑定）
+      crosshairs: {"label": {"path": "xxx.png", "use_vehicle_overlay": False, "overlay_ammo_ui": False}}
+    """
+
+    # ==================== 载具基础 ====================
+
+    def get_vehicles(self) -> dict[str, dict]:
         return self._config["vehicles"]
 
-
-    def get_vehicle_names(self) -> List[str]:
-        """获取所有载具名称列表"""
+    def get_vehicle_names(self) -> list[str]:
         return list(self._config["vehicles"].keys())
 
-
-    def get_vehicle(self, name: str) -> Optional[Dict]:
-        """获取指定载具配置"""
+    def get_vehicle(self, name: str) -> dict | None:
         return self._config["vehicles"].get(name)
 
-    # === 载具缩放偏移 ===
+    # ==================== 载具缩放偏移 ====================
 
-
-    def get_vehicle_overlay(self, vehicle_name: str) -> Dict:
-        """获取载具缩放偏移配置，不存在时返回默认值"""
+    def get_vehicle_overlay(self, vehicle_name: str) -> dict:
         vehicle = self._config["vehicles"].get(vehicle_name)
         if vehicle and "overlay" in vehicle:
             return vehicle["overlay"]
         return self._default_vehicle_overlay()
 
-
     def set_vehicle_overlay(self, vehicle_name: str, scale: float, offset_x: int, offset_y: int, opacity=None):
-        """设置载具缩放偏移配置，防抖保存。opacity=None保留当前值（避免现有调用点重置透明度）"""
         vehicle = self._config["vehicles"].get(vehicle_name)
         if not vehicle:
             return
@@ -49,39 +44,36 @@ class ConfigVehicleMixin:
         }
         self.request_save()
 
-
     def reset_vehicle_overlay(self, vehicle_name: str):
-        """重置载具缩放偏移为默认值"""
         vehicle = self._config["vehicles"].get(vehicle_name)
         if not vehicle:
             return
         vehicle["overlay"] = self._default_vehicle_overlay()
         self.request_save()
 
-    # === 倍率缩放偏移开关 ===
-
+    # ==================== 倍率 overlay 模式（读 crosshairs dict） ====================
 
     def get_magnification_overlay_mode(self, vehicle_name: str, ammo_name: str, index: int) -> bool:
-        """获取倍率缩放偏移模式（true=载具，false=全局）"""
-        mags = self.get_magnifications(vehicle_name, ammo_name)
-        if 0 <= index < len(mags):
-            return mags[index].get("use_vehicle_overlay", False)
-        return False
-
+        """获取倍率缩放偏移模式（true=载具，false=全局）。读 crosshairs dict。"""
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return False
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.get(label, {})
+        return entry.get("use_vehicle_overlay", False)
 
     def set_magnification_overlay_mode(self, vehicle_name: str, ammo_name: str, index: int, use_vehicle: bool):
-        """设置倍率缩放偏移模式，防抖保存"""
-        mags = self.get_magnifications(vehicle_name, ammo_name)
-        if 0 <= index < len(mags):
-            mags[index]["use_vehicle_overlay"] = bool(use_vehicle)
-            self.request_save()
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.setdefault(label, {"path": "", "use_vehicle_overlay": False, "overlay_ammo_ui": False})
+        entry["use_vehicle_overlay"] = bool(use_vehicle)
+        self.request_save()
 
-    # === 核心：有效缩放偏移（二选一判断唯一入口） ===
+    # ==================== 有效缩放偏移（二选一唯一入口） ====================
 
-
-    def get_effective_overlay(self, vehicle_name: str, ammo_name: str, index: int) -> Dict:
-        """获取当前倍率的有效缩放偏移配置。
-        二选一判断逻辑只在此方法中做一次，overlay 渲染和 UI 预览都调用此方法。"""
+    def get_effective_overlay(self, vehicle_name: str, ammo_name: str, index: int) -> dict:
         use_vehicle = self.get_magnification_overlay_mode(vehicle_name, ammo_name, index)
         if use_vehicle:
             return self.get_vehicle_overlay(vehicle_name)
@@ -93,61 +85,53 @@ class ConfigVehicleMixin:
         }
 
     @staticmethod
-
-    def _default_vehicle_overlay() -> Dict:
-        """载具缩放偏移默认值（单一工厂方法，不散落多处）"""
+    def _default_vehicle_overlay() -> dict:
         return {"scale": 100.0, "offset_x": 0, "offset_y": 0, "opacity": 1.0}
 
+    # ==================== 载具增删改 ====================
 
     def add_vehicle(self, name: str) -> bool:
-        """添加新载具"""
         if name in self._config["vehicles"]:
             return False
         self._config["vehicles"][name] = {
             "name": name,
             "tags": [],
             "ammo_types": {},
+            "magnifications": [],
             "overlay": self._default_vehicle_overlay()
         }
         self.request_save()
         return True
 
-
     def remove_vehicle(self, name: str) -> bool:
-        """删除载具"""
         if name not in self._config["vehicles"]:
             return False
         del self._config["vehicles"][name]
-
-        # 如果当前载具被删除，重置当前状态
-        if self._config["current_state"]["vehicle"] == name:
-            self._config["current_state"]["vehicle"] = None
-            self._config["current_state"]["ammo_type"] = None
-            self._config["current_state"]["magnification_index"] = 0
-
+        self._config.get("hotkeys", {}).get("ammo_types", {}).pop(name, None)
+        # 清理角度仪配置里对本载具的引用
+        profiles = self._config.get("angle_meter", {}).get("profiles", {})
+        for profile in profiles.values():
+            linked = profile.get("linked_vehicles", [])
+            if name in linked:
+                linked.remove(name)
+        # current_state 的更新由 state_machine 负责，本方法只做业务
         self.request_save()
         return True
 
-
     def rename_vehicle(self, old_name: str, new_name: str) -> bool:
-        """重命名载具"""
         if old_name not in self._config["vehicles"] or new_name in self._config["vehicles"]:
             return False
-
         vehicle = self._config["vehicles"].pop(old_name)
         vehicle["name"] = new_name
         self._config["vehicles"][new_name] = vehicle
-
-        # 更新当前状态
-        if self._config["current_state"]["vehicle"] == old_name:
-            self._config["current_state"]["vehicle"] = new_name
-
+        ammo_hks = self._config.get("hotkeys", {}).get("ammo_types", {})
+        if old_name in ammo_hks:
+            ammo_hks[new_name] = ammo_hks.pop(old_name)
+        # current_state 的更新由 state_machine 负责，本方法只做业务
         self.request_save()
         return True
 
-
     def copy_vehicle(self, src_name: str, dst_name: str) -> bool:
-        """复制载具配置（弹种、倍率、准星绑定、标签完整复制）"""
         import copy as _copy
         if src_name not in self._config["vehicles"] or dst_name in self._config["vehicles"]:
             return False
@@ -155,19 +139,18 @@ class ConfigVehicleMixin:
         new_vehicle = _copy.deepcopy(src)
         new_vehicle["name"] = dst_name
         self._config["vehicles"][dst_name] = new_vehicle
+        src_hks = self._config.get("hotkeys", {}).get("ammo_types", {}).get(src_name)
+        if src_hks is not None:
+            self._config.setdefault("hotkeys", {}).setdefault("ammo_types", {})[dst_name] = _copy.deepcopy(src_hks)
         self.request_save()
         return True
 
     # ==================== 标签管理 ====================
 
-
-    def get_all_tags(self) -> List[str]:
-        """获取全局标签库"""
+    def get_all_tags(self) -> list[str]:
         return list(self._config.get("tags", []))
 
-
     def add_tag(self, tag_name: str) -> bool:
-        """创建新标签"""
         tag_name = tag_name.strip()
         if not tag_name or tag_name in self._config.get("tags", []):
             return False
@@ -175,22 +158,25 @@ class ConfigVehicleMixin:
         self.request_save()
         return True
 
-
     def remove_tag(self, tag_name: str) -> bool:
-        """删除标签（解绑所有载具的该标签，不删除载具）"""
         if tag_name not in self._config.get("tags", []):
             return False
         self._config["tags"].remove(tag_name)
-        # 解绑所有载具的该标签
         for vehicle in self._config["vehicles"].values():
             if tag_name in vehicle.get("tags", []):
                 vehicle["tags"].remove(tag_name)
         self.request_save()
         return True
 
+    def reorder_tags(self, new_order: list[str]) -> bool:
+        current = self._config.get("tags", [])
+        if sorted(new_order) != sorted(current):
+            return False
+        self._config["tags"] = list(new_order)
+        self.request_save()
+        return True
 
     def rename_tag(self, old_name: str, new_name: str) -> bool:
-        """重命名标签（同步更新所有载具的绑定）"""
         new_name = new_name.strip()
         if old_name not in self._config.get("tags", []) or not new_name:
             return False
@@ -204,26 +190,20 @@ class ConfigVehicleMixin:
         self.request_save()
         return True
 
-
-    def get_vehicle_tags(self, vehicle_name: str) -> List[str]:
-        """获取载具绑定的标签"""
+    def get_vehicle_tags(self, vehicle_name: str) -> list[str]:
         vehicle = self.get_vehicle(vehicle_name)
         if vehicle:
             return vehicle.get("tags", [])
         return []
 
-
-    def set_vehicle_tags(self, vehicle_name: str, tags: List[str]):
-        """设置载具标签（只能绑定全局标签库中存在的标签）"""
+    def set_vehicle_tags(self, vehicle_name: str, tags: list[str]):
         vehicle = self.get_vehicle(vehicle_name)
         if vehicle:
             valid_tags = [t for t in tags if t in self._config.get("tags", [])]
-            vehicle["tags"] = list(dict.fromkeys(valid_tags))  # 去重保序
+            vehicle["tags"] = list(dict.fromkeys(valid_tags))
             self.request_save()
 
-
-    def get_vehicle_names_filtered(self, text: str = "", tag: str = "") -> List[str]:
-        """按名称文本和标签筛选载具（AND 关系）"""
+    def get_vehicle_names_filtered(self, text: str = "", tag: str = "") -> list[str]:
         text_lower = text.lower()
         result = []
         for name, vehicle in self._config["vehicles"].items():
@@ -234,34 +214,26 @@ class ConfigVehicleMixin:
             result.append(name)
         return sorted(result)
 
-    # ==================== 测距仪管理 ====================
+    # ==================== 弹种管理 ====================
 
-
-    def get_ammo_types(self, vehicle_name: str) -> Dict[str, Dict]:
-        """获取指定载具的所有弹种"""
+    def get_ammo_types(self, vehicle_name: str) -> dict[str, dict]:
         vehicle = self.get_vehicle(vehicle_name)
         if vehicle:
             return vehicle["ammo_types"]
         return {}
 
-
-    def get_ammo_type_names(self, vehicle_name: str) -> List[str]:
-        """获取指定载具的弹种名称列表"""
+    def get_ammo_type_names(self, vehicle_name: str) -> list[str]:
         return list(self.get_ammo_types(vehicle_name).keys())
 
-
     def add_ammo_type(self, vehicle_name: str, ammo_name: str) -> bool:
-        """19.3: 添加弹种，按该载具内弹种序号预填数字键(1-9)，不覆盖已绑定。"""
         vehicle = self.get_vehicle(vehicle_name)
         if not vehicle or ammo_name in vehicle["ammo_types"]:
             return False
-
+        # 新弹种的 crosshairs 初始化为空 dict（倍率列表是载具级公共的）
         vehicle["ammo_types"][ammo_name] = {
             "name": ammo_name,
-            "magnifications": []
+            "crosshairs": {}
         }
-
-        # 按当前载具内弹种序号预填（第N个弹种→数字N），超过9留空
         v_hks = self._config.setdefault("hotkeys", {}).setdefault("ammo_types", {}).setdefault(vehicle_name, {})
         existing_count = len([k for k in v_hks if k != ammo_name])
         digit = str(existing_count + 1) if existing_count < 9 else ""
@@ -269,140 +241,226 @@ class ConfigVehicleMixin:
             "key1": digit, "trigger1": "keydown",
             "key2": "", "trigger2": "keydown"
         }
-
         self.request_save()
         return True
 
-
     def remove_ammo_type(self, vehicle_name: str, ammo_name: str) -> bool:
-        """19.3: 删除弹种，同步删除对应载具下的热键"""
         vehicle = self.get_vehicle(vehicle_name)
         if not vehicle or ammo_name not in vehicle["ammo_types"]:
             return False
-
         del vehicle["ammo_types"][ammo_name]
-        # 同步删除该载具下的弹种热键
         v_hks = self._config.get("hotkeys", {}).get("ammo_types", {}).get(vehicle_name, {})
         if ammo_name in v_hks:
             del v_hks[ammo_name]
-
-        # 删除对应热键
-        if ammo_name in self._config["hotkeys"]["ammo_types"]:
-            del self._config["hotkeys"]["ammo_types"][ammo_name]
-
-        # 如果当前弹种被删除，重置
-        if (self._config["current_state"]["vehicle"] == vehicle_name and
-                self._config["current_state"]["ammo_type"] == ammo_name):
-            self._config["current_state"]["ammo_type"] = None
-            self._config["current_state"]["magnification_index"] = 0
-
+        # current_state 的更新由 state_machine 负责，本方法只做业务
         self.request_save()
         return True
 
-
     def rename_ammo_type(self, vehicle_name: str, old_name: str, new_name: str) -> bool:
-        """重命名弹种"""
         vehicle = self.get_vehicle(vehicle_name)
         if not vehicle or old_name not in vehicle["ammo_types"] or new_name in vehicle["ammo_types"]:
             return False
-
         ammo = vehicle["ammo_types"].pop(old_name)
         ammo["name"] = new_name
         vehicle["ammo_types"][new_name] = ammo
-
-        # 同步重命名该载具下的热键
         v_hks = self._config.get("hotkeys", {}).get("ammo_types", {}).get(vehicle_name, {})
         if old_name in v_hks:
             v_hks[new_name] = v_hks.pop(old_name)
-
-        # 更新当前状态
-        if (self._config["current_state"]["vehicle"] == vehicle_name and
-                self._config["current_state"]["ammo_type"] == old_name):
-            self._config["current_state"]["ammo_type"] = new_name
-
+        # current_state 的更新由 state_machine 负责，本方法只做业务
         self.request_save()
         return True
 
-    # ==================== 倍率管理 ====================
+    # ==================== 倍率管理（载具级公共） ====================
 
-
-    def get_magnifications(self, vehicle_name: str, ammo_name: str) -> List[Dict]:
-        """获取指定弹种的所有倍率"""
-        ammo_types = self.get_ammo_types(vehicle_name)
-        if ammo_name in ammo_types:
-            return ammo_types[ammo_name]["magnifications"]
+    def get_magnifications(self, vehicle_name: str) -> list[dict]:
+        """获取载具级公共倍率列表 [{"label": "1x"}, ...]"""
+        vehicle = self.get_vehicle(vehicle_name)
+        if vehicle:
+            return vehicle.get("magnifications", [])
         return []
 
+    def get_magnification_count(self, vehicle_name: str) -> int:
+        return len(self.get_magnifications(vehicle_name))
 
-    def add_magnification(self, vehicle_name: str, ammo_name: str, label: str = "", crosshair_path: str = "") -> bool:
-        """添加倍率"""
-        ammo_types = self.get_ammo_types(vehicle_name)
-        if ammo_name not in ammo_types:
+    def add_magnification(self, vehicle_name: str, label: str = "") -> bool:
+        """添加倍率（载具级公共，所有弹种共享）。"""
+        vehicle = self.get_vehicle(vehicle_name)
+        if not vehicle:
             return False
-
+        mags = vehicle.setdefault("magnifications", [])
         if not label:
-            index = len(ammo_types[ammo_name]["magnifications"]) + 1
-            label = f"倍率{index}"
-
-        ammo_types[ammo_name]["magnifications"].append({
-            "label": label,
-            "crosshair": crosshair_path
-        })
-
+            label = f"倍率{len(mags) + 1}"
+        mags.append({"label": label})
+        # 给所有弹种的 crosshairs 加一个空条目
+        for ammo in vehicle.get("ammo_types", {}).values():
+            crosshairs = ammo.setdefault("crosshairs", {})
+            if label not in crosshairs:
+                crosshairs[label] = {"path": "", "use_vehicle_overlay": False, "overlay_ammo_ui": False}
         self.request_save()
         return True
 
-
-    def remove_magnification(self, vehicle_name: str, ammo_name: str, index: int) -> bool:
-        """删除倍率，删除后自动重新编号（倍率1、倍率2...无断层）"""
-        magnifications = self.get_magnifications(vehicle_name, ammo_name)
-        if index < 0 or index >= len(magnifications):
+    def remove_magnification(self, vehicle_name: str, index: int) -> bool:
+        """删除倍率（载具级公共，从所有弹种的 crosshairs 中移除）。"""
+        vehicle = self.get_vehicle(vehicle_name)
+        if not vehicle:
             return False
-
-        magnifications.pop(index)
-
-        # 自动重新编号，消除断层
-        for i, mag in enumerate(magnifications):
-            mag["label"] = f"倍率{i+1}"
-
-        # 如果当前倍率索引越界，调整
-        if self._config["current_state"]["magnification_index"] >= len(magnifications):
-            self._config["current_state"]["magnification_index"] = max(0, len(magnifications) - 1)
-
-        self.request_save()
-        return True
-
-
-    def update_magnification(self, vehicle_name: str, ammo_name: str, index: int,
-                             label: str = None, crosshair_path: str = None) -> bool:
-        """更新倍率配置"""
-        magnifications = self.get_magnifications(vehicle_name, ammo_name)
-        if index < 0 or index >= len(magnifications):
+        mags = vehicle.get("magnifications", [])
+        if index < 0 or index >= len(mags):
             return False
-
-        if label is not None:
-            magnifications[index]["label"] = label
-        if crosshair_path is not None:
-            magnifications[index]["crosshair"] = crosshair_path
-
+        removed = mags.pop(index)
+        removed_label = removed.get("label", "")
+        # 从所有弹种的 crosshairs 中移除
+        for ammo in vehicle.get("ammo_types", {}).values():
+            crosshairs = ammo.get("crosshairs", {})
+            crosshairs.pop(removed_label, None)
+        # 重新编号 label（倍率1、倍率2...）
+        for i, mag in enumerate(mags):
+            mag["label"] = f"倍率{i + 1}"
+        # 同步更新所有弹种 crosshairs 的 key
+        for ammo in vehicle.get("ammo_types", {}).values():
+            crosshairs = ammo.get("crosshairs", {})
+            new_crosshairs = {}
+            for i, mag in enumerate(mags):
+                # 找到对应的旧 key
+                matched = None
+                for k in crosshairs:
+                    if k == mag["label"] or (i < index and k == mag["label"]) or (i >= index and k == f"倍率{i+2}"):
+                        matched = k
+                        break
+                if matched is not None:
+                    new_crosshairs[mag["label"]] = crosshairs[matched]
+                else:
+                    new_crosshairs[mag["label"]] = {"path": "", "use_vehicle_overlay": False, "overlay_ammo_ui": False}
+            ammo["crosshairs"] = new_crosshairs
+        # current_state 的更新由 state_machine 负责，本方法只做业务
         self.request_save()
         return True
 
+    def update_magnification(self, vehicle_name: str, index: int, label: str | None = None) -> bool:
+        """更新倍率配置（载具级公共）。"""
+        mags = self.get_magnifications(vehicle_name)
+        if index < 0 or index >= len(mags):
+            return False
+        old_label = mags[index].get("label", "")
+        if label is not None and label != old_label:
+            mags[index]["label"] = label
+            # 同步更新所有弹种 crosshairs 的 key
+            vehicle = self.get_vehicle(vehicle_name)
+            for ammo in vehicle.get("ammo_types", {}).values():
+                crosshairs = ammo.get("crosshairs", {})
+                if old_label in crosshairs:
+                    crosshairs[label] = crosshairs.pop(old_label)
+        self.request_save()
+        return True
 
-    def get_magnification_count(self, vehicle_name: str, ammo_name: str) -> int:
-        """获取倍率数量"""
-        return len(self.get_magnifications(vehicle_name, ammo_name))
+    # ==================== crosshair 绑定（弹种级，读 crosshairs dict） ====================
 
+    def get_crosshair_path(self, vehicle_name: str, ammo_name: str, index: int) -> str:
+        """获取指定倍率的 crosshair 路径。"""
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return ""
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.get(label, {})
+        return entry.get("path", "")
 
-    def get_ammo_hotkey(self, vehicle_name: str, ammo_name: str) -> Dict:
-        """19.3: 获取指定载具的弹种切换热键（按载具维度存储）"""
+    def set_crosshair_path(self, vehicle_name: str, ammo_name: str, index: int, path: str) -> bool:
+        """设置指定倍率的 crosshair 路径。"""
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return False
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.setdefault(label, {"path": "", "use_vehicle_overlay": False, "overlay_ammo_ui": False})
+        entry["path"] = path
+        self.request_save()
+        return True
+
+    # ==================== 弹种 UI 绑定 ====================
+
+    def get_ammo_ui(self, vehicle_name: str, ammo_name: str) -> str:
+        ammo = self.get_ammo_types(vehicle_name).get(ammo_name, {})
+        return ammo.get("ui", "")
+
+    def set_ammo_ui(self, vehicle_name: str, ammo_name: str, path: str):
+        ammo = self.get_ammo_types(vehicle_name).get(ammo_name)
+        if ammo:
+            ammo["ui"] = path
+            self.request_save()
+
+    # ==================== 载具 UI 绑定 ====================
+
+    def get_vehicle_ui(self, vehicle_name: str) -> str:
+        vehicle = self._config["vehicles"].get(vehicle_name, {})
+        return vehicle.get("base_ui", "")
+
+    def set_vehicle_ui(self, vehicle_name: str, path: str):
+        vehicle = self._config["vehicles"].get(vehicle_name)
+        if vehicle:
+            vehicle["base_ui"] = path
+            self.request_save()
+
+    # ==================== overlay_ammo_ui（倍率级开关） ====================
+
+    def get_overlay_ammo_ui(self, vehicle_name: str, ammo_name: str, index: int) -> bool:
+        """获取该倍率是否叠加弹种 UI。"""
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return False
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.get(label, {})
+        return entry.get("overlay_ammo_ui", False)
+
+    def set_overlay_ammo_ui(self, vehicle_name: str, ammo_name: str, index: int, enabled: bool):
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.setdefault(label, {"path": "", "use_vehicle_overlay": False, "overlay_ammo_ui": False, "overlay_vehicle_ui": False})
+        entry["overlay_ammo_ui"] = bool(enabled)
+        self.request_save()
+
+    # ==================== overlay_vehicle_ui（倍率级开关） ====================
+
+    def get_overlay_vehicle_ui(self, vehicle_name: str, ammo_name: str, index: int) -> bool:
+        """获取该倍率是否叠加载具 UI。"""
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return False
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.get(label, {})
+        return entry.get("overlay_vehicle_ui", False)
+
+    def set_overlay_vehicle_ui(self, vehicle_name: str, ammo_name: str, index: int, enabled: bool):
+        label = self._mag_label_at(vehicle_name, index)
+        if label is None:
+            return
+        crosshairs = self._get_crosshairs_dict(vehicle_name, ammo_name)
+        entry = crosshairs.setdefault(label, {"path": "", "use_vehicle_overlay": False, "overlay_ammo_ui": False, "overlay_vehicle_ui": False})
+        entry["overlay_vehicle_ui"] = bool(enabled)
+        self.request_save()
+
+    # ==================== 内部辅助 ====================
+
+    def _mag_label_at(self, vehicle_name: str, index: int) -> str | None:
+        mags = self.get_magnifications(vehicle_name)
+        if 0 <= index < len(mags):
+            return mags[index].get("label")
+        return None
+
+    def _get_crosshairs_dict(self, vehicle_name: str, ammo_name: str) -> dict:
+        ammo = self.get_ammo_types(vehicle_name).get(ammo_name)
+        if ammo is None:
+            return {}
+        return ammo.setdefault("crosshairs", {})
+
+    # ==================== 弹种热键 ====================
+
+    def get_ammo_hotkey(self, vehicle_name: str, ammo_name: str) -> dict:
         return self._config["hotkeys"]["ammo_types"].get(vehicle_name, {}).get(ammo_name, {
             "key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"
         })
 
-
     def set_ammo_hotkey(self, vehicle_name: str, ammo_name: str, key: str, trigger: str = "keydown", slot: int = 1):
-        """19.3: 设置指定载具的弹种切换热键（按载具维度存储）"""
         v_hks = self._config["hotkeys"]["ammo_types"].setdefault(vehicle_name, {})
         hk = v_hks.setdefault(ammo_name, {
             "key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"
@@ -410,37 +468,3 @@ class ConfigVehicleMixin:
         hk[f"key{slot}"] = key
         hk[f"trigger{slot}"] = trigger
         self.request_save()
-
-
-    def _migrate_ammo_hotkeys_vehicle_scope(self):
-        """19.3: 弹种热键从全局 {弹种名: hk} 迁移为按载具 {载具名: {弹种名: hk}}。
-        旧格式遍历所有载具，把全局弹种热键复制到各载具下；迁移后删除旧全局键。
-        同时批量重绑：每辆载具的弹种按序号从1开始预填数字键。"""
-        ammo_hks = self._config.get("hotkeys", {}).get("ammo_types", {})
-        if not ammo_hks:
-            return
-        # 判断是否已是新格式（值是dict且key是载具名）
-        sample = next(iter(ammo_hks.values()), None)
-        if isinstance(sample, dict) and "key1" not in sample:
-            return  # 已是载具维度
-        # 旧格式：{弹种名: {key1,...}} → 新格式 {载具名: {弹种名: {key1,...}}}
-        new_ammo_hks = {}
-        vehicles = self._config.get("vehicles", {})
-        for v_name in vehicles:
-            new_ammo_hks[v_name] = {}
-            v_ammos = vehicles[v_name].get("ammo_types", {})
-            for idx, a_name in enumerate(v_ammos.keys()):
-                # 优先用旧全局绑定，否则按序号预填
-                old_hk = ammo_hks.get(a_name, {})
-                if old_hk.get("key1"):
-                    new_ammo_hks[v_name][a_name] = dict(old_hk)
-                else:
-                    digit = str(idx + 1) if idx < 9 else ""
-                    new_ammo_hks[v_name][a_name] = {
-                        "key1": digit, "trigger1": "keydown",
-                        "key2": "", "trigger2": "keydown"
-                    }
-        self._config["hotkeys"]["ammo_types"] = new_ammo_hks
-        self.request_save()
-        print("[ConfigManager] 配置迁移: 弹种热键已改为按载具维度存储")
-

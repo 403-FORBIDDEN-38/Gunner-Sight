@@ -1,3 +1,5 @@
+from core.logger import logger
+
 """
 共享低级鼠标钩子 (WH_MOUSE_LL)
 
@@ -9,11 +11,14 @@ HotkeyManager（全局热键）和 HotkeyLineEdit（热键绑定捕获）共用�
 import ctypes
 import ctypes.wintypes
 import threading
+import time
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from core.win32_utils import kernel32
+
 # 独立的 user32 DLL 实例，避免全局 windll 的线程安全问题
-from core.win32_utils import user32 as _user32, kernel32  # 统一 Win32 入口
+from core.win32_utils import user32 as _user32  # 统一 Win32 入口
 
 # 严格设置函数参数类型和返回类型（64位安全）
 _user32.SetWindowsHookExW.argtypes = [
@@ -61,9 +66,11 @@ WM_LBUTTONDOWN, WM_LBUTTONUP = 0x0201, 0x0202
 WM_RBUTTONDOWN, WM_RBUTTONUP = 0x0204, 0x0205
 WM_MBUTTONDOWN, WM_MBUTTONUP = 0x0207, 0x0208
 WM_XBUTTONDOWN, WM_XBUTTONUP = 0x020B, 0x020C
+WM_MOUSEWHEEL = 0x020A
 XBUTTON1, XBUTTON2 = 0x0001, 0x0002
 HC_ACTION = 0
 WM_QUIT = 0x0012
+LLMHF_INJECTED = 0x01  # MSLLHOOKSTRUCT.flags 低位：事件是注入的(SendInput/mouse_event)
 
 # HOOKPROC 类型：返回 LRESULT (c_int64)
 HOOKPROC = ctypes.WINFUNCTYPE(
@@ -88,6 +95,7 @@ class MouseHook(QObject):
 
     mouse_down = pyqtSignal(str)
     mouse_up = pyqtSignal(str)
+    mouse_wheel = pyqtSignal(int)  # delta: 正数=向上滚动, 负数=向下滚动
 
     _instance = None
     _instance_lock = threading.Lock()
@@ -108,6 +116,7 @@ class MouseHook(QObject):
         self._thread_id = None
         self._ref_count = 0
         self._ref_lock = threading.Lock()
+        self._retry_count = 0  # 钩子设置失败/线程意外退出的连续重试次数
 
     # --- 引用计数 ---
     def acquire(self):
@@ -146,67 +155,99 @@ class MouseHook(QObject):
                 pass
         # 等待钩子线程结束（最多500ms）
         if self._thread and self._thread.is_alive():
-            self._thread.join
+            self._thread.join(timeout=0.5)
         self._proc_ref = None
         self._thread_id = None
         self._thread = None
 
     def _loop(self):
-        try:
-            self._thread_id = threading.get_native_id()
+        while self._running:
+            try:
+                self._thread_id = threading.get_native_id()
 
-            def hook_proc(nCode, wParam, lParam):
-                try:
-                    if nCode == HC_ACTION:
-                        key = _SIMPLE_KEY_MAP.get(wParam)
-                        if key is None and wParam in (WM_XBUTTONDOWN, WM_XBUTTONUP):
-                            try:
-                                data = ctypes.cast(
-                                    lParam, ctypes.POINTER(MSLLHOOKSTRUCT)
-                                ).contents
-                                xb = data.mouseData >> 16
-                                if xb == XBUTTON1:
-                                    key = "mouse_xbutton1"
-                                elif xb == XBUTTON2:
-                                    key = "mouse_xbutton2"
-                            except Exception as e:
-                                print(f"[MouseHook] XBUTTON 解析异常: {e}")
-                        if key:
-                            if wParam in _DOWN_EVENTS:
-                                self.mouse_down.emit(key)
-                            elif wParam in _UP_EVENTS:
-                                self.mouse_up.emit(key)
-                except Exception as e:
-                    print(f"[MouseHook] 钩子回调异常: {e}")
-                return _user32.CallNextHookEx(None, nCode, wParam, lParam)
+                def hook_proc(nCode, wParam, lParam):
+                    try:
+                        if nCode == HC_ACTION:
+                            msll = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
+                            if msll.flags & LLMHF_INJECTED:
+                                return _user32.CallNextHookEx(None, nCode, wParam, lParam)
+                            key = _SIMPLE_KEY_MAP.get(wParam)
+                            if key is None and wParam in (WM_XBUTTONDOWN, WM_XBUTTONUP):
+                                try:
+                                    data = ctypes.cast(
+                                        lParam, ctypes.POINTER(MSLLHOOKSTRUCT)
+                                    ).contents
+                                    xb = data.mouseData >> 16
+                                    if xb == XBUTTON1:
+                                        key = "mouse_xbutton1"
+                                    elif xb == XBUTTON2:
+                                        key = "mouse_xbutton2"
+                                except Exception as e:
+                                    logger.info(f"[MouseHook] XBUTTON 解析异常: {e}")
+                            if wParam == WM_MOUSEWHEEL:
+                                try:
+                                    data = ctypes.cast(
+                                        lParam, ctypes.POINTER(MSLLHOOKSTRUCT)
+                                    ).contents
+                                    delta = ctypes.c_short(data.mouseData >> 16).value
+                                    if delta != 0:
+                                        self.mouse_wheel.emit(delta)
+                                except Exception as e:
+                                    logger.info(f"[MouseHook] WHEEL 解析异常: {e}")
+                            elif key:
+                                if wParam in _DOWN_EVENTS:
+                                    self.mouse_down.emit(key)
+                                elif wParam in _UP_EVENTS:
+                                    self.mouse_up.emit(key)
+                    except Exception as e:
+                        logger.info(f"[MouseHook] 钩子回调异常: {e}")
+                    return _user32.CallNextHookEx(None, nCode, wParam, lParam)
 
-            self._proc_ref = HOOKPROC(hook_proc)
-            self._hook = _user32.SetWindowsHookExW(
-                WH_MOUSE_LL,
-                ctypes.cast(self._proc_ref, ctypes.c_void_p).value,
-                None, 0
-            )
-            if not self._hook:
-                error_code = kernel32.GetLastError()
-                print(f"[MouseHook] 钩子设置失败，错误码: {error_code}")
-                self._running = False
-                return
+                self._proc_ref = HOOKPROC(hook_proc)
+                self._hook = _user32.SetWindowsHookExW(
+                    WH_MOUSE_LL,
+                    ctypes.cast(self._proc_ref, ctypes.c_void_p).value,
+                    None, 0
+                )
+                if not self._hook:
+                    error_code = kernel32.GetLastError()
+                    if self._retry_count == 0:
+                        logger.warning(f"[MouseHook] 钩子设置失败，错误码: {error_code}，开始重试")
+                    else:
+                        logger.debug(f"[MouseHook] 钩子设置失败（重试中，第 {self._retry_count + 1} 次），错误码: {error_code}")
+                    self._retry_count += 1
+                    # 刻意退避后重试：钩子可能被安全软件临时拦截，等一会儿能成。
+                    # 这是"失败重试的退避"，不是"用等待掩盖时序问题"（AGENTS 2.1 禁的是后者）
+                    time.sleep(1.0)
+                    continue
+                # 恢复成功：此前有过重试
+                if self._retry_count > 0:
+                    logger.warning(f"[MouseHook] 钩子已恢复（此前重试了 {self._retry_count} 次）")
+                    self._retry_count = 0
 
-            msg = ctypes.wintypes.MSG()
-            while self._running:
-                bRet = _user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
-                if bRet == 0 or bRet == -1:
-                    break
-                _user32.TranslateMessage(ctypes.byref(msg))
-                _user32.DispatchMessageW(ctypes.byref(msg))
-        except Exception as e:
-            print(f"[MouseHook] 钩子线程错误: {e}")
-        finally:
-            if self._hook:
-                try:
-                    _user32.UnhookWindowsHookEx(self._hook)
-                except Exception:
-                    pass
-                self._hook = None
-            self._running = False
-            self._proc_ref = None
+                msg = ctypes.wintypes.MSG()
+                while self._running:
+                    bRet = _user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+                    if bRet == 0 or bRet == -1:
+                        break
+                    _user32.TranslateMessage(ctypes.byref(msg))
+                    _user32.DispatchMessageW(ctypes.byref(msg))
+            except Exception as e:
+                logger.info(f"[MouseHook] 钩子线程错误: {e}")
+            finally:
+                if self._hook:
+                    try:
+                        _user32.UnhookWindowsHookEx(self._hook)
+                    except Exception:
+                        pass
+                    self._hook = None
+                self._proc_ref = None
+            # 意外退出后自动重启（除非stop()被调用）
+            if self._running:
+                if self._retry_count == 0:
+                    logger.warning("[MouseHook] 钩子线程意外退出，开始自动重启")
+                else:
+                    logger.debug(f"[MouseHook] 钩子线程意外退出（重启中，第 {self._retry_count + 1} 次）")
+                self._retry_count += 1
+                time.sleep(1.0)  # 同上：重试退避
+        self._running = False
