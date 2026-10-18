@@ -1,3 +1,5 @@
+from core.logger import logger
+
 """
 聊天气泡：三明治层级 + 气泡尾巴 + 内容随机抓取。
 层级（从底到顶）：尾巴 → 气泡底 → 内容（alpha剪切蒙版） → 气泡框。
@@ -5,12 +7,22 @@
 shake用相对偏移pyqtProperty叠加在跟随位置上，不与QTimer跟随冲突。
 """
 import os
+from gui.mascot.paths import get_mascot_dir
 import random
-from PyQt5.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QUrl
-from PyQt5.QtGui import QPixmap, QMovie, QImage, QBitmap, QFont, QFontDatabase
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtWidgets import QWidget, QLabel, QGraphicsOpacityEffect
 
+from PyQt5.QtCore import (
+    QEasingCurve,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+    QTimer,
+    QUrl,
+    pyqtProperty,
+    pyqtSignal,
+)
+from PyQt5.QtGui import QBitmap, QFont, QFontDatabase, QImage, QMovie, QPixmap
+from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+from PyQt5.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
 
 # 资源文件名常量
 TAIL_IMAGE = "气泡尾巴.png"
@@ -38,7 +50,7 @@ class ChatBubble(QWidget):
 
     def __init__(self, resources_dir: str, parent=None):
         super().__init__(parent)
-        self.mascot_dir = os.path.join(resources_dir, "assets/mascot")
+        self.mascot_dir = get_mascot_dir(resources_dir)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.layout = dict(BUBBLE_LAYOUT)
         self._recompute_geometry()
@@ -52,6 +64,7 @@ class ChatBubble(QWidget):
         self._bottom_label.setAlignment(Qt.AlignCenter)
 
         self._content_label = QLabel(self)
+        self._content_label.setObjectName("mascot_content")
         self._content_label.setAttribute(Qt.WA_TranslucentBackground, True)
         self._content_label.setAlignment(Qt.AlignCenter)
         self._movie = None
@@ -72,14 +85,14 @@ class ChatBubble(QWidget):
         self._auto_hide_timer.timeout.connect(self._fade_out)
         self._persistent = False
         self._last_anchor = None
-        self._last_content_file = None  # FEATURE-5: 记录上次内容文件，避免连续重复
+        self._last_content_file = None  # 记录上次内容文件，避免连续重复
         self._content_dir = os.path.join(self.mascot_dir, "content")
 
         # shake相对偏移
         self._shake_anim = None
         self._shake_offset_val = 0.0
 
-        # 字体加载
+        # 字体加载（根源修复：确保mascot目录中的字体生效，并在样式表中也指定）
         self._font_family = "Microsoft YaHei"
         font_path = os.path.join(self.mascot_dir, FONT_FILE)
         if os.path.exists(font_path):
@@ -88,6 +101,13 @@ class ChatBubble(QWidget):
                 families = QFontDatabase.applicationFontFamilies(font_id)
                 if families:
                     self._font_family = families[0]
+                    logger.info(f"[mascot] 对话字体加载成功: {self._font_family}")
+                else:
+                    logger.info("[mascot] 字体加载失败: families为空")
+            else:
+                logger.info(f"[mascot] 字体加载失败: font_id={font_id}")
+        else:
+            logger.info(f"[mascot] 字体文件不存在: {font_path}")
 
         # 音频播放器（content中的音频文件）
         self._audio_player = QMediaPlayer()
@@ -182,12 +202,12 @@ class ChatBubble(QWidget):
     def _pick_text_line(self, filepath):
         """从txt读取所有非空行，随机选一行。文件级有概率，行内平等。"""
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, encoding='utf-8') as f:
                 lines = [line.strip() for line in f if line.strip()]
             if lines:
                 return random.choice(lines)
         except Exception as e:
-            print(f"[mascot] 读取txt失败 {filepath}: {e}")
+            logger.info(f"[mascot] 读取txt失败 {filepath}: {e}")
         return "..."
 
     def _pick_from_folder(self):
@@ -244,12 +264,11 @@ class ChatBubble(QWidget):
             self._movie.stop()
             self._movie = None
         self._content_label.clear()
-        self._content_label.setStyleSheet("")
         self._content_label.setWordWrap(False)
         self._content_label.setFont(QFont())
 
         ftype, fpath = self._pick_from_folder()
-        # FEATURE-5: 不重复上次文件（最多重试3次，单文件时不死循环）
+        # 不重复上次文件（最多重试3次，单文件时不死循环）
         _retry = 0
         while fpath and fpath == self._last_content_file and _retry < 3:
             ftype, fpath = self._pick_from_folder()
@@ -262,22 +281,30 @@ class ChatBubble(QWidget):
             self._movie.start()
         elif ftype == "text" and fpath:
             text = self._pick_text_line(fpath)
-            self._content_label.setText(text)
+            # 富文本包裹：line-height 0.75 激进压缩行间距，颜色由全局QSS mascot_content控制
+            self._content_label.setText(
+                f'<div style="line-height: 0.75; margin: 0;">{text}</div>')
             self._content_label.setWordWrap(True)
-            self._content_label.setFont(QFont(self._font_family, 28, QFont.Bold))
-            self._content_label.setStyleSheet("color: #382923; font-size: 28px; font-weight: bold;")
+            # QSS明确指定字体族+大小，避免被全局QSS覆盖；18pt在190x120气泡内合适
+            self._content_label.setStyleSheet(
+                f"QLabel {{ font-family: '{self._font_family}'; font-size: 18pt; "
+                f"font-weight: bold; padding: 0px; }}")
         elif ftype == "image" and fpath:
             pix = QPixmap(fpath).scaled(
                 self._content_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self._content_label.setPixmap(pix)
         elif ftype == "audio" and fpath:
-            self._audio_player.stop()
-            self._audio_player.setMedia(QMediaContent(QUrl.fromLocalFile(fpath)))
-            self._audio_player.setVolume(10)  # setMedia会重置音量，必须重设
-            self._audio_player.play()
+            # 根源优化：如果正在播放同一文件，不重启（高频点击时音频不被切碎）
+            current_media = self._audio_player.media()
+            current_url = current_media.canonicalUrl().toLocalFile() if current_media else ""
+            if current_url != fpath or self._audio_player.state() != QMediaPlayer.PlayingState:
+                self._audio_player.stop()
+                self._audio_player.setMedia(QMediaContent(QUrl.fromLocalFile(fpath)))
+                self._audio_player.setVolume(10)  # setMedia会重置音量，必须重设
+                self._audio_player.play()
             self._content_label.setText("♪")
-            self._content_label.setFont(QFont(self._font_family, 72, QFont.Bold))
-            self._content_label.setStyleSheet("color: #382923;")
+            self._content_label.setStyleSheet(
+                f"QLabel {{ font-family: '{self._font_family}'; font-size: 48pt; font-weight: bold; }}")
 
     def _position_to(self, anchor_x, anchor_y):
         L = self.layout
@@ -290,8 +317,18 @@ class ChatBubble(QWidget):
         self.move(x, y)
 
     def show_bubble(self, anchor_x, anchor_y):
+        """根源优化：高频点击时不频繁重载内容。
+        如果气泡已可见且距离上次加载内容 < 300ms，只刷新位置和自动隐藏计时器，不重载内容。"""
+        import time as _time
         self._last_anchor = (anchor_x, anchor_y)
-        self._load_content()
+        now = _time.monotonic() * 1000
+        need_reload = True
+        if hasattr(self, '_last_load_time') and self.isVisible():
+            if now - self._last_load_time < 300:
+                need_reload = False
+        if need_reload:
+            self._load_content()
+            self._last_load_time = now
         self._position_to(anchor_x, anchor_y)
         self.setWindowOpacity(1.0)
         self.show()
@@ -334,6 +371,6 @@ class ChatBubble(QWidget):
         if self._movie:
             self._movie.stop()
         self._audio_player.stop()
-        self._last_content_file = None  # FEATURE-5: 隐藏后重置，下次可重复
+        self._last_content_file = None  # 隐藏后重置，下次可重复
         self.visibility_changed.emit(False)
         super().hideEvent(event)

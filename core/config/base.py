@@ -1,3 +1,5 @@
+from core.logger import logger
+
 """
 配置管理模块 (Configuration Manager)
 
@@ -9,12 +11,17 @@ import json
 import os
 import sys
 import threading
+import time
 from pathlib import Path
-from typing import Dict, List, Optional
 
-# 配置版本号：迁移函数只在版本变化时执行，避免每次启动重复遍历
-CURRENT_CONFIG_VERSION = 5
+from core.colors import THEME_DARK, THEME_LIGHT
 
+# 受保护配置键：永远保留，禁止任何清理/迁移/墓碑逻辑删除。
+# 即使未来从 _get_minimal_skeleton 移除，用户 cfg 里的值也不会丢失。
+# 新增受保护字段时在此登记（键 -> 默认值）。
+_PROTECTED_CONFIG_KEYS = {
+    "my_beloved": "Xiaocheng",
+}
 
 def get_app_base_dir() -> Path:
     """获取应用基础目录（兼容开发环境和打包环境）
@@ -26,33 +33,39 @@ def get_app_base_dir() -> Path:
     return Path(__file__).parent.parent.parent
 
 
-def _default_angle_meter_profile() -> Dict:
+def get_config_file() -> Path:
+    """配置文件路径：config/config.json（开发版和发布版统一）。"""
+    return get_app_base_dir() / "config" / "config.json"
+
+
+def _default_angle_meter_profile() -> dict:
     """角度仪默认配置。各精度方案独立保存，可切换。"""
     return {
         "pitch_min": -80.0, "pitch_max": 80.0,
         "calibrations": {},
-        "active_calibration_point_count": 7,
-        "linked_vehicles": [], "auto_reset": False
+        "active_calibration_point_count": 5,
+        "linked_vehicles": [], "auto_reset": False,
+        "firing_table": []
     }
 
 
-def _default_angle_meter_segment() -> Dict:
+def _default_angle_meter_segment() -> dict:
     """angle_meter 配置段默认值单一工厂（空房子原则：profiles 为空，用户自行创建）"""
     return {
         "enabled": False, "current_profile": "",
         "profiles": {},
         "hotkeys": {
-            "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "pause": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "calibrate": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "reset": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "up": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "down": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "toggle": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "pause": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "calibrate": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "reset": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "up": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "down": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
         }
     }
 
 
-def _default_distance_meter_segment() -> Dict:
+def _default_distance_meter_segment() -> dict:
     """distance_meter 配置段默认值（空房子原则：默认禁用，无默认热键，无标定数据）"""
     return {
         "enabled": False,
@@ -63,10 +76,10 @@ def _default_distance_meter_segment() -> Dict:
         "overlay_offset_x": 100,
         "overlay_offset_y": 100,
         "hotkeys": {
-            "toggle": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "record": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "measure": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-            "modifier": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+            "toggle": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "record": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "measure": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+            "modifier": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
         }
     }
 
@@ -74,14 +87,14 @@ def _default_distance_meter_segment() -> Dict:
 class ConfigBaseMixin:
     """base 配置管理 mixin"""
 
-    def __init__(self, config_dir: str = None):
+    def __init__(self, config_dir: str | None = None):
         # 设置配置目录
         if config_dir:
             self.config_dir = Path(config_dir)
+            self.config_file = self.config_dir / "config.json"
         else:
-            self.config_dir = get_app_base_dir() / "config"
-
-        self.config_file = self.config_dir / "config.json"
+            self.config_file = get_config_file()
+            self.config_dir = self.config_file.parent
         self.resources_dir = get_app_base_dir() / "resources"
 
         # 确保目录存在
@@ -95,36 +108,31 @@ class ConfigBaseMixin:
         self._save_timer = None
         self._save_lock = threading.Lock()
 
+        # 配置变更回调（统一通知所有监听者，替代到处手动调 refresh）
+        self._on_change_callbacks = []
+
         # 加载配置
         self.load_config()
 
-        # 迁移
-        self._migrate_crosshair_paths()
-
-        cfg_ver = self._config.get("config_version", 0)
-        if cfg_ver < CURRENT_CONFIG_VERSION:
-            self._migrate_ammo_hotkeys()
-            self._migrate_xcj_to_rangefinder()
-            self._migrate_angle_meter_hotkeys()
-            self._migrate_angle_meter_calibration()
-            self._config["config_version"] = CURRENT_CONFIG_VERSION
-            self.save_config()
-
-    def _get_minimal_skeleton(self) -> Dict:
+    def _get_minimal_skeleton(self) -> dict:
         """最小安全骨架：程序启动必需的顶层键，缺失时不崩溃"""
         return {
+            "my_beloved": "Xiaocheng",
             "version": "1.0",
-            "config_version": CURRENT_CONFIG_VERSION,
             "global_settings": {
                 "scale": 100.0, "offset_x": 0, "offset_y": 0,
                 "overlay_opacity": 1.0, "overlay_visible": True,
+                "wheel_offset_x": 0, "wheel_offset_y": 0,
+                # 出厂兜底（对最终用户）：中性无倾向值——深主题用浅色、浅主题用深色。
+                # 用户在适配设置改过后存进自己的 CFG，运行时走用户值。
+                "accent_dark": "#EBEBEC", "accent_light": "#1D1D1F",
             },
             "hotkeys": {
-                "toggle_overlay": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-                "cycle_magnification": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-                "invert_colors": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-                "reset_magnification": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
-                "toggle_ui": {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"},
+                "toggle_overlay": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                "cycle_magnification": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                "invert_colors": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                "reset_magnification": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                "toggle_ui": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
             },
             "vehicles": {},
             "current_state": {
@@ -132,80 +140,41 @@ class ConfigBaseMixin:
             },
             "tags": [],
             "theme": "dark",
-            "rangefinder": {"profiles": {}, "current_profile": ""},
             "angle_meter": _default_angle_meter_segment(),
             "distance_meter": _default_distance_meter_segment(),
+            "magnifier": {
+                "enabled": False,
+                "zoom": 2.0,
+                "radius": 200,
+                "hotkeys": {
+                    "toggle": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                    "zoom_in": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                    "zoom_out": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
+                },
+            },
             "squad_macro": {"enabled": False, "name": "", "locked": False, "interval": 100},
             "mascot": {"enabled": False, "volume": 0.225, "persistent": False},
+            "ui_state": {"splitter_sizes": {}},
         }
 
-    def _migrate_crosshair_paths(self):
-        """迁移旧版准星路径格式"""
-        vehicles = self._config.get("vehicles", {})
-        for v_name, v_data in vehicles.items():
-            for a_name, a_data in v_data.get("ammo_types", {}).items():
-                for mag in a_data.get("magnifications", []):
-                    ch = mag.get("crosshair", "")
-                    if ch and "/" not in ch and "\\" not in ch:
-                        mag["crosshair"] = f"任意/{ch}" if ch else ""
-
-    def _migrate_ammo_hotkeys(self):
-        """迁移旧版弹种热键 key/trigger -> key1/trigger1/key2/trigger2"""
-        hotkeys = self._config.get("hotkeys", {})
-        ammo = hotkeys.get("ammo_types", {})
-        for v_name, v_hotkeys in ammo.items():
-            if isinstance(v_hotkeys, dict) and "key" in v_hotkeys:
-                if not v_hotkeys.get("key1"):
-                    v_hotkeys["key1"] = v_hotkeys["key"]
-                    v_hotkeys["trigger1"] = v_hotkeys.get("trigger", "keydown")
-                v_hotkeys.pop("key", None)
-                v_hotkeys.pop("trigger", None)
-
-    def _migrate_xcj_to_rangefinder(self):
-        """迁移旧版 xcj 段到 rangefinder"""
-        if "xcj" in self._config:
-            old_seg = self._config["xcj"]
-            new_seg = self._config.setdefault("rangefinder", {"profiles": {}, "current_profile": ""})
-            for k, v in old_seg.items():
-                if k not in new_seg or not new_seg.get(k):
-                    new_seg[k] = v
-            print("[ConfigManager] xcj -> rangefinder 迁移完成")
-            del self._config["xcj"]
-            self.request_save()
-
-    def _migrate_angle_meter_hotkeys(self):
-        """迁移角度仪旧版热键格式"""
-        am = self._config.get("angle_meter", {})
-        hotkeys = am.get("hotkeys", {})
-        for action, hk in hotkeys.items():
-            if isinstance(hk, dict) and "key" in hk:
-                if not hk.get("key1"):
-                    hk["key1"] = hk["key"]
-                    hk["trigger1"] = hk.get("trigger", "keydown")
-                hk.pop("key", None)
-                hk.pop("trigger", None)
-
-    def _migrate_angle_meter_calibration(self):
-        """迁移角度仪旧版校准数据格式"""
-        am = self._config.get("angle_meter", {})
-        for name, profile in am.get("profiles", {}).items():
-            if "calibration" in profile and "calibrations" not in profile:
-                profile["calibrations"] = {"7": profile.pop("calibration")}
-                profile["active_calibration_point_count"] = 7
-
     def load_config(self) -> bool:
-        """从文件加载配置。优先级：config.json > 最小骨架"""
+        """从文件加载配置（明文JSON）。"""
         if self.config_file.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(self.config_file, encoding="utf-8") as f:
                     loaded = json.load(f)
                 self._merge_config(self._config, loaded)
-                self._migrate_legacy_hotkey_fields()
+                # 受保护字段兜底（只在顶层执行，不进递归）：强制存在，用户值优先。
+                for key, default_val in _PROTECTED_CONFIG_KEYS.items():
+                    self._config.setdefault(key, default_val)
                 return True
             except Exception as e:
-                print(f"[ConfigManager] config.json 加载失败: {e}，备份并回退最小骨架")
+                logger.info(f"[ConfigManager] config.json 加载失败: {e}，备份并回退最小骨架")
                 try:
-                    backup = self.config_file.with_suffix('.json.corrupt')
+                    import os
+                    backup_dir = self.config_file.parent.parent / "backups"
+                    os.makedirs(backup_dir, exist_ok=True)
+                    backup = backup_dir / f"config.corrupt_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}"
                     self.config_file.rename(backup)
                 except Exception:
                     pass
@@ -215,7 +184,7 @@ class ConfigBaseMixin:
         self.save_config()
         return False
 
-    def _merge_config(self, default: Dict, loaded: Dict):
+    def _merge_config(self, default: dict, loaded: dict):
         """递归合并配置，保留loaded中的值，补充default中的新字段"""
         for key, value in default.items():
             if key not in loaded or loaded[key] is None:
@@ -223,33 +192,18 @@ class ConfigBaseMixin:
             elif isinstance(value, dict) and isinstance(loaded[key], dict):
                 self._merge_config(value, loaded[key])
         self._config = loaded
-
-    def _migrate_legacy_hotkey_fields(self):
-        """加载时迁移旧格式热键 key/trigger -> key1/trigger1（内存中）"""
-        hotkeys = self._config.get("hotkeys", {})
-        for hk_name, hk_val in hotkeys.items():
-            if isinstance(hk_val, dict) and "key" in hk_val:
-                if not hk_val.get("key1") and hk_val.get("key"):
-                    hk_val["key1"] = hk_val["key"]
-                    hk_val["trigger1"] = hk_val.get("trigger", "keydown")
+        # 墓碑清理：删掉历史遗留字段（代码里没人读，防止幽灵引用传播）
+        if "angle_meter" in self._config:
+            self._config["angle_meter"].pop("current_vehicle", None)
+            self._config["angle_meter"].pop("vehicles", None)
 
     def _prepare_config_for_save(self):
-        """保存前清理冗余字段 + 统一分区顺序"""
+        """保存前统一分区顺序"""
         cfg = self._config
-        # 清理热键旧格式
-        hotkeys = cfg.get("hotkeys", {})
-        for hk_name, hk_val in hotkeys.items():
-            if isinstance(hk_val, dict) and "key" in hk_val:
-                if not hk_val.get("key1") and hk_val.get("key"):
-                    hk_val["key1"] = hk_val["key"]
-                    hk_val["trigger1"] = hk_val.get("trigger", "keydown")
-                del hk_val["key"]
-                if "trigger" in hk_val:
-                    del hk_val["trigger"]
         # 统一顶层键顺序
         ordered = {}
         key_order = [
-            "version", "global_settings", "hotkeys", "vehicles",
+            "my_beloved", "version", "global_settings", "hotkeys", "vehicles",
             "angle_meter", "distance_meter", "squad_macro", "mascot",
         ]
         for k in key_order:
@@ -261,6 +215,21 @@ class ConfigBaseMixin:
         self._config = ordered
         return ordered
 
+    def _dump_config(self) -> str:
+        """在锁内做保存前整理+序列化。
+        与 GUI 写线程并发时 json.dumps 可能撞到 dict 被增删而抛
+        RuntimeError: dictionary changed size during iteration；
+        此处重试若干次（每次间隔 50ms），避免丢一次自动保存。"""
+        self._prepare_config_for_save()
+        last_err = None
+        for _ in range(3):
+            try:
+                return json.dumps(self._config, indent=4, ensure_ascii=False)
+            except RuntimeError as e:
+                last_err = e
+                time.sleep(0.05)
+        raise last_err
+
     def save_config(self) -> bool:
         """立即保存配置到文件"""
         with self._save_lock:
@@ -268,21 +237,36 @@ class ConfigBaseMixin:
                 self._save_timer.cancel()
                 self._save_timer = None
             try:
-                self._prepare_config_for_save()
-                data = json.dumps(self._config, indent=4, ensure_ascii=False)
+                data = self._dump_config()
             except Exception as e:
-                print(f"序列化配置失败: {e}")
+                logger.info(f"序列化配置失败: {e}")
                 return False
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                f.write(data)
+            self._atomic_write(data)
             return True
         except Exception as e:
-            print(f"保存配置失败: {e}")
+            logger.info(f"保存配置失败: {e}")
             return False
+
+    def _atomic_write(self, data: str):
+        """原子写：先写临时文件再 os.replace。"""
+        tmp = self.config_file.parent / (self.config_file.name + '.tmp')
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(data)
+        os.replace(tmp, self.config_file)
+
+    def add_on_change_callback(self, cb):
+        """注册配置变更回调（任何 set_* 触发 request_save 时自动调用）"""
+        self._on_change_callbacks.append(cb)
 
     def request_save(self):
         """请求保存配置（防抖：500ms）"""
+        # 立即通知所有监听者（同步刷新UI，不等磁盘写入）
+        for cb in self._on_change_callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
         if self._save_timer:
             self._save_timer.cancel()
         self._save_timer = threading.Timer(0.5, self._do_deferred_save)
@@ -293,16 +277,14 @@ class ConfigBaseMixin:
         with self._save_lock:
             self._save_timer = None
             try:
-                self._prepare_config_for_save()
-                data = json.dumps(self._config, indent=4, ensure_ascii=False)
+                data = self._dump_config()
             except Exception as e:
-                print(f"序列化配置失败: {e}")
+                logger.info(f"序列化配置失败: {e}")
                 return
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                f.write(data)
+            self._atomic_write(data)
         except Exception as e:
-            print(f"保存配置失败: {e}")
+            logger.info(f"保存配置失败: {e}")
 
     # ==================== 全局设置 ====================
 
@@ -332,6 +314,61 @@ class ConfigBaseMixin:
         self._config["global_settings"]["offset_y"] = offset_y
         self.request_save()
 
+    def get_display_resolution(self):
+        """用户标注的当前屏幕分辨率 (w,h)。[0,0] 表示自动检测真实屏幕。"""
+        rs = self._config["global_settings"].get("display_resolution")
+        if not rs or len(rs) != 2:
+            return (0, 0)
+        return (int(rs[0]), int(rs[1]))
+
+    def set_display_resolution(self, width: int, height: int):
+        self._config["global_settings"]["display_resolution"] = [int(width), int(height)]
+        self.request_save()
+
+    def get_adapt_mode(self) -> str:
+        """preset=按分辨率档预设；custom=手动 sx/sy"""
+        return self._config["global_settings"].get("adapt_mode", "preset")
+
+    def set_adapt_mode(self, mode: str):
+        self._config["global_settings"]["adapt_mode"] = mode if mode in ("preset", "custom") else "preset"
+        self.request_save()
+
+    def get_sx_override(self) -> float:
+        return float(self._config["global_settings"].get("sx_override", 0.0))
+
+    def set_sx_override(self, v: float):
+        self._config["global_settings"]["sx_override"] = float(v)
+        self.request_save()
+
+    def get_sy_override(self) -> float:
+        return float(self._config["global_settings"].get("sy_override", 0.0))
+
+    def set_sy_override(self, v: float):
+        self._config["global_settings"]["sy_override"] = float(v)
+
+    def get_sx_adapt_mode(self) -> str:
+        """横向适配逻辑：expand=增加/拓宽视野(等比)；stretch=拉伸/图像拉伸(非等比)"""
+        return self._config["global_settings"].get("sx_adapt_mode", "expand")
+
+    def set_sx_adapt_mode(self, mode: str):
+        self._config["global_settings"]["sx_adapt_mode"] = mode if mode in ("expand", "stretch") else "expand"
+        self.request_save()
+
+    def get_sy_adapt_mode(self) -> str:
+        """竖向适配逻辑：expand=增加/拓宽视野(等比)；stretch=拉伸/图像拉伸(非等比)"""
+        return self._config["global_settings"].get("sy_adapt_mode", "expand")
+
+    def set_sy_adapt_mode(self, mode: str):
+        self._config["global_settings"]["sy_adapt_mode"] = mode if mode in ("expand", "stretch") else "expand"
+        self.request_save()
+
+    def get_selected_screen(self) -> str:
+        return self._config["global_settings"].get("selected_screen", "")
+
+    def set_selected_screen(self, name: str):
+        self._config["global_settings"]["selected_screen"] = str(name)
+        self.request_save()
+
     def get_overlay_opacity(self) -> float:
         return self._config["global_settings"].get("overlay_opacity", 1.0)
 
@@ -342,63 +379,64 @@ class ConfigBaseMixin:
     def get_overlay_visible(self) -> bool:
         return self._config["global_settings"].get("overlay_visible", True)
 
-    def set_overlay_visible(self, visible: bool):
+    def _set_overlay_visible(self, visible: bool):
         self._config["global_settings"]["overlay_visible"] = visible
         self.request_save()
 
     # ==================== 热键 ====================
 
-    def get_hotkey(self, action: str) -> Dict:
+    def get_hotkey(self, action: str) -> dict:
         return self._config.get("hotkeys", {}).get(action, {
-            "key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"
+            "key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"
         })
 
     def set_hotkey(self, action: str, key: str, trigger: str = "keydown", slot: int = 1):
         hk = self._config.setdefault("hotkeys", {}).setdefault(action, {
-            "key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"
+            "key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"
         })
         hk[f"key{slot}"] = key
         hk[f"trigger{slot}"] = trigger
         self.request_save()
 
-    def get_all_hotkeys(self) -> Dict:
+    def get_all_hotkeys(self) -> dict:
         return self._config.get("hotkeys", {})
 
     # ==================== 当前状态 ====================
 
-    def get_current_state(self) -> Dict:
+    def get_current_state(self) -> dict:
         return self._config.get("current_state", {})
 
-    def set_current_vehicle(self, vehicle_name: str):
-        self._config.setdefault("current_state", {})["vehicle"] = vehicle_name
-        # 级联：切换载具后选第一个弹种
+    def _set_current_vehicle(self, vehicle_name: str | None):
+        state = self._config.setdefault("current_state", {})
+        state["vehicle"] = vehicle_name
+        # 级联：切换载具后，弹种/倍率必须无条件重置为新载具的有效值
+        # （新载具无弹种时置 None/0，严禁残留旧载具数据）
         vehicles = self._config.get("vehicles", {})
-        if vehicle_name in vehicles:
-            ammo_types = vehicles[vehicle_name].get("ammo_types", {})
-            if ammo_types:
-                first_ammo = list(ammo_types.keys())[0]
-                self._config["current_state"]["ammo_type"] = first_ammo
-                mags = ammo_types[first_ammo].get("magnifications", [])
-                if mags:
-                    self._config["current_state"]["magnification_index"] = 0
+        ammo_types = vehicles.get(vehicle_name, {}).get("ammo_types", {}) if vehicle_name in vehicles else {}
+        if ammo_types:
+            first_ammo = next(iter(ammo_types))
+            state["ammo_type"] = first_ammo
+            state["magnification_index"] = 0
+        else:
+            state["ammo_type"] = None
+            state["magnification_index"] = 0
         self.request_save()
 
-    def set_current_ammo_type(self, ammo_name: str):
+    def _set_current_ammo_type(self, ammo_name: str | None):
         self._config.setdefault("current_state", {})["ammo_type"] = ammo_name
-        self._config["current_state"]["magnification_index"] = 0
+        # 不重置倍率索引，继承当前倍率（越界由 state_machine 处理）
         self.request_save()
 
-    def set_current_magnification_index(self, index: int):
+    def _set_current_magnification_index(self, index: int):
         self._config.setdefault("current_state", {})["magnification_index"] = index
         self.request_save()
 
     def cycle_magnification(self):
         state = self._config.get("current_state", {})
         vehicle = state.get("vehicle", "")
-        ammo = state.get("ammo_type", "")
         vehicles = self._config.get("vehicles", {})
-        if vehicle in vehicles and ammo in vehicles[vehicle].get("ammo_types", {}):
-            mags = vehicles[vehicle]["ammo_types"][ammo].get("magnifications", [])
+        if vehicle in vehicles:
+            mags = vehicles[vehicle].get("magnifications", [])
             if mags:
                 cur = state.get("magnification_index", 0)
                 new_idx = (cur + 1) % len(mags)
@@ -407,22 +445,89 @@ class ConfigBaseMixin:
                 return new_idx
         return 0
 
-    def get_current_crosshair(self) -> Optional[str]:
+    def get_current_crosshair(self) -> str | None:
+        """返回当前准星的绝对路径（拼接 resources 目录，统一正斜杠）
+        读 crosshairs dict：ammo_types[ammo].crosshairs[label].path
+        """
         state = self._config.get("current_state", {})
         vehicle = state.get("vehicle", "")
         ammo = state.get("ammo_type", "")
         idx = state.get("magnification_index", 0)
         vehicles = self._config.get("vehicles", {})
-        if vehicle in vehicles and ammo in vehicles[vehicle].get("ammo_types", {}):
-            mags = vehicles[vehicle]["ammo_types"][ammo].get("magnifications", [])
-            if 0 <= idx < len(mags):
-                return mags[idx].get("crosshair", "")
-        return None
+        if vehicle not in vehicles:
+            return None
+        v = vehicles[vehicle]
+        mags = v.get("magnifications", [])
+        if not (0 <= idx < len(mags)):
+            return None
+        label = mags[idx].get("label", "")
+        ammo_data = v.get("ammo_types", {}).get(ammo, {})
+        crosshairs = ammo_data.get("crosshairs", {})
+        entry = crosshairs.get(label, {})
+        rel = entry.get("path", "")
+        if not rel:
+            return ""
+        rel = rel.replace("\\", "/")
+        return str(self.resources_dir / rel).replace("\\", "/")
 
     # ==================== 主题 ====================
 
     def get_theme(self) -> str:
         return self._config.get("theme", "dark")
+
+    def get_accent_dark(self) -> str:
+        """深色主题强调色（出厂默认见 global_settings 模板）"""
+        return self._config["global_settings"]["accent_dark"]
+
+    def set_accent_dark(self, hexc: str):
+        self._config["global_settings"]["accent_dark"] = hexc
+        self.request_save()
+
+    def get_accent_light(self) -> str:
+        """浅色主题强调色（出厂默认见 global_settings 模板）"""
+        return self._config["global_settings"]["accent_light"]
+
+    def set_accent_light(self, hexc: str):
+        self._config["global_settings"]["accent_light"] = hexc
+        self.request_save()
+
+    def get_accent(self, theme: str | None = None) -> str:
+        """当前（或指定）主题生效的强调色"""
+        if theme is None:
+            theme = self.get_theme()
+        return self.get_accent_light() if theme == "light" else self.get_accent_dark()
+
+    def get_on_accent_text(self) -> str:
+        """当前主题强调色底上的文字色（与主界面 on_accent_text 一致）"""
+        return self._theme_palette()["on_accent_text"]
+
+    def _theme_palette(self) -> dict:
+        """当前主题的界面调色板"""
+        return THEME_LIGHT if self.get_theme() == "light" else THEME_DARK
+
+    # ---------- 滚轮悬浮窗位置偏移 ----------
+    # 滚轮三个 overlay 整体偏移 (x, y) px；默认贴屏幕右边垂直居中
+    def get_wheel_offset(self):
+        g = self._config["global_settings"]
+        return g.get("wheel_offset_x", 0), g.get("wheel_offset_y", 0)
+
+    def set_wheel_offset(self, x: int, y: int):
+        self._config["global_settings"]["wheel_offset_x"] = int(x)
+        self._config["global_settings"]["wheel_offset_y"] = int(y)
+        self.request_save()
+
+    def get_splitter_sizes(self, name: str, default=None):
+        """获取QSplitter保存的尺寸，不存在返回default"""
+        return self._config.get("ui_state", {}).get("splitter_sizes", {}).get(name, default)
+
+    def set_splitter_sizes(self, name: str, sizes: list):
+        """保存QSplitter尺寸"""
+        if "ui_state" not in self._config:
+            self._config["ui_state"] = {}
+        if "splitter_sizes" not in self._config["ui_state"]:
+            self._config["ui_state"]["splitter_sizes"] = {}
+        self._config["ui_state"]["splitter_sizes"][name] = list(sizes)
+        self.request_save()
 
     def set_theme(self, theme: str):
         self._config["theme"] = theme
@@ -431,14 +536,73 @@ class ConfigBaseMixin:
     # ==================== 工具 ====================
 
     def unbind_crosshair(self, crosshair_name: str) -> int:
-        """解除所有载具/弹种/倍率对指定准星的绑定，返回解除数量"""
+        """解除所有载具/弹种/倍率对指定图片的绑定，返回解除数量
+        覆盖：准星图片(crosshairs.path) + 载具图片(base_ui) + 弹种图片(ammo_ui)"""
         count = 0
         vehicles = self._config.get("vehicles", {})
         for v_data in vehicles.values():
+            # 载具图片 base_ui
+            if v_data.get("base_ui") == crosshair_name:
+                v_data["base_ui"] = ""
+                count += 1
             for a_data in v_data.get("ammo_types", {}).values():
-                for mag in a_data.get("magnifications", []):
-                    if mag.get("crosshair") == crosshair_name:
-                        mag["crosshair"] = ""
+                # 弹种图片 ammo_ui
+                if a_data.get("ammo_ui") == crosshair_name:
+                    a_data["ammo_ui"] = ""
+                    count += 1
+                # 准星图片
+                crosshairs = a_data.get("crosshairs", {})
+                for entry in crosshairs.values():
+                    if entry.get("path") == crosshair_name:
+                        entry["path"] = ""
+                        count += 1
+        if count > 0:
+            self.request_save()
+        return count
+
+    def get_crosshair_reference_index(self) -> dict[str, list[str]]:
+        """构建资源引用倒排索引：{图片相对路径: [载具名, ...]}（载具名不去重）
+        统计范围：准星图片(crosshairs.path) + 载具图片(base_ui) + 弹种图片(ammo_ui)"""
+        index: dict[str, list[str]] = {}
+        vehicles = self._config.get("vehicles", {})
+        for vname, v_data in vehicles.items():
+            # 载具图片 base_ui
+            base_ui = v_data.get("base_ui", "").replace("\\", "/")
+            if base_ui:
+                index.setdefault(base_ui, []).append(vname)
+            for a_data in v_data.get("ammo_types", {}).values():
+                # 弹种图片 ammo_ui
+                ammo_ui = a_data.get("ammo_ui", "").replace("\\", "/")
+                if ammo_ui:
+                    index.setdefault(ammo_ui, []).append(vname)
+                # 准星图片
+                crosshairs = a_data.get("crosshairs", {})
+                for entry in crosshairs.values():
+                    ch = entry.get("path", "").replace("\\", "/")
+                    if ch:
+                        index.setdefault(ch, []).append(vname)
+        return index
+
+    def rename_crosshair_path(self, old_path: str, new_path: str) -> int:
+        """批量更新config中所有引用old_path的位置为new_path，返回更新数量
+        覆盖：准星图片(crosshairs.path) + 载具图片(base_ui) + 弹种图片(ammo_ui)"""
+        count = 0
+        vehicles = self._config.get("vehicles", {})
+        for v_data in vehicles.values():
+            # 载具图片 base_ui
+            if v_data.get("base_ui") == old_path:
+                v_data["base_ui"] = new_path
+                count += 1
+            for a_data in v_data.get("ammo_types", {}).values():
+                # 弹种图片 ammo_ui
+                if a_data.get("ammo_ui") == old_path:
+                    a_data["ammo_ui"] = new_path
+                    count += 1
+                # 准星图片
+                crosshairs = a_data.get("crosshairs", {})
+                for entry in crosshairs.values():
+                    if entry.get("path") == old_path:
+                        entry["path"] = new_path
                         count += 1
         if count > 0:
             self.request_save()

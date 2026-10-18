@@ -1,9 +1,3 @@
-import json
-import os
-import sys
-import threading
-from pathlib import Path
-from typing import Dict, List, Optional
 
 class ConfigDistanceMixin:
     """distance 配置管理 mixin"""

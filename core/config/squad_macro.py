@@ -1,9 +1,4 @@
-import json
-import os
-import sys
-import threading
-from pathlib import Path
-from typing import Dict, List, Optional
+
 
 class ConfigSquadMacroMixin:
     """squad_macro 配置管理 mixin"""
@@ -17,7 +12,7 @@ class ConfigSquadMacroMixin:
         self.request_save()
 
 
-    def get_squad_macro_hotkey(self) -> Dict:
+    def get_squad_macro_hotkey(self) -> dict:
         return self._config.get("squad_macro", {}).get("hotkey", {"key1": "", "trigger1": "keydown", "key2": "", "trigger2": "keydown"})
 
 
@@ -54,6 +49,17 @@ class ConfigSquadMacroMixin:
     def set_squad_macro_interval(self, interval_ms: int):
         sm = self._config.setdefault("squad_macro", {})
         sm["interval_ms"] = max(50, int(interval_ms))
+        self.request_save()
+
+    def get_squad_macro_console_key(self) -> str:
+        """获取游戏控制台键（默认 ~ 键，即 OEM3）"""
+        sm = self._config.get("squad_macro", {})
+        return sm.get("console_key", "`")
+
+    def set_squad_macro_console_key(self, key: str):
+        """设置游戏控制台键"""
+        sm = self._config.setdefault("squad_macro", {})
+        sm["console_key"] = key
         self.request_save()
 
     # ==================== 弹种管理 ====================

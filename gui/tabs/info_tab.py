@@ -1,16 +1,17 @@
 """信息页：标题、简述、免费声明、README链接、吉祥物开关"""
-import sys
+import base64
 import os
 import subprocess
+import sys
 from pathlib import Path
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QCheckBox, QMessageBox
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from core.resource_manager import ResourceManager
-from gui.mascot import MascotWidget, ChatBubble, SoundPlayer
+from gui.mascot import ChatBubble, MascotWidget, SoundPlayer
 
-APP_VERSION = "V0.0140300090"
+APP_VERSION = "V0.0140300174"
 
 
 class InfoTab(QWidget):
@@ -23,6 +24,7 @@ class InfoTab(QWidget):
         self._sound = None
         self._follow_timer = None
         self._build_ui()
+        self._connect_ui_signals()
         # 从配置加载吉祥物启用状态
         self.mascot_enable_check.setChecked(self.config.is_mascot_enabled())
 
@@ -31,7 +33,7 @@ class InfoTab(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
 
-        title = QLabel("GunnerSight Overlay")
+        title = QLabel("GUNNER SIGHT")
         title.setObjectName("info_title")
         layout.addWidget(title)
 
@@ -39,34 +41,37 @@ class InfoTab(QWidget):
         version_label.setObjectName("hint_text")
         layout.addWidget(version_label)
 
-        desc = QLabel("屏幕准星辅助软件 — 依程序状态显示对应的炮镜图片，支持载具/弹种/倍率三级切换、全局热键、一键反色、Hold to Aim、外置信息数显（测距）等功能。")
+        desc = QLabel("屏幕准星辅助软件 — 依程序状态显示对应的炮镜图片，支持载具/弹种/倍率三级切换、一键反色、放大镜、标定测距、角度仪、建队宏等功能。载具导出文件（.gsv）保存在 resources/ 目录下，可直接分享给他人导入使用。")
         desc.setObjectName("hint_text")
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
-        free_label = QLabel('本项目为免费工具，本人不收取任何费用。若遇到他人以"代下、安装、指导、内部版"等名义收费，请谨慎判断，谨防信息差，避免为获取本工具额外付费。\n联系方式QQ：3117023693 注明来意')
+        _b64 = "5pys6aG555uu5Li65YWN6LS55bel5YW377yM5pys5Lq65LiN5pS25Y+W5Lu75L2V6LS555So44CC6Iul6YGH5Yiw5LuW5Lq65LulIuS7o+S4i+OAgeWuieijheOAgeaMh+WvvOOAgeWGhemDqOeJiCLnrYnlkI3kuYnmlLbotLnvvIzor7fosKjmhY7liKTmlq3vvIzosKjpmLLkv6Hmga/lt67vvIzpgb/lhY3kuLrojrflj5bmnKzlt6Xlhbfpop3lpJbku5jotLnjgIIK6IGU57O75pa55byPUVHvvJozMTE3MDIzNjkzIOazqOaYjuadpeaEjw=="
+        free_label = QLabel(base64.b64decode(_b64).decode("utf-8"))
         free_label.setObjectName("free_notice")
         free_label.setWordWrap(True)
         layout.addWidget(free_label)
 
         layout.addStretch()
 
-        readme_btn = QPushButton("简述说明")
-        readme_btn.setObjectName("link_btn")
-        readme_btn.setCursor(Qt.PointingHandCursor)
-        readme_btn.clicked.connect(lambda: self._open_doc("README.md"))
-        layout.addWidget(readme_btn)
+        self.readme_btn = QPushButton("简述说明")
+        self.readme_btn.setObjectName("link_btn")
+        self.readme_btn.setCursor(Qt.PointingHandCursor)
+        layout.addWidget(self.readme_btn)
 
-        guide_btn = QPushButton("用户手册")
-        guide_btn.setObjectName("link_btn")
-        guide_btn.setCursor(Qt.PointingHandCursor)
-        guide_btn.clicked.connect(lambda: self._open_doc("USER_GUIDE.md"))
-        layout.addWidget(guide_btn)
+        self.guide_btn = QPushButton("用户手册")
+        self.guide_btn.setObjectName("link_btn")
+        self.guide_btn.setCursor(Qt.PointingHandCursor)
+        layout.addWidget(self.guide_btn)
 
         self.mascot_enable_check = QCheckBox("召唤惊天一条区")
         self.mascot_enable_check.setChecked(False)
-        self.mascot_enable_check.toggled.connect(self._on_mascot_toggled)
         layout.addWidget(self.mascot_enable_check)
+
+    def _connect_ui_signals(self):
+        self.readme_btn.clicked.connect(lambda: self._open_doc("README.md"))
+        self.guide_btn.clicked.connect(lambda: self._open_doc("USER_GUIDE.md"))
+        self.mascot_enable_check.toggled.connect(self._on_mascot_toggled)
 
     def showEvent(self, event):
         super().showEvent(event)
