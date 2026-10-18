@@ -20,11 +20,11 @@
           - QDoubleSpinBox range=[1.0, 1000.0] 当前=100.0  suffix=「 %」  decimals=1
           - QSlider range=[1, 1000] 当前=100
         - QLabel 「横向偏移:」
-          - QSpinBox range=[-500, 500] 当前=0  suffix=「 px」
-          - QSlider range=[-500, 500] 当前=0
+          - QSpinBox range=[-2000, 2000] 当前=0  suffix=「 px」
+          - QSlider range=[-2000, 2000] 当前=0
         - QLabel 「竖向偏移:」
-          - QSpinBox range=[-500, 500] 当前=0  suffix=「 px」
-          - QSlider range=[-500, 500] 当前=0
+          - QSpinBox range=[-2000, 2000] 当前=0  suffix=「 px」
+          - QSlider range=[-2000, 2000] 当前=0
         - QLabel 「不透明度:」
           - QSpinBox range=[10, 100] 当前=100  suffix=「 %」
           - QSlider range=[10, 100] 当前=100
@@ -74,9 +74,9 @@
           - QSlider range=[1, 1000] 当前=100
           - QSpinBox range=[1, 1000] 当前=100  suffix=「%」
         - QLabel 「横向偏移:」
-        - QSpinBox range=[-500, 500] 当前=0
+        - QSpinBox range=[-2000, 2000] 当前=0
         - QLabel 「竖向偏移:」
-        - QSpinBox range=[-500, 500] 当前=0
+        - QSpinBox range=[-2000, 2000] 当前=0
         - QLabel 「不透明度:」
           - QPushButton 「-」
           - QSpinBox range=[10, 100] 当前=100  suffix=「%」
@@ -276,9 +276,9 @@
             - QLineEdit placeholder=「点击设置...」
             - QComboBox 3 项: ['按下触发', '松开触发', '按住模式']  当前=「按下触发」
           - QLabel 「窗口X:」
-          - QSpinBox range=[0, 9999] 当前=0
+          - QSpinBox range=[-2000, 2000] 当前=0
           - QLabel 「Y:」
-          - QSpinBox range=[0, 9999] 当前=0
+          - QSpinBox range=[-2000, 2000] 当前=0
         - QGroupBox 「校准设置」
           - QLabel 「精度方案:」
           - QComboBox 3 项: ['2 点', '5 点', '11 点']  当前=「2 点」

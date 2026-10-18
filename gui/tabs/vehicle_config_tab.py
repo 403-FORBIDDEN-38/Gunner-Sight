@@ -270,11 +270,11 @@ class VehicleConfigTab(QWidget):
         offset_layout = QHBoxLayout()
         offset_layout.addWidget(QLabel("横向偏移:"))
         self.vo_offset_x = QSpinBox()
-        self.vo_offset_x.setRange(-500, 500)
+        self.vo_offset_x.setRange(-2000, 2000)
         offset_layout.addWidget(self.vo_offset_x)
         offset_layout.addWidget(QLabel("竖向偏移:"))
         self.vo_offset_y = QSpinBox()
-        self.vo_offset_y.setRange(-500, 500)
+        self.vo_offset_y.setRange(-2000, 2000)
         offset_layout.addWidget(self.vo_offset_y)
         vo_layout.addLayout(offset_layout)
         # 透明度（- / 输入框 / 滑块 / +）

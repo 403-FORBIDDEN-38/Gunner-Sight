@@ -1,6 +1,6 @@
 [project]
 name = "gunnersight"
-version = "0.0140300174"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
+version = "0.0140300177"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
 description = "Squad vehicle reticle overlay tool"
 requires-python = ">=3.10"
 dependencies = [

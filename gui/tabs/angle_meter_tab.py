@@ -14,6 +14,7 @@ from core.colors import (ANGLE_ACTIVE, ANGLE_CALIBRATING,
                          OVERLAY_BOX_BG_ALPHA, OVERLAY_BOX_RGB, OVERLAY_TEXT)
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -491,11 +492,11 @@ class AngleMeterTab(QWidget):
         pos_row = QHBoxLayout()
         pos_row.addWidget(QLabel("窗口X:"))
         self.overlay_x_spin = QSpinBox()
-        self.overlay_x_spin.setRange(0, 9999)
+        self.overlay_x_spin.setRange(-2000, 2000)
         pos_row.addWidget(self.overlay_x_spin)
         pos_row.addWidget(QLabel("Y:"))
         self.overlay_y_spin = QSpinBox()
-        self.overlay_y_spin.setRange(0, 9999)
+        self.overlay_y_spin.setRange(-2000, 2000)
         pos_row.addWidget(self.overlay_y_spin)
         pos_row.addStretch()
         hk_grid.addLayout(pos_row, 8, 0, 1, 2)
@@ -1118,17 +1119,19 @@ class AngleMeterTab(QWidget):
         if self.overlay:
             self.overlay.show()
             ox, oy = self.config.get_angle_meter_overlay_pos()
+            center = QApplication.primaryScreen().geometry().center()
             if ox is not None and oy is not None:
-                self.overlay.move(ox, oy)
+                self.overlay.move(center.x() + ox, center.y() + oy)
             else:
-                self.overlay.move(100, 100)
+                self.overlay.move(center.x(), center.y())
 
     def _on_overlay_pos_changed(self):
         x = self.overlay_x_spin.value()
         y = self.overlay_y_spin.value()
         self.config.set_angle_meter_overlay_pos(x, y)
         if self.overlay and self.overlay.isVisible():
-            self.overlay.move(x, y)
+            center = QApplication.primaryScreen().geometry().center()
+            self.overlay.move(center.x() + x, center.y() + y)
 
     def _on_toggle_use(self):
         if not self.tracker:

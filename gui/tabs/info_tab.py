@@ -11,7 +11,8 @@ from PyQt5.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QVBoxLa
 from core.resource_manager import ResourceManager
 from gui.mascot import ChatBubble, MascotWidget, SoundPlayer
 
-APP_VERSION = "V0.0140300174"
+APP_VERSION = "V0.0140300177"
+DEDICATION = "Dedicated to Xiaocheng"
 
 
 class InfoTab(QWidget):
@@ -41,6 +42,10 @@ class InfoTab(QWidget):
         version_label.setObjectName("hint_text")
         layout.addWidget(version_label)
 
+        dedication_label = QLabel(DEDICATION)
+        dedication_label.setObjectName("hint_text")
+        layout.addWidget(dedication_label)
+
         desc = QLabel("屏幕准星辅助软件 — 依程序状态显示对应的炮镜图片，支持载具/弹种/倍率三级切换、一键反色、放大镜、标定测距、角度仪、建队宏等功能。载具导出文件（.gsv）保存在 resources/ 目录下，可直接分享给他人导入使用。")
         desc.setObjectName("hint_text")
         desc.setWordWrap(True)
@@ -51,6 +56,11 @@ class InfoTab(QWidget):
         free_label.setObjectName("free_notice")
         free_label.setWordWrap(True)
         layout.addWidget(free_label)
+
+        credit_label = QLabel("所有视觉素材版权归原作者所有，仅个人非商用。详见 CREDITS.md。")
+        credit_label.setObjectName("hint_text")
+        credit_label.setWordWrap(True)
+        layout.addWidget(credit_label)
 
         layout.addStretch()
 
