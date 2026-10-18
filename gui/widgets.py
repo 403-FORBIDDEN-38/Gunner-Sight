@@ -157,7 +157,7 @@ class VehicleFilterWidget(QWidget):
             self.list.currentItemChanged.connect(self._on_current_changed)
         elif self._mode == "click":
             self.list.itemClicked.connect(self._on_item_clicked)
-        layout.addWidget(self.list)
+        layout.addWidget(self.list, 1)
 
     FAVORITE_TAG = "收藏"
 

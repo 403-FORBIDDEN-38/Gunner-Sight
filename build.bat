@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 REM GunnerSight 打包脚本（Nuitka onedir，配置明文）
 REM 用法：双击 build.bat，或命令行执行 build.bat
 REM 产物：dist\main.dist\GUNNER SIGHT.exe
@@ -17,10 +17,14 @@ echo [1/2] 清理旧产物（保留编译缓存 main.build）...
 if exist "dist\main.dist" rmdir /s /q "dist\main.dist"
 
 echo [2/2] Nuitka 编译中（复用缓存，用时取决于改动范围）...
+for /f "delims=" %%v in ('py -c "from gui.tabs.info_tab import APP_VERSION; v=APP_VERSION.lstrip('V'); p=v.split('.'); print(f'{p[0]}.{p[1][0:2]}.{p[1][2:5]}.{int(p[1][5:])}')"') do set APP_VER=%%v
 py -m nuitka main.py ^
     --standalone ^
     --enable-plugin=pyqt5 ^
     --windows-icon-from-ico=app_icon.ico ^
+    --copyright="Copyright © 2026 [403 FORBIDDEN]. Dedicated to Xiaocheng." ^
+    --product-version=%APP_VER% ^
+    --include-data-files=CREDITS.md=CREDITS.md ^
     --output-filename="GUNNER SIGHT.exe" ^
     --python-flag=no_docstrings ^
     --python-flag=no_asserts ^

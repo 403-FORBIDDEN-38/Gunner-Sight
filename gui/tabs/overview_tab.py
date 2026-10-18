@@ -46,7 +46,7 @@ class OverviewTab(QWidget):
         self._vf_container.setMinimumHeight(300)
         vf_container_layout = QVBoxLayout(self._vf_container)
         vf_container_layout.setContentsMargins(0, 0, 0, 0)
-        quick_layout.addWidget(self._vf_container)
+        quick_layout.addWidget(self._vf_container, 1)
         quick_ammo_row = QHBoxLayout()
         quick_ammo_row.addWidget(QLabel("弹种:"))
         self.quick_ammo_combo = QComboBox()
@@ -54,14 +54,14 @@ class OverviewTab(QWidget):
         self.quick_mag_btn = QPushButton("切换倍率")
         quick_ammo_row.addWidget(self.quick_mag_btn)
         quick_layout.addLayout(quick_ammo_row)
-        layout.addWidget(quick_group)
+        layout.addWidget(quick_group, 1)
 
         # 准星参数（全局默认，无载例覆盖时生效）——从适配tab移回，用户主要在此调节
         rg, rl = make_group_box("准星参数", layout_cls=QFormLayout)
         self.size_ctl = LinkedSpinSlider((1.0, 1000.0), slider_range=(1, 1000),
                                          decimals=1, suffix=" %")
-        self.offset_x_ctl = LinkedSpinSlider((-500, 500), suffix=" px")
-        self.offset_y_ctl = LinkedSpinSlider((-500, 500), suffix=" px")
+        self.offset_x_ctl = LinkedSpinSlider((-2000, 2000), suffix=" px")
+        self.offset_y_ctl = LinkedSpinSlider((-2000, 2000), suffix=" px")
         self.opacity_ctl = LinkedSpinSlider((10, 100), suffix=" %")
         rl.addRow("大小缩放:", self.size_ctl)
         rl.addRow("横向偏移:", self.offset_x_ctl)
@@ -83,9 +83,6 @@ class OverviewTab(QWidget):
 
         self._connect_crosshair_params()
 
-        layout.addStretch()
-
-
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
@@ -95,7 +92,7 @@ class OverviewTab(QWidget):
             return
         self.quick_vf = VehicleFilterWidget(mode="select")
         self.quick_vf.setMinimumHeight(300)
-        self._vf_container.layout().addWidget(self.quick_vf)
+        self._vf_container.layout().addWidget(self.quick_vf, 1)
         self._vf_created = True
         if self._pending_vf_signals:
             on_vehicle_changed = self._pending_vf_signals[0]

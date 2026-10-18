@@ -8229,7 +8229,9 @@
                 "key2": "",
                 "trigger2": "keydown"
             }
-        }
+        },
+        "overlay_x": -300,
+        "overlay_y": 300
     },
     "distance_meter": {
         "enabled": false,
@@ -8300,7 +8302,7 @@
     },
     "current_state": {
         "vehicle": "AAA 示例载具",
-        "ammo_type": "ATGM 制导弹药",
+        "ammo_type": "AP 仅代表个人指代癖好",
         "magnification_index": 0
     },
     "tags": [

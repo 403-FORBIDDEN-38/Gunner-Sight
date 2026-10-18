@@ -6,6 +6,67 @@
 
 ---
 
+## 2026-10-18 数值范围统一 + 角度仪 overlay 语义变更 + 手册错误修正
+
+### 准星面板载具列表拉伸修复
+
+根因：`overview_tab._build_ui` 末尾 `layout.addStretch()` 吃掉所有剩余空间，载具组 stretch 链全没传 1。修复 5 处联动（含通用组件 `widgets.py::VehicleFilterWidget`），载具配置页中栏列表同样受益。
+
+### 数值范围统一：准星/独立偏移 ±500 → ±2000
+
+- `overview_tab.py`：全局偏移 LinkedSpinSlider (-500,500) → (-2000,2000)
+- `vehicle_config_tab.py`：独立偏移 QSpinBox (-500,500) → (-2000,2000)
+- 原因：4K 屏 ±500 不够用
+
+### 角度仪 overlay 语义变更（breaking change）
+
+- 从屏幕绝对坐标（0~9999，左上角原点）改为相对屏幕中心偏移（±2000）
+- `_show_overlay` / `_on_overlay_pos_changed` 改为 `move(center.x()+ox, center.y()+oy)`
+- 默认位置从 (100,100) 改为屏幕中心 (0,0 偏移)
+- 影响：已有用户 config 里存的绝对坐标值会被解释为偏移量，位置会变。无自动迁移。
+
+### 用户手册错误修正（USER_GUIDE.md）
+
+1. 反色：从"切换式"改为"按住式"（config 里 trigger='hold'，按下松开各触发一次 toggle）
+2. 出厂预设：从"LAV-6 / SMK"改为"AAA 示例载具 / AP"（与 current_state 一致）
+3. 放大镜预设：从"不会跨重启保存"改为"会跨重启保存"（config 里 current_preset 非空）
+4. 分辨率挡位：从"出厂预配 1K"改为"点识别当前屏后自动匹配"
+5. 配置迁移：从"不做配置迁移"改为"只补全新字段默认值，不做版本间格式转换"
+
+### 版本
+
+V0.0140300174 → V0.0140300175
+
+### DEDICATION 纪念（三层）
+
+- 源码：`info_tab.py` 加 `DEDICATION = "Dedicated to Xiaocheng"`，信息页版本号下面一行灰色小字
+- exe 属性：`build.bat` 加 `--copyright="Copyright © 2026 [403 FORBIDDEN]. Dedicated to Xiaocheng."`，Windows 文件属性→详细信息可见
+- cfg：已有 `my_beloved: "Xiaocheng"` 受保护字段（base.py `_PROTECTED_CONFIG_KEYS`）
+
+### 素材版权声明（无敌大甲）
+
+- 新增 `CREDITS.md`：通用 blanket statement，覆盖所有素材（版权归原作者、非商业用途、48小时下架、免责担保）
+- `README.md` 加"素材版权声明"节
+- `info_tab.py` 加一行短声明
+
+### build.bat 改进
+
+- 转 UTF-8 with BOM + CRLF（cmd.exe 才能正确解析 © 字符）
+- 动态读取版本号：`for /f` 从 `info_tab.APP_VERSION` 转换为 Windows 4段格式（V0.0140300177 → 0.14.3.177）
+- 加 `--product-version`（Nuitka 要求提供 copyright 时必须同时提供版本号）
+- 加 `--include-data-files=CREDITS.md=CREDITS.md`（打进发布包）
+- 踩坑：`--windows-legal-copyright` 不是有效参数，正确的是 `--copyright`
+
+### 版本
+
+V0.0140300175 → V0.0140300177
+
+### 打包 V0.0140300177
+
+备份 → py_compile + pytest 29 passed → build.bat（Nuitka 4.2.1，zig 后端）→ robocopy /MIR 覆盖桌面版。exe 版权属性验证通过，CREDITS.md 已进包。
+
+---
+
 ## 2026-10-18 滚轮边界 bug + GitHub 开源 + my_beloved 保护 + 手册文风讨论
 
 ### 滚轮切弹种桌面焦点边界 bug（已闭环，非代码 bug）
