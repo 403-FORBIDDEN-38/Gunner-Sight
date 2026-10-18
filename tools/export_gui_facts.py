@@ -180,15 +180,11 @@ import subprocess
 
 
 def load_factory_config():
-    """出厂配置 = **发布包里带的那份**（用户拿到手第一眼看到的）。
+    """出厂配置 = git HEAD 里的 config/config.json（提交时状态，与发布包一致）。
 
     绝不读工作区 config/config.json —— 那是使用者**当前状态**，随时会变。
-    实测过：工作区 overlay_visible=false，而出厂（发布包 + git HEAD）都是 true。
-    拿不到发布包时退回 git HEAD（提交时状态，与发布包一致）。
+    实测过：工作区 overlay_visible=false，而 git HEAD 是 true。
     """
-    pkg = Path(r"config/config.json")
-    if pkg.exists():
-        return json.loads(pkg.read_text(encoding="utf-8")), f"发布包 `{pkg}`"
     out = subprocess.run(["git", "show", "HEAD:config/config.json"],
                          capture_output=True, text=True, encoding="utf-8").stdout
     return json.loads(out), "git HEAD:config/config.json"
