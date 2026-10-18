@@ -8299,8 +8299,8 @@
         "persistent": false
     },
     "current_state": {
-        "vehicle": "LAV-6",
-        "ammo_type": "SMK",
+        "vehicle": "AAA 示例载具",
+        "ammo_type": "ATGM 制导弹药",
         "magnification_index": 0
     },
     "tags": [

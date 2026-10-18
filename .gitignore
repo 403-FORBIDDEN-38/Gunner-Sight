@@ -38,3 +38,6 @@ venv/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# 本地开发规范（不公开）
+AGENTS.md
