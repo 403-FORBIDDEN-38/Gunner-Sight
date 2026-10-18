@@ -25,6 +25,9 @@ py -m nuitka main.py ^
     --copyright="Copyright © 2026 [403 FORBIDDEN]. Dedicated to Xiaocheng." ^
     --product-version=%APP_VER% ^
     --include-data-files=CREDITS.md=CREDITS.md ^
+    --include-data-files=README.md=README.md ^
+    --include-data-files=USER_GUIDE.md=USER_GUIDE.md ^
+    --include-data-files=LICENSE=LICENSE ^
     --output-filename="GUNNER SIGHT.exe" ^
     --python-flag=no_docstrings ^
     --python-flag=no_asserts ^
