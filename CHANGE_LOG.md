@@ -6,6 +6,59 @@
 
 ---
 
+## 2026-10-18 滚轮边界 bug + GitHub 开源 + my_beloved 保护 + 手册文风讨论
+
+### 滚轮切弹种桌面焦点边界 bug（已闭环，非代码 bug）
+
+**现象**：鼠标焦点在 Windows 桌面时滚轮无法触发弹种预选，其他窗口正常。
+
+**排查**：加临时日志确认——`fg=Notepad` / `fg=Qt5152QWindowIcon`（软件自身）时 `[MouseHook] WHEEL` 正常 emit 且 `_on_wheel` 正常响应；桌面前台时段底层钩子零条日志。
+
+**结论**：WH_MOUSE_LL 低级钩子在前台为桌面（Progman/WorkerW）时收不到 WM_MOUSEWHEEL，Windows 系统层行为，代码层无解。已记入 HANDOVER §十三。
+
+**教训**：项目用 `from core.logger import logger`（loguru），不是标准库 `logging`。第一次加日志误用 logging 导致 NameError。
+
+### 打包 V0.0140300174
+
+清理临时日志改了 .py，按 AGENTS §6 升版本。单箭头流程：备份 → py_compile + pytest 29 passed + audit_docs 30/30 → build.bat（Nuitka）→ robocopy /MIR 覆盖桌面版。
+
+### 项目安全检查（开源前）
+
+- 凭据扫描：全项目 grep api_key/secret/token/password/bearer/sk- 等，0 匹配
+- 依赖：pyproject.toml 仅 5 个（PyQt5、Pillow、keyboard、loguru、mss），全本地库
+- 网络请求：0 匹配 requests/urllib/socket/websocket/QNetworkAccessManager。两处 URL（squadcalc.app、squad-armor.com）通过 QDesktopServices.openUrl() 调系统浏览器，用户主动点击
+- 打包产物 464 文件，无 .pdb/.env/.key/.pem
+- 结果：PASS 7 / UNKNOWN 2（Git 历史扫描当时无 git CLI；干净环境启动未实测）/ FAIL 0
+
+### Git 安装与 GitHub 开源
+
+- winget 安装 Git.Git 2.55.0.windows.5
+- 项目已有 .git（从 V0.0140300054 起完整历史，最新提交 9860d90），V0.0140300086 后大规模重构未提交
+- 配置 git 身份：user.name=403-FORBIDDEN-38, user.email=3117023693@qq.com, core.autocrlf=false
+- 创建/更新 .gitignore（排除 dist/、backups/、logs/、构建日志、__pycache__、AGENTS.md 等；config/config.json 不排除——是项目核心数据应公开）
+- 基线提交 c856842：566 files changed, +25474 / -7213
+- 推送到 https://github.com/403-FORBIDDEN-38/Gunner-Sight.git（master 分支）
+- 随后清理仓库：git rm --cached AGENTS.md（本地保留，加 .gitignore）、删 airsoft 版 USER_GUIDE.md、git mv USER_GUIDE_formal.md → USER_GUIDE.md，force push 覆盖
+
+### my_beloved 受保护配置字段
+
+用户在 cfg 骨架 `_get_minimal_skeleton()` 加了 `"my_beloved": "Xiaocheng"`，要求加保护防止被误删。
+
+**第一次实现的 bug**：把兜底逻辑写进递归的 `_merge_config()`，导致递归到 vehicles 子字典时也执行 `loaded.setdefault("my_beloved", ...)`，给 vehicles 字典加了 my_beloved 键（值是字符串）。`get_vehicle_names_filtered` 遍历到这个键 → `get_vehicle_tags` 调 `.get()` 抛 `AttributeError: 'str' object has no attribute 'get'` → VehicleConfigTab 创建失败。
+
+**修法**：受保护兜底从 `_merge_config` 移到 `load_config` 顶层（合并完成后执行一次）。模块级常量 `_PROTECTED_CONFIG_KEYS = {"my_beloved": "Xiaocheng"}`（base.py）。config.json 磁盘未被污染（污染只在内存），29 passed。
+
+### 用户手册文风讨论（进行中，未动手）
+
+- 参考 KAC 真铁手册中文译制版（KAC_SR25_真铁手册_中文译制版.docx）
+- 当前 USER_GUIDE.md 是真铁版（722 行，LF），有真铁的壳但缺魂
+- 差距分析（6 维）：安全语气偏软、缺工作原理章节、操作步骤是叙述性散文而非编号 SOP、缺功能检查环节、排错是散文而非表格矩阵、有讨好语言
+- 打磨方向（用户已确认方向，待执行）：①安全章硬化 ②加工作原理节（含已知边界）③核心操作改编号 SOP ④排错改表格矩阵 ⑤删讨好语言 ⑥PMCS 表格化
+- 用户偏好：通读一遍过、不回看不重看、去人化去误差的纪律性
+- 详见 HANDOVER §十一・六
+
+---
+
 ## 2026-10-17 角度仪第三轮 + 准星常闭修复 + 定角装填修复
 
 ### OverlayRenderer.hide()/show() 不再改 state
