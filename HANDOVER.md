@@ -645,7 +645,7 @@ build.bat
 
 ### 当前状态
 
-- `USER_GUIDE.md`：真铁版，722 行，LF 换行。已推 GitHub（master）。
+- `USER_GUIDE.md`：真铁版，LF 换行。已推 GitHub（master）。2026-10-20 第二轮修正 7 处错误（暂离移交退出权、弹种/载具图片叠加层、倍率无名称输入、比例尺热键循环、删全局组合键前缀）。
 - airsoft 版（390 行简洁命令式）已删除，不保留。
 - 参考素材：`KAC_SR25_真铁手册_中文译制版.docx`（同目录还有英文原件 PDF SR25-UM-0011-REV-3、airsoft 版译件、配图目录）。
 
