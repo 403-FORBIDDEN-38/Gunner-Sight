@@ -1,16 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "gunnersight"
-version = "0.0140300178"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
+version = "0.0140300179"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
 description = "Squad vehicle reticle overlay tool"
 requires-python = ">=3.10"
 dependencies = [
     "PyQt5>=5.15.11,<5.16",  # 和用户原环境 5.15.11 对齐
-    "pyqt5-qt5>=5.15.2,<5.15.14",  # 阿里云镜像 5.15.14+ 无 Windows wheel，上限写死
+    # PyQt5 5.15.11 的 Windows wheel 自包含 Qt，但对 PyQt5-Qt5 是无 marker 强依赖；
+    # [5.15.2,5.16.0) 内唯一有 win_amd64 wheel 的是 5.15.2（PyPI 实证：5.15.3~5.15.10
+    # 无任何文件，5.15.11+ 仅 macOS wheel）。放行到 <5.15.14 会让 uv sync 在所有
+    # Windows 机器上解析失败（旧 lock 锁的 5.15.13 即此事故）。与用户本机 5.15.2 对齐。
+    "pyqt5-qt5>=5.15.2,<5.15.3",
     "Pillow>=9.0,<11.0",
     "keyboard>=0.13,<1.0",
     "loguru>=0.7,<1.0",
-    "mss>=9.0,<10.0",
+    # >=10.0 是实质要求：core/magnifier.py 的 CAPTUREBLT 放大镜 import mss.windows.gdi（10.x 独有模块结构）
+    "mss>=10.0",
 ]
+
+# 打包链依赖单独成组：默认安装不拉 Nuitka/C 编译器工具链
+[project.optional-dependencies]
+build = ["nuitka", "zstandard"]
+
+# 扁平布局多顶级包（core/gui/tests/tools/config/resources/frames...），
+# 必须显式声明包发现，否则 pip install . 报 "Multiple top-level packages discovered"
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "gui*"]
 
 [tool.ruff]
 line-length = 100

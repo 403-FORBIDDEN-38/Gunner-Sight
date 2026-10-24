@@ -21,6 +21,7 @@ Overlay渲染模块 (Overlay Renderer)
 
 from collections import OrderedDict
 from pathlib import Path
+import tempfile
 
 from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QImage, QPainter, QPixmap
@@ -33,7 +34,7 @@ from core.overlay_base import ClickThroughOverlay
 class OverlayWindow(ClickThroughOverlay):
     """Overlay透明窗口 - 三层叠加渲染 + 透明区域裁剪"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, config_dir=None):
         super().__init__(parent)
 
         # 当前层
@@ -73,12 +74,20 @@ class OverlayWindow(ClickThroughOverlay):
         self._inverted_cache_max = 15
         self._pending_scans = {}
 
-        # 后台扫描 + bbox 缓存（config/bbox_cache.json）
+        # 后台扫描 + bbox 缓存（跟随 ConfigManager 的数据目录决策：
+        # 可写时在便携 config/，只读安装降级 %APPDATA%——见 core/config/base.py）
         import sys as _sys
         from pathlib import Path as _Path
-        _base = _Path(_sys.executable).parent if getattr(_sys, 'frozen', False) else _Path(__file__).parent.parent
-        bbox_cache_file = _base / "config" / "bbox_cache.json"
-        bbox_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        if config_dir is not None:
+            bbox_cache_file = _Path(config_dir) / "bbox_cache.json"
+        else:
+            _base = _Path(_sys.executable).parent if getattr(_sys, 'frozen', False) else _Path(__file__).parent.parent
+            bbox_cache_file = _base / "config" / "bbox_cache.json"
+        try:
+            bbox_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # 只读位置连缓存目录都建不了：退 %TEMP%（缓存可弃，绝不阻断启动，P4/P5）
+            bbox_cache_file = _Path(tempfile.gettempdir()) / "GunnerSight" / "bbox_cache.json"
         self._bbox_cache = BboxCache(bbox_cache_file, resources_dir=self._resources_dir())
         self._scanner = BboxScanner(self._bbox_cache)
         self._scanner.scan_done.connect(self._on_scan_done)
@@ -553,7 +562,8 @@ class OverlayRenderer:
 
     def _ensure_overlay(self):
         if not self.overlay:
-            self.overlay = OverlayWindow()
+            # bbox 缓存跟随数据目录（只读安装时与 config 一起降级 %APPDATA%）
+            self.overlay = OverlayWindow(config_dir=self.config.config_dir)
             self.overlay.update_screen_geometry()
             self._sync_reference_resolution()
             self._update_crosshair()

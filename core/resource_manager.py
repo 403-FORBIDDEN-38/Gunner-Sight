@@ -21,7 +21,12 @@ class ResourceManager:
             self.resources_dir = Path(resources_dir)
         else:
             self.resources_dir = get_app_base_dir() / "resources"
-        self.resources_dir.mkdir(parents=True, exist_ok=True)
+        # 只读安装下资源目录已随包存在（mkdir 是 no-op）；缺失且不可写时仅记录，
+        # 不阻断启动（导入功能会自然失败，list 返回空）
+        try:
+            self.resources_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.info(f"[ResourceManager] 创建资源目录失败: {self.resources_dir} ({e})")
         self._resources_cache = None  # 资源列表缓存，None表示需要重新扫描
 
     def get_resources_dir(self) -> Path:

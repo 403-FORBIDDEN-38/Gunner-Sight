@@ -2,23 +2,34 @@
 
 - 控制台默认 WARNING，GS_DEBUG=1 升 DEBUG（避免刷屏）
 - 文件永远 DEBUG（排错时不需要先设环境变量）
-- 日志输出到 exe 同目录/logs（绿色便携，不写系统目录）
+- 日志输出到 exe 同目录/logs（绿色便携，不写系统目录）；
+  只读安装位置 mkdir 失败时降级 %TEMP%/GunnerSight/logs（P4）
 - 格式不含模块名/函数名/行号，减少架构信息泄露
 """
 import sys
 import os
+import tempfile
 from pathlib import Path
 
 from loguru import logger
 
 
 def _get_log_dir() -> Path:
-    """确定日志目录（绿色便携：exe 同目录/logs，开发模式项目根目录/logs）。"""
+    """确定日志目录（绿色便携：exe 同目录/logs，开发模式项目根目录/logs）。
+    只读位置（Program Files 标准用户等）mkdir 失败时降级 %TEMP%/GunnerSight/logs。"""
     if getattr(sys, "frozen", False):
         log_dir = Path(sys.executable).resolve().parent / "logs"
     else:
         log_dir = Path(__file__).resolve().parent.parent / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        fallback = Path(tempfile.gettempdir()) / "GunnerSight" / "logs"
+        try:
+            fallback.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass  # 连 TEMP 都不可写：下面 logger.add 的 try 兜底（仅控制台输出，不阻断启动）
+        return fallback
     return log_dir
 
 
@@ -50,18 +61,27 @@ logger.add(
 
 # 文件输出：简化格式，不含模块名/函数名/行号
 _log_dir = _get_log_dir()
-logger.add(
-    _log_dir / "app_{time:YYYY-MM-DD}.log",
-    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
-    level=_file_level,
-    rotation="00:00",
-    retention="7 days",
-    compression="zip",
-    encoding="utf-8",
-    backtrace=False,
-    diagnose=False,
-    enqueue=True,
-)
+try:
+    logger.add(
+        _log_dir / "app_{time:YYYY-MM-DD}.log",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+        level=_file_level,
+        rotation="00:00",
+        retention="7 days",
+        compression="zip",
+        encoding="utf-8",
+        backtrace=False,
+        diagnose=False,
+        enqueue=True,
+    )
+except Exception:
+    pass  # 极端只读环境：仅保留控制台输出，日志文件不可用不阻断启动
+
+# 记录降级决策（只读位置启动时，这是"日志去哪了"的唯一线索）
+_preferred_log_dir = (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+                      else Path(__file__).resolve().parent.parent) / "logs"
+if _log_dir != _preferred_log_dir:
+    logger.info(f"[Logger] 首选日志目录不可写（{_preferred_log_dir}），已降级到 {_log_dir}")
 
 
 def _excepthook(exc_type, exc_value, exc_traceback):

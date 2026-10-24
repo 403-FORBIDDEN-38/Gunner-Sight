@@ -13,6 +13,11 @@ REM 删掉 main.build 会退化成每次全量重编，慢很多。
 setlocal
 cd /d "%~dp0.."
 
+REM ---- 解释器选择（P2）：有 uv 走 uv run（自动安装构建依赖），否则系统 py 启动器 ----
+set PY_RUN=py
+where uv >nul 2>nul
+if %errorlevel%==0 set PY_RUN=uv run --with nuitka --with zstandard python
+
 REM ---- 自动备份：打包前覆盖 backups\auto_before_build（约定见 docs/HANDOVER.md：不增殖，新覆盖旧）----
 robocopy . backups\auto_before_build /MIR /XD .git dist backups .workbuddy __pycache__ .pytest_cache .ruff_cache /XF *.pyc *.pyo /NFL /NDL /NJH /NJS /R:1 /W:1 >nul
 if %errorlevel% geq 8 echo [警告] 自动备份失败（backups\auto_before_build），仍继续打包
@@ -21,8 +26,17 @@ echo [1/2] 清理旧产物（保留编译缓存 main.build）...
 if exist "dist\main.dist" rmdir /s /q "dist\main.dist"
 
 echo [2/2] Nuitka 编译中（复用缓存，用时取决于改动范围）...
-for /f "delims=" %%v in ('py -c "from gui.tabs.info_tab import APP_VERSION; v=APP_VERSION.lstrip('V'); p=v.split('.'); print(f'{p[0]}.{p[1][0:2]}.{p[1][2:5]}.{int(p[1][5:])}')"') do set APP_VER=%%v
-py -m nuitka main.py ^
+%PY_RUN% -m nuitka --version >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] 未找到 nuitka。请先安装构建依赖：
+    echo   - uv 用户: uv sync --extra build
+    echo   - pip 用户: py -m pip install nuitka zstandard
+    echo   首次构建还需联网下载 MinGW C 编译器（约 100MB）
+    exit /b 1
+)
+for /f "delims=" %%v in ('%PY_RUN% -c "from gui.tabs.info_tab import APP_VERSION; v=APP_VERSION.lstrip('V'); p=v.split('.'); print(f'{p[0]}.{p[1][0:2]}.{p[1][2:5]}.{int(p[1][5:])}')"') do set APP_VER=%%v
+if not defined APP_VER set APP_VER=0.0.0.0
+%PY_RUN% -m nuitka main.py ^
     --standalone ^
     --enable-plugin=pyqt5 ^
     --windows-icon-from-ico=resources/app_icon.ico ^

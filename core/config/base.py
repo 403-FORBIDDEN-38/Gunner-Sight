@@ -9,7 +9,9 @@ from core.logger import logger
 
 import json
 import os
+import shutil
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -36,6 +38,64 @@ def get_app_base_dir() -> Path:
 def get_config_file() -> Path:
     """配置文件路径：config/config.json（开发版和发布版统一）。"""
     return get_app_base_dir() / "config" / "config.json"
+
+
+def _is_writable(dir_path: Path) -> bool:
+    """目录可写探测：实际创建并删除一个探针文件。
+
+    比 os.access 可靠——只读介质、OneDrive"文件按需"占位、目录只读属性
+    都可能让 os.access 返回 True 而真实写入失败（P4/P5 的根因）。
+    """
+    try:
+        dir_path.mkdir(parents=True, exist_ok=True)
+        probe = dir_path / f".gs_write_probe_{os.getpid()}"
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        probe.unlink()
+        return True
+    except Exception:
+        return False
+
+
+def get_fallback_data_dir() -> Path:
+    r"""只读安装位置的降级数据目录：%APPDATA%\GunnerSight"""
+    appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+    return Path(appdata) / "GunnerSight"
+
+
+def _seed_config_from(src: Path, dst: Path) -> None:
+    """首次降级启动：把随包出厂的 config.json 复制到降级目录做种子
+    （不存在才复制，绝不覆盖用户已有数据；出厂 77 载具库因此不丢）。"""
+    try:
+        if src.is_file() and not dst.exists():
+            shutil.copyfile(src, dst)
+            logger.info(f"[ConfigManager] 出厂配置已复制到 {dst}")
+    except Exception as e:
+        logger.info(f"[ConfigManager] 复制出厂配置失败: {e}")
+
+
+def _resolve_portable_config_dir() -> Path:
+    r"""数据目录决策（P5，启动时一次）：
+
+    1. exe 同级/config 可写 → 维持绿色便携（绝大多数用户，含开发版）；
+    2. 不可写（Program Files 标准用户 / 公司锁定目录 / 只读介质）→
+       %APPDATA%\GunnerSight\config，并把出厂 config.json 复制过去做种子；
+    3. %APPDATA% 也不可写 → %TEMP%\GunnerSight\config（保命：能启动，设置不持久）。
+    """
+    portable = get_config_file().parent
+    if _is_writable(portable):
+        return portable
+
+    logger.info(f"[ConfigManager] 便携配置目录不可写: {portable}，降级数据目录")
+    fallback = get_fallback_data_dir() / "config"
+    if _is_writable(fallback):
+        _seed_config_from(portable / "config.json", fallback / "config.json")
+        return fallback
+
+    temp_fallback = Path(tempfile.gettempdir()) / "GunnerSight" / "config"
+    logger.info(f"[ConfigManager] %APPDATA% 不可写，最终降级到 {temp_fallback}")
+    _seed_config_from(portable / "config.json", temp_fallback / "config.json")
+    return temp_fallback
 
 
 def _default_angle_meter_profile() -> dict:
@@ -88,18 +148,23 @@ class ConfigBaseMixin:
     """base 配置管理 mixin"""
 
     def __init__(self, config_dir: str | None = None):
-        # 设置配置目录
+        # 设置配置目录（P5：便携优先；只读安装降级 %APPDATA%，再不行 %TEMP%）
         if config_dir:
             self.config_dir = Path(config_dir)
-            self.config_file = self.config_dir / "config.json"
         else:
-            self.config_file = get_config_file()
-            self.config_dir = self.config_file.parent
+            self.config_dir = _resolve_portable_config_dir()
+        self.config_file = self.config_dir / "config.json"
         self.resources_dir = get_app_base_dir() / "resources"
 
-        # 确保目录存在
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.resources_dir.mkdir(parents=True, exist_ok=True)
+        # 确保目录存在（P4：只读环境下创建失败绝不阻断启动，仅记录）
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.info(f"[ConfigManager] 创建配置目录失败: {self.config_dir} ({e})")
+        try:
+            self.resources_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.info(f"[ConfigManager] 创建资源目录失败: {self.resources_dir} ({e})")
 
         # 配置数据（初始为最小骨架，load_config 时从 config.json 加载）
         self._config = self._get_minimal_skeleton()
@@ -111,6 +176,9 @@ class ConfigBaseMixin:
 
         # 配置变更回调（统一通知所有监听者，替代到处手动调 refresh）
         self._on_change_callbacks = []
+
+        # 启动期需要告知用户的恢复提示（P6：配置损坏回退；main 启动后弹一次）
+        self.recovery_notices: list[str] = []
 
         # 加载配置
         self.load_config()
@@ -171,18 +239,73 @@ class ConfigBaseMixin:
                 return True
             except Exception as e:
                 logger.info(f"[ConfigManager] config.json 加载失败: {e}，备份并回退最小骨架")
-                try:
-                    import os
-                    backup_dir = self.config_file.parent.parent / "backups"
-                    os.makedirs(backup_dir, exist_ok=True)
-                    backup = backup_dir / f"config.corrupt_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    self.config_file.rename(backup)
-                except Exception:
-                    pass
+                # P6：原文件必须先"留痕"（备份/改名/恢复副本至少一样成功）才允许写骨架覆盖；
+                # 全部失败则原文件原地保留，本次以默认配置运行，绝不静默覆盖用户数据。
+                if self._recover_from_corrupt_config():
+                    self._config = self._get_minimal_skeleton()
+                    self.save_config()
+                else:
+                    self._config = self._get_minimal_skeleton()
+                return False
 
         # 安全回退：最小骨架
         self._config = self._get_minimal_skeleton()
         self.save_config()
+        return False
+
+    def _recover_from_corrupt_config(self) -> bool:
+        """P6：config.json 损坏时的安全回退。
+
+        返回 True = 原内容已安全留痕，调用方可写骨架覆盖；False = 原文件原地未动。
+        每一步失败都写日志，成功路径登记 recovery_notices（启动后弹一次提示）。
+        """
+        import datetime
+
+        original_bytes = None
+        try:
+            original_bytes = self.config_file.read_bytes()
+        except Exception as e:
+            logger.info(f"[ConfigManager] 读取损坏的 config.json 内容失败: {e}")
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 1) 优先：rename 到 backups/（历史行为）
+        try:
+            import os
+            backup_dir = self.config_file.parent.parent / "backups"
+            os.makedirs(backup_dir, exist_ok=True)
+            backup = backup_dir / f"config.corrupt_{ts}"
+            self.config_file.rename(backup)
+            logger.info(f"[ConfigManager] 原 config.json 已备份到 {backup}")
+            self.recovery_notices.append(f"配置文件损坏，已备份到 {backup} 并恢复默认配置。")
+            return True
+        except Exception as e:
+            logger.info(f"[ConfigManager] 备份 config.json 到 backups/ 失败: {e}")
+
+        # 2) 次选：同目录改名（backups 不可用但配置目录可写时）
+        try:
+            same_dir = self.config_file.with_name(f"config.corrupt_{ts}")
+            self.config_file.rename(same_dir)
+            logger.info(f"[ConfigManager] 原 config.json 已改名为 {same_dir}")
+            self.recovery_notices.append(f"配置文件损坏，已保留为 {same_dir.name} 并恢复默认配置。")
+            return True
+        except Exception as e:
+            logger.info(f"[ConfigManager] 同目录改名保留 config.json 失败: {e}")
+
+        # 3) 保底：原内容写成恢复副本（配置目录优先，%TEMP% 兜底）
+        if original_bytes is not None:
+            for base in (self.config_file.parent, Path(tempfile.gettempdir())):
+                try:
+                    copy = base / f"gunnersight_config.corrupt_{ts}"
+                    copy.write_bytes(original_bytes)
+                    logger.info(f"[ConfigManager] 损坏配置的恢复副本已写入 {copy}")
+                    self.recovery_notices.append(f"配置文件损坏，恢复副本在 {copy}，已加载默认配置。")
+                    return True
+                except Exception as e:
+                    logger.info(f"[ConfigManager] 写恢复副本到 {base} 失败: {e}")
+
+        # 4) 全部失败：原文件原地保留，绝不覆盖
+        logger.warning("[ConfigManager] 损坏的 config.json 无法留痕，保留原文件不覆盖，本次以默认配置运行")
+        self.recovery_notices.append("配置文件损坏且无法备份，已保留原文件、本次以默认配置运行。请手动迁移 config.json。")
         return False
 
     def _merge_config(self, default: dict, loaded: dict):

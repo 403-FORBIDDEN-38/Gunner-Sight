@@ -7,6 +7,7 @@ Gunner Sight - 屏幕准星辅助软件
 
 import os
 import sys
+import tempfile
 import time
 import traceback
 
@@ -53,7 +54,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QPixmap
-from PyQt5.QtWidgets import QApplication, QSplashScreen
+from PyQt5.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
 from core.config_manager import get_app_base_dir
 
@@ -156,7 +157,17 @@ def load_custom_fonts(app):
 def main():
     # 控制台输出同时写入文件，窗口闪太快也能在文件里看
     _log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-    _log_file = open(os.path.join(_log_dir, "startup_log.txt"), "w", encoding="utf-8")
+    # P4：只读位置（Program Files 标准用户等）startup_log 写不进去也不能让程序退——
+    # 降级 %TEMP%，再失败就放弃文件（_Tee 过滤 None），仅保留控制台输出。
+    try:
+        _log_file = open(os.path.join(_log_dir, "startup_log.txt"), "w", encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"[Main] startup_log 写入失败（{_log_dir}）: {e}，降级到 %TEMP%")
+        try:
+            _log_file = open(os.path.join(tempfile.gettempdir(), "GunnerSight_startup_log.txt"), "w", encoding="utf-8")
+        except Exception as e2:
+            logger.warning(f"[Main] %TEMP% 下 startup_log 也不可写: {e2}，放弃启动日志文件")
+            _log_file = None
     class _Tee:
         """行缓冲Tee：只在写入包含换行符时flush，减少磁盘IO。
         性能优化：原实现每次write都flush，控制台输出频繁时（如热键调试日志）
@@ -183,8 +194,15 @@ def main():
     # 捕获异步回调（QTimer/signal）中的未处理异常，写入 crash_log.txt
     _ex_log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
     def _excepthook(exc_type, exc_value, exc_tb):
-        with open(os.path.join(_ex_log_dir, "crash_log.txt"), "w", encoding="utf-8") as _f:
-            traceback.print_exception(exc_type, exc_value, exc_tb, file=_f)
+        # P4：崩溃日志同样只读降级 %TEMP%；异常路径绝不能因为写不了日志而二次崩溃
+        for _path in (os.path.join(_ex_log_dir, "crash_log.txt"),
+                      os.path.join(tempfile.gettempdir(), "GunnerSight_crash_log.txt")):
+            try:
+                with open(_path, "w", encoding="utf-8") as _f:
+                    traceback.print_exception(exc_type, exc_value, exc_tb, file=_f)
+                break
+            except Exception:
+                continue
         traceback.print_exception(exc_type, exc_value, exc_tb)
     sys.excepthook = _excepthook
     try:
@@ -192,14 +210,29 @@ def main():
     except Exception:
         # 崩溃日志必须落到可写目录。
         # frozen 时直接取 exe 同级（不依赖 config 目录是否已建，首次启动崩溃也能落盘）；
-        # 开发环境取脚本同级。
+        # 开发环境取脚本同级。只读位置降级 %TEMP%（P4）。
         if getattr(sys, 'frozen', False):
             log_dir = os.path.dirname(sys.executable)
         else:
             log_dir = os.path.dirname(os.path.abspath(__file__))
-        log_path = os.path.join(log_dir, "crash_log.txt")
-        with open(log_path, "w", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
+        for _path in (os.path.join(log_dir, "crash_log.txt"),
+                      os.path.join(tempfile.gettempdir(), "GunnerSight_crash_log.txt")):
+            try:
+                with open(_path, "w", encoding="utf-8") as f:
+                    traceback.print_exc(file=f)
+                break
+            except Exception:
+                continue
+        # 发布版无控制台（--windows-console-mode=disable）：不弹窗用户看到的就是
+        # "双击什么都没发生"。QApplication 之前的致命错误用 MessageBoxW 保证可见（P4）。
+        if getattr(sys, 'frozen', False):
+            try:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(
+                    0, f"GUNNER SIGHT 启动失败，错误已写入 crash_log.txt：\n\n{traceback.format_exc()[-1500:]}",
+                    "GUNNER SIGHT", 0x10)
+            except Exception:
+                pass
         raise
 
 
@@ -304,6 +337,11 @@ def _main():
     window.show()
     logger.info(f"[性能] 主窗口显示 耗时={(time.perf_counter()-_t7)*1000:.0f}ms")
     logger.info(f"[性能] 启动总耗时(不含字体)={(time.perf_counter()-_t0)*1000:.0f}ms")
+
+    # P6：配置损坏回退提示（若有）——窗口显示后延迟弹一次，确保用户知道配置被重置过
+    _notices = getattr(config, "recovery_notices", None)
+    if _notices:
+        QTimer.singleShot(800, lambda: QMessageBox.warning(window, "配置提示", "\n".join(_notices)))
 
     # P1: 分阶段异步创建
     # 阶段2a: UI框架（顶栏+导航+tab_stack+信号连接）

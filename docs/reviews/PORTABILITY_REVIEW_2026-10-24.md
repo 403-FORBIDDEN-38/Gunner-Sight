@@ -269,3 +269,24 @@ README 声明了仅 Windows，这本身没问题；但 Linux/macOS 用户 import
 ## 总体评价
 
 发布链的断点非常集中：**新用户的标准入口（uv sync / pip install / tools/build.bat）三条全断，而作者本人一条都没走过**——本地能跑依赖的是"系统 Python 恰好装了 10.2.0 的 mss 和 nuitka"这条偶际链路。写盘位置（config/logs/日志全部钉死在 exe 同级且无保护）则让任何"安装到受保护目录"的分发方式直接失去可用性。这两类问题修掉（P1/P2/P4/P5/P7），这个项目的分发健壮性会从"作者机器限定"变成"任何 Windows 10 2004+ 机器可用"。
+
+---
+
+## 修复状态（2026-10-24 批次 2 后，版本 V0.0140300179）
+
+| # | 状态 | 说明 |
+| --- | --- | --- |
+| P1 | ✅ 已修 | pyproject 补 build-system + 包发现；实证 `pip wheel .` 出包、内容正确（core/gui/main.py，无数据目录泄漏） |
+| P2 | ✅ 已修 | build.bat 解释器自适应（uv/py）+ nuitka 预检；README 构建章节 uv 化 + 联网提示；pyproject build 可选组 |
+| P3 | ⬜ 未做（轻） | BOM/`--jobs` 硬编码，留批次 4 |
+| P4 | ✅ 已修 | 四处裸 open 全部 try + %TEMP% 降级；logger 目录降级；frozen 崩溃 MessageBoxW 弹窗 |
+| P5 | ✅ 已修 | 可写性探测 + 便携→%APPDATA%→%TEMP% 决策链 + 出厂种子复制 + bbox_cache 跟随 + 信息页显示 |
+| P6 | ✅ 已修 | 先留痕再覆盖的三级降级；全失败保原文件；启动弹提示 |
+| P7 | ✅ 已修 | mss>=10.0 重锁 10.2.0；实证干净副本 uv sync 后 import mss.windows.gdi / core.magnifier 通过 |
+| P8 | ⬜ 未做（轻） | requires-python 上界，留批次 4 |
+| P9 | ⬜ 未做（轻） | 非 Windows 平台守卫，留批次 4 |
+| P10 | ✅ 已修（按拍板 D） | 出厂库保留；README 已明示；**修订：载具数 79 → 77**（committed config 实证，README 原本就是 77） |
+| P11–P17 | ⬜ 未做（轻） | 中文目录名压缩、图标死分支、外链声明等，留批次 4 |
+| **2.8（本报告漏项）** | ✅ 已修 | pyqt5-qt5 约束：PyQt5 win wheel 对 PyQt5-Qt5 无 marker 强依赖，[5.15.2,5.16.0) 内唯一有 win_amd64 wheel 的是 5.15.2；旧约束+旧 lock 让所有 Windows 机器 uv sync 必败。改 `>=5.15.2,<5.15.3` 并重锁 |
+
+**仍待非作者机器验证**：只读位置运行与设置持久化（Program Files 标准用户）、从零构建、压缩包跨区域解压。本机已验证：pip wheel 出包、uv sync + mss 10.x import、pytest 54 passed。

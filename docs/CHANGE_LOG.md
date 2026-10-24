@@ -4,6 +4,26 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-24 批次 2：发布兼容性必修（P1/P2/P4/P5/P6/P7 + 2.8）
+
+> 依据 docs/reviews/PORTABILITY_REVIEW_2026-10-24.md，执行 docs/reviews/FIX_PLAN_2026-10-24.md 批次 2。
+> 用户拍板 A-D 全部按推荐：A mss>=10.0 重锁；B README 构建口径 uv 化；C 数据目录加只读降级；D 出厂 77 载具库保留 + README 明示。
+> 版本号 V0.0140300178 → V0.0140300179；测试 42 → 54 passed（新增 12 个契约测试）。
+
+- **P1 `pip install .` 必败**（pyproject.toml）：补 `[build-system]`（setuptools）+ `[tool.setuptools.packages.find] include=["core*","gui*"]` + `py-modules=["main"]`。实证：干净副本 `pip wheel .` 出包，wheel 含 core(29 模块)/gui(21)/main.py，无 config/resources/tests 泄漏。
+- **P7 mss 版本矛盾**：约束 `>=9.0,<10.0` → `>=10.0`；uv.lock 重锁 9.0.2 → 10.2.0（uv 0.13.5 装入隔离 venv 执行，`UV_DEFAULT_INDEX` 指向 aliyun 保持镜像来源一致；重锁顺带修正 lock 里过期的项目版本号 141→178）。实证：干净副本 `uv sync` 后 `import mss.windows.gdi` / `core.magnifier` / `main` 全部通过。
+- **2.8（P 报告漏项，本轮实证发现）pyqt5-qt5 约束放行了无 Windows wheel 的版本**：PyQt5 5.15.11 的 win_amd64 wheel 对 PyQt5-Qt5 是**无 marker 强依赖**，而 [5.15.2,5.16.0) 内唯一有 win_amd64 wheel 的是 **5.15.2**（PyPI 实证：5.15.3~5.15.10 无任何文件，5.15.11+ 仅 macOS wheel）。旧约束 `<5.15.14` + 旧 lock 锁 5.15.13 → **所有 Windows 机器 `uv sync` 必败**（作者不走 uv 故从未暴露，P1 报告只测了 pip wheel 没测 uv sync）。改 `>=5.15.2,<5.15.3`，与用户本机 5.15.2 对齐，重锁后 uv sync 通过。
+- **P4 启动期写盘即死**（main.py、core/logger.py）：startup_log/crash_log 四处裸 open 全部 try + %TEMP% 降级；logger 日志目录 mkdir 失败降级 %TEMP%/GunnerSight/logs 并记一条"日志去哪了"的日志；frozen 崩溃时 `MessageBoxW` 弹窗（发布版无控制台，否则用户看到的就是"双击什么都没发生"）。
+- **P5 数据目录只读即丢**（core/config/base.py）：启动可写性探测（**真实写探针文件**，不信 os.access），决策链 便携（exe 同级 config）→ `%APPDATA%\GunnerSight\config`（首次降级把出厂 config.json 复制过去做种子，77 载具库不丢）→ `%TEMP%\GunnerSight\config`（保命，设置不持久）；`bbox_cache.json` 跟随同一决策（OverlayWindow 新增 `config_dir` 参数，不再自己拼 exe 同级路径）；信息页显示当前数据目录。`resources/` 不降级（只读位置读出厂资源无问题，受影响的仅"导入新图"）。
+- **P6 回退覆盖原配置**（core/config/base.py）：损坏回退改为**先留痕再覆盖**——rename 到 `backups/` → 同目录改名 → 写恢复副本（配置目录 / %TEMP%）逐级降级；全部失败则原文件原地保留，启动路径绝不静默覆盖用户数据；回退后启动弹一次提示（`config.recovery_notices`，main.py 接线）。
+- **P2 打包链未声明**（tools/build.bat、README.md、pyproject.toml）：build.bat 解释器自适应（有 uv 走 `uv run --with nuitka --with zstandard`，否则 `py`；作者机器无 uv，行为逐字不变）+ nuitka 预检人话错误 + APP_VER 兜底；README 构建章节写明两种方式与"首次构建需联网下载 MinGW C 编译器（约 100MB）"；pyproject 增 `[project.optional-dependencies] build`。
+- **P10 出厂载具库**：用户拍板保留。README 已有明示（"77 套载具分划，开箱即用"）。顺带修正 P 报告里"79 个载具"的笔误——committed config 实证为 **77**（与 README 一致）。
+- **新增测试**（12 个，tests/test_data_dir_fallback.py）：可写探测真/假、便携维持、APPDATA 降级+出厂种子、降级不覆盖用户已有数据、TEMP 保命、P6 三级留痕（backups / 同目录改名 / 全失败保原文件）、日志目录降级、信息页数据目录显示。
+- **验证**：pytest 54 passed、py_compile 全过、audit_docs 29/29、`pip wheel .` 实证出包且内容正确、干净副本 `uv sync` + mss 10.2.0 import 实证。
+- 遗留（待非作者机器验证）：Program Files 标准用户只读运行与设置持久化、从零构建、非 Windows 人话报错（P9 未做，连同 P3/P8/P11-P17 留批次 4）。
+
+---
+
 ## 2026-10-24 批次 1：正确性必修十项（S2/S3/S4/S5/S7/M1/M3/M6/M9）
 
 > 依据 docs/reviews/CODE_REVIEW_2026-10-24.md，执行 docs/reviews/FIX_PLAN_2026-10-24.md 批次 1。

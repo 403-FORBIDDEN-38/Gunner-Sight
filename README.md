@@ -49,7 +49,11 @@ py main.py
 tools/build.bat
 ```
 
+脚本自动选择解释器：有 `uv` 时走 `uv run`（自动安装构建依赖），否则用系统 `py` 启动器（需提前 `py -m pip install nuitka zstandard`；构建依赖也可用 `uv sync --extra build` 预装）。
+
 产出 `dist/main.dist/GUNNER SIGHT.exe`，Nuitka onedir 模式。首次构建约 60 秒，之后利用编译缓存会快得多。
+
+**注意**：首次构建会从互联网下载 MinGW C 编译器（约 100MB），离线或网络受限环境无法完成构建。产物仅 x64（Windows on ARM 靠模拟运行，无保证）。
 
 ## 项目结构
 

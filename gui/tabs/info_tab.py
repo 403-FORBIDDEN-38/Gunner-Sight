@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QVBoxLa
 from core.resource_manager import ResourceManager
 from gui.mascot import ChatBubble, MascotWidget, SoundPlayer
 
-APP_VERSION = "V0.0140300178"
+APP_VERSION = "V0.0140300179"
 DEDICATION = "Dedicated to Xiaocheng"
 
 
@@ -41,6 +41,12 @@ class InfoTab(QWidget):
         version_label = QLabel(APP_VERSION)
         version_label.setObjectName("hint_text")
         layout.addWidget(version_label)
+
+        # P5：数据目录可见——只读安装（Program Files 标准用户等）时配置降级到
+        # %APPDATA%\GunnerSight，用户需要知道自己的配置/载具库实际存在哪
+        data_dir_label = QLabel(f"数据目录: {self.config.config_dir}")
+        data_dir_label.setObjectName("hint_text")
+        layout.addWidget(data_dir_label)
 
         dedication_label = QLabel(DEDICATION)
         dedication_label.setObjectName("hint_text")

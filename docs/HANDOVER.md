@@ -5,7 +5,7 @@
 > `AGENTS.md`
 > ；这份文件只讲**这个项目长什么样、为什么这么设计**。
 > 只写 "是什么" 和 "为什么"，**不写故事**。踩过的坑压缩成第十二节的一行速查。
-> 最后更新：2026-10-24（仓库整理 + 批次 1 正确性修复） · 版本 `V0.0140300178`
+> 最后更新：2026-10-24（批次 2 发布兼容修复） · 版本 `V0.0140300179`
 > 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
@@ -198,6 +198,26 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 * 两个文件：`config/config.json`（明文，加密已取消）、`config/bbox_cache.json`
 
   （自动生成的缓存，接不上就删掉重启）
+
+* **数据目录决策**（2026-10-24 批次 2，P5）：便携优先——exe 同级 `config/` 可写就维持；
+
+  不可写（Program Files 标准用户 / 公司锁定目录 / 只读介质）降级
+
+  `%APPDATA%\GunnerSight\config`，**首次降级把随包出厂的 config.json 复制过去做种子**
+
+  （77 载具库不丢）；`%APPDATA%` 也不可写时退 `%TEMP%\GunnerSight\config`（保命，设置不持久）。
+
+  探测用**真实写探针文件**，不信 `os.access`（只读介质 / OneDrive 占位文件会让它说谎）。
+
+  `bbox_cache.json` 跟随同一决策（`OverlayWindow(config_dir=...)`，overlay 不再自己拼路径）。
+
+  信息页显示当前数据目录。`resources/` 不降级——只读位置读出厂资源没问题，受影响的只有导入新图
+
+* **配置损坏回退**（2026-10-24 批次 2，P6）：加载失败时**先留痕再覆盖**——rename 到
+
+  `backups/` → 同目录改名 → 写恢复副本（配置目录 / %TEMP%）逐级降级；全部失败则原文件
+
+  原地保留，启动路径**绝不静默覆盖**用户数据。回退后启动弹一次提示（`config.recovery_notices`）
 
 * **写入是防抖的**：`set_xxx` 通常只改内存 + `request_save()`（500ms 防抖落盘）。
 
@@ -551,6 +571,20 @@ tools/build.bat
 
 * `.bat` **必须 CRLF**（见 AGENTS §3）
 
+* `tools/build.bat` **解释器自适应**（2026-10-24 批次 2，P2）：有 `uv` 走
+
+  `uv run --with nuitka --with zstandard python`，否则系统 `py` 启动器；缺 nuitka 时
+
+  预检并给人话错误（而不是 `No module named nuitka`）。作者机器没有 uv，行为与以前逐字一致
+
+* `pyproject.toml` **已可打包**（2026-10-24 批次 2，P1）：`[build-system]`（setuptools）+
+
+  `[tool.setuptools.packages.find] include=["core*","gui*"]` + `py-modules=["main"]`，
+
+  `pip wheel .` / `pip install .` 不再报 "Multiple top-level packages discovered"；
+
+  构建依赖放 `[project.optional-dependencies] build`（nuitka + zstandard），不进默认安装
+
 * `--include-data-dir=config=config` 会把当前 `config.json` 打进包，所以 config 目录的变化也会进发布包
 
 ### 备份
@@ -583,8 +617,10 @@ tools/build.bat
 
 ### 发布前验收矩阵（2026-10-24 立，来源：`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md`）
 
-每项都应在**非作者机器**上过。当前状态：P1/P2/P4/P5/P6/P7 未修，多数项会挂——
-修完再逐项验，挂了就是回归。
+每项都应在**非作者机器**上过。2026-10-24 批次 2 后 P1/P2/P4/P5/P6/P7 已修
+（另修复 P 报告漏项 2.8：pyqt5-qt5 约束，见 CHANGE_LOG 当日条目），本机已验证：
+① `uv sync` + mss 10.2.0 import、`pip wheel .` 出包且内容正确。**仍待非作者机器**：③④
+（Program Files 标准用户只读运行 + 设置持久化）、②（从零构建）。挂了就是回归，回来查。
 
 | # | 验收项 | 方法 |
 | --- | --- | --- |
@@ -745,7 +781,7 @@ tools/build.bat
 ### 注意事项
 
 - 手册里的术语必须与 UI 一致（"定角装填"不是"归零"，config 键名 `auto_reset` 不改但 UI 文本用"定角装填"）
-- 版本号写 `V0.0140300178`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
+- 版本号写 `V0.0140300179`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
 - 改完手册不需要升版本号（AGENTS §6：文档/测试不算源码更新）
 - 改完 docs/HANDOVER 必跑 `py tools/audit_docs.py`
 
