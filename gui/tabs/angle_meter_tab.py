@@ -368,6 +368,11 @@ class AngleMeterTab(QWidget):
         self._height_down_tuner = _HeightTuner(self, -1, "height_down")
 
         self._data_loaded = False
+        # M12：profile 搜索防抖 timer（180ms）
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(180)
+        self._search_timer.timeout.connect(self._apply_profile_search)
         self._build_ui()
         self._connect_ui_signals()
         self.refresh()  # config→UI 加载（热键+配置列表+禁用状态）
@@ -393,7 +398,7 @@ class AngleMeterTab(QWidget):
         self.auto_reset_check.toggled.connect(self._on_auto_reset_toggled)
         self.overlay_x_spin.valueChanged.connect(self._on_overlay_pos_changed)
         self.overlay_y_spin.valueChanged.connect(self._on_overlay_pos_changed)
-        self.profile_search.textChanged.connect(self._refresh_profile_list)
+        self.profile_search.textChanged.connect(self._on_profile_search)
         self.profile_tag_filter.currentIndexChanged.connect(self._refresh_profile_list)
         self.profile_list.currentItemChanged.connect(self._on_profile_select)
         self.profile_list.customContextMenuRequested.connect(self._on_profile_context_menu)
@@ -810,6 +815,13 @@ class AngleMeterTab(QWidget):
         self.cal_hint_label.setText("")
 
     # === 配置列表 ===
+    def _on_profile_search(self, _text):
+        """M12：只重启防抖 timer，停止输入 180ms 后才真正过滤。"""
+        self._search_timer.start()
+
+    def _apply_profile_search(self):
+        self._refresh_profile_list()
+
     def _refresh_profile_list(self):
         # 填充标签筛选下拉框（保持当前选中；选项无变化时不重建）
         self.profile_panel.set_tag_options(self.config.get_all_tags())
@@ -864,30 +876,36 @@ class AngleMeterTab(QWidget):
 
     def _load_profile_params(self, name):
         profile = self.config.get_angle_meter_profile(name)
+        # M16：_loading 必须 try/finally 复位。中途任何异常（射表解析失败、
+        # 控件缺失等）都会让 _loading 永久停在 True——此后所有参数修改被
+        # _on_profile_param_changed 静默丢弃（widgets.py set_silent 注释
+        # 警示的「控件永久静默」模式）。
         self._loading = True
-        self.min_spin.setValue(profile.get("pitch_min", -80.0))
-        self.max_spin.setValue(profile.get("pitch_max", 80.0))
-        # 精度方案下拉框选中项
-        active = profile.get("active_calibration_point_count", 5)
-        self.cal_scheme_combo.blockSignals(True)
-        idx = self.cal_scheme_combo.findData(active)
-        if idx >= 0:
-            self.cal_scheme_combo.setCurrentIndex(idx)
-        self.cal_scheme_combo.blockSignals(False)
-        # 当前方案校准状态
-        cal_pts = self.config.get_angle_meter_calibration_points(name)
-        if cal_pts and "points" in cal_pts:
-            self.cal_status_label.setText("当前方案已校准(%d点)" % len(cal_pts["points"]))
-        else:
-            self.cal_status_label.setText("当前方案未校准")
-        self._load_firing_table(name)
-        # 定角装填：恢复当前 profile 的启用状态
-        ar = profile.get("auto_reset", False)
-        self.auto_reset_check.blockSignals(True)
-        self.auto_reset_check.setChecked(ar)
-        self.auto_reset_check.blockSignals(False)
-        self.hk_reset.setEnabled(ar)
-        self._loading = False
+        try:
+            self.min_spin.setValue(profile.get("pitch_min", -80.0))
+            self.max_spin.setValue(profile.get("pitch_max", 80.0))
+            # 精度方案下拉框选中项
+            active = profile.get("active_calibration_point_count", 5)
+            self.cal_scheme_combo.blockSignals(True)
+            idx = self.cal_scheme_combo.findData(active)
+            if idx >= 0:
+                self.cal_scheme_combo.setCurrentIndex(idx)
+            self.cal_scheme_combo.blockSignals(False)
+            # 当前方案校准状态
+            cal_pts = self.config.get_angle_meter_calibration_points(name)
+            if cal_pts and "points" in cal_pts:
+                self.cal_status_label.setText("当前方案已校准(%d点)" % len(cal_pts["points"]))
+            else:
+                self.cal_status_label.setText("当前方案未校准")
+            self._load_firing_table(name)
+            # 定角装填：恢复当前 profile 的启用状态
+            ar = profile.get("auto_reset", False)
+            self.auto_reset_check.blockSignals(True)
+            self.auto_reset_check.setChecked(ar)
+            self.auto_reset_check.blockSignals(False)
+            self.hk_reset.setEnabled(ar)
+        finally:
+            self._loading = False
 
     def _on_profile_param_changed(self):
         if self._loading:

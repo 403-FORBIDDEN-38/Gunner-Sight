@@ -5,7 +5,7 @@
 > `AGENTS.md`
 > ；这份文件只讲**这个项目长什么样、为什么这么设计**。
 > 只写 "是什么" 和 "为什么"，**不写故事**。踩过的坑压缩成第十二节的一行速查。
-> 最后更新：2026-10-24（批次 2 发布兼容修复） · 版本 `V0.0140300179`
+> 最后更新：2026-10-24（批次 3 中坏味道十五项） · 版本 `V0.0140300180`
 > 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
@@ -700,6 +700,21 @@ tools/build.bat
 
   被纠正、不需要重校。但校准会**快照当时的灵敏度**—— 灵敏度必须在**校准之前**填好，否则那条曲线此后永远不自动换算（刻意的保守行为：宁可不动也不按 0 缩放）
 
+### 7. 清理契约 SSOT + 弹种滚轮进退退路径（已完成 2026-10-24，批次 3 浪 D）
+
+* **M19**：`core/cleanup.py` 扩建为清理契约 SSOT——`TAB_CLEANUP_STEPS` 表 +
+  `collect_tab_cleanup_steps()`（`get_tab` 纯查询，**不触发懒加载**）+
+  `collect_window_cleanup_steps()` + `run_cleanup_steps()`（safe_call 逐项隔离 +
+  on_step 耗时回调）。四份调用方收敛为一份：`MainWindow.closeEvent`（保留逐项耗时
+  日志）、`main.py` aboutToQuit 兜底（原只停 overlay+放大镜，扩为全契约）、
+  `tests/conftest.py` teardown、`tools/export_gui_facts.py`（删五个历史方法名探测）
+
+* **M18**：`ammo_wheel.stop()` 进退出路径——滚轮常驻鼠标钩子与超时定时器，
+  此前四份清理一处都没停它（关窗后钩子还挂着，滚轮事件继续注入）
+
+* 各清理动作**幂等**（正常退出 closeEvent + aboutToQuit 双跑安全）；契约测试在
+  `tests/test_wave_d_contract.py`（含有牙证明：HEAD 版 main_window 下必红）
+
 ---
 
 ## 十一・五、审查任务书（2026-10-13 三轮审查产出）
@@ -781,7 +796,7 @@ tools/build.bat
 ### 注意事项
 
 - 手册里的术语必须与 UI 一致（"定角装填"不是"归零"，config 键名 `auto_reset` 不改但 UI 文本用"定角装填"）
-- 版本号写 `V0.0140300179`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
+- 版本号写 `V0.0140300180`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
 - 改完手册不需要升版本号（AGENTS §6：文档/测试不算源码更新）
 - 改完 docs/HANDOVER 必跑 `py tools/audit_docs.py`
 

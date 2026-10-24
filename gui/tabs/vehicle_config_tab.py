@@ -1,11 +1,12 @@
 """载具配置页：标签列表、载具列表、弹种列表、倍率列表"""
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QGroupBox,
     QHBoxLayout,
     QSplitter,
+    QSplitterHandle,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -44,6 +45,14 @@ class VehicleConfigTab(QWidget):
         self._suppress_vehicle_writeback = False
         self._suppress_ammo_writeback = False
         self._suppress_mag_writeback = False
+        # M17：splitter 拖动结束（handle release）才落盘的脏标记
+        self._splitter_dirty = False
+        # M12：搜索防抖 timer（180ms）——textChanged 每按键全量重建列表，
+        # 停止输入后才过滤一次
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(180)
+        self._search_timer.timeout.connect(self._apply_vehicle_search)
 
         self._build_ui()
         self._connect_ui_signals()
@@ -306,12 +315,27 @@ class VehicleConfigTab(QWidget):
         # 恢复保存的尺寸，没有则用默认
         saved = self.config.get_splitter_sizes("vehicle_config", [150, 250, 400])
         self.splitter.setSizes(saved)
-        self.splitter.splitterMoved.connect(lambda: self.config.set_splitter_sizes(
-            "vehicle_config", self.splitter.sizes()))
+        # M17：拖动中只标记脏，handle release（拖动结束）时才写 config。
+        # splitterMoved 逐像素触发，直接写是高频入队（500ms 防抖被反复重启）。
+        self.splitter.splitterMoved.connect(self._on_splitter_moved)
+        for _hi in range(1, self.splitter.count()):
+            self.splitter.handle(_hi).installEventFilter(self)
         tag_panel.setMinimumWidth(120)
         vehicle_panel.setMinimumWidth(180)
         right_panel.setMinimumWidth(280)
         layout.addWidget(self.splitter)
+
+    def _on_splitter_moved(self, _pos, _index):
+        """M17：splitter 拖动中只标记脏，release 时才落盘（见 eventFilter）。"""
+        self._splitter_dirty = True
+
+    def eventFilter(self, obj, event):
+        # M17：splitter handle 的鼠标 release = 拖动结束，此时才保存尺寸。
+        if event.type() == QEvent.MouseButtonRelease and self._splitter_dirty:
+            if isinstance(obj, QSplitterHandle):
+                self._splitter_dirty = False
+                self.config.set_splitter_sizes("vehicle_config", self.splitter.sizes())
+        return super().eventFilter(obj, event)
 
     def _connect_ui_signals(self):
         # 载具
@@ -501,6 +525,10 @@ class VehicleConfigTab(QWidget):
             self._suppress_vehicle_writeback = False
 
     def _on_vehicle_search(self, _text):
+        """M12：只重启防抖 timer，停止输入 180ms 后才真正过滤。"""
+        self._search_timer.start()
+
+    def _apply_vehicle_search(self):
         self._refresh_vehicle_list()
 
     def _on_vehicle_user_selected(self, current, _previous):
@@ -544,14 +572,16 @@ class VehicleConfigTab(QWidget):
         if not current:
             return
         name, ok = QInputDialog.getText(self, "重命名载具", "新名称:", text=current)
-        if ok and name.strip() and name != current:
-            new_name = name.strip()
-            self.state.rename_vehicle(current, new_name)
-            self._refresh_vehicle_list()
-            self._select_row_by_data(self.vehicle_list, new_name)
-            self.data_changed.emit()
-        else:
-            QMessageBox.warning(self, "提示", f"载具 '{name.strip()}' 已存在！")
+        # M10：取消 / 空名 / 未改名都是用户主动放弃，静默 return（对齐
+        # _on_rename_tag / _on_rename_ammo 的语义）。原实现三种情况全落
+        # else 弹「已存在」——纯误报，本页唯一的多余分支。
+        if not ok or not name.strip() or name.strip() == current:
+            return
+        new_name = name.strip()
+        self.state.rename_vehicle(current, new_name)
+        self._refresh_vehicle_list()
+        self._select_row_by_data(self.vehicle_list, new_name)
+        self.data_changed.emit()
 
     def _on_remove_vehicle(self):
         current = self._get_selected_vehicle()
@@ -723,8 +753,17 @@ class VehicleConfigTab(QWidget):
         # 优先使用传入的 select_idx，没有则用自动恢复的 previously_selected_idx
         target_idx = select_idx if select_idx is not None else previously_selected_idx
         self.mag_list.blockSignals(False)
-        if target_idx is not None and 0 <= target_idx < self.mag_list.count():
-            self.mag_list.setCurrentRow(target_idx)
+        # M11：选中恢复必须包 _suppress_mag_writeback（对齐 vehicle/ammo 语义）。
+        # 裸 setCurrentRow 会触发 _on_mag_user_selected 回写 state；原先只靠
+        # 「idx 相等」短路兜底，相等判断一旦失效就形成 state→刷新→state 回写环路。
+        # try/finally：异常也不把抑制旗永久留在 True（widgets.py set_silent 注释
+        # 警示的「控件永久静默」模式）。
+        self._suppress_mag_writeback = True
+        try:
+            if target_idx is not None and 0 <= target_idx < self.mag_list.count():
+                self.mag_list.setCurrentRow(target_idx)
+        finally:
+            self._suppress_mag_writeback = False
 
     def _update_mag_detail(self):
         vehicle = self._get_selected_vehicle()

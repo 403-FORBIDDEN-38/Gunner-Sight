@@ -180,6 +180,12 @@ class ConfigBaseMixin:
         # 启动期需要告知用户的恢复提示（P6：配置损坏回退；main 启动后弹一次）
         self.recovery_notices: list[str] = []
 
+        # M3：射表 profile 缓存 {name: (table 引用, BallisticProfile)}。
+        # 射表查询挂在 angle_changed（鼠标移动级），每次重建 profile 要做
+        # 解析+排序+PCHIP 求导。用 table 引用（is）判有效：set_firing_table
+        # 换 list 对象即自动失效，无需版本号。
+        self._firing_profile_cache: dict = {}
+
         # 加载配置
         self.load_config()
 

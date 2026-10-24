@@ -51,13 +51,14 @@ def window(config, qapp):
     win = MainWindow(config, state, overlay, hotkey, resources)
     yield win
 
-    # 清理已创建的 tab，避免线程/窗口泄漏到后续用例（同 closeEvent 的清理口径）
-    for idx in list(win._tab_cache):
-        widget = win._tab_cache[idx]
-        for method in ("shutdown", "cleanup"):
-            fn = getattr(widget, method, None)
-            if callable(fn):
-                try:
-                    fn()
-                except Exception:
-                    pass
+    # M19：清理口径与 closeEvent 同一份契约（core.cleanup SSOT）。
+    # 含 overlay 常驻 scanner 显式停（request_stop + wait）——否则 prescan
+    # 长队列在进程退出时才被 join，每个用例都白等几十秒。
+    from core.cleanup import (
+        collect_tab_cleanup_steps,
+        collect_window_cleanup_steps,
+        run_cleanup_steps,
+    )
+    _steps = (collect_tab_cleanup_steps(win)
+              + collect_window_cleanup_steps(win))
+    run_cleanup_steps(_steps)

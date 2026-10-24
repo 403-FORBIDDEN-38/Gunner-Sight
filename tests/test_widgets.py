@@ -7,6 +7,7 @@
 - 列表在搜索/筛选下恢复选中必须用**实际插入的行号**（曾经的错位 bug）
 """
 from PyQt5.QtCore import Qt
+from PyQt5.QtTest import QTest
 
 from gui.widgets import FilterListPanel, LinkedSpinSlider, set_silent
 
@@ -102,6 +103,9 @@ def test_list_row_restored_under_filter(config, window):
     tab = window.get_tab(window.TAB_MAGNIFIER)
 
     tab.preset_search.setText("charlie")
+    # M12（批次 3 浪 C1）：放大镜 preset 搜索已改 180ms 防抖，
+    # 等 timer 触发真正过滤后再断言（测试对象是选中恢复，不是防抖本身）
+    QTest.qWait(400)
     names = [tab.preset_list.item(i).data(Qt.UserRole) for i in range(tab.preset_list.count())]
     assert names == ["Charlie"], "搜索应只留下 Charlie"
 

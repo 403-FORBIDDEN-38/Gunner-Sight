@@ -1,5 +1,5 @@
 """适配 tab：屏幕选择 + 分辨率适配（准星参数已移回准星面板）+ 主题色设置"""
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -19,6 +19,10 @@ from gui.widgets import make_group_box
 
 
 class AdaptTab(QWidget):
+    # M15：跨页公共信号——主题色被改（参数：改的是 "dark" 还是 "light"）。
+    # 替代 tab 反向读 window._current_theme、调 window._apply_theme() 私有 API。
+    theme_reapply_requested = pyqtSignal(str)
+
     def __init__(self, config, overlay):
         super().__init__()
         self.setFocusPolicy(Qt.StrongFocus)
@@ -266,11 +270,10 @@ class AdaptTab(QWidget):
         else:
             self.config.set_accent_light(color.name())
         self._refresh_accent_buttons()
-        # 改的是当前主题 → 立即重应用整套样式（QSS + 滚轮 overlay 强调色）
-        window = self.window()
-        cur_theme = getattr(window, "_current_theme", None)
-        if cur_theme == ("dark" if which == "dark" else "light"):
-            window._apply_theme(cur_theme)
+        # 改的是当前主题 → 请求 MainWindow 重应用整套样式（QSS + 滚轮 overlay
+        # 强调色）。M15：只发公共信号，是否重应用由 window 判断——tab 不读
+        # window 私有状态、不调私有方法（跨页走信号约定）。
+        self.theme_reapply_requested.emit(which)
 
     # ===== 刷新 =====
     def refresh(self):

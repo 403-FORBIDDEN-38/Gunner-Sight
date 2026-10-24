@@ -1,6 +1,7 @@
 
 from core.config.base import _default_angle_meter_profile, _default_angle_meter_segment
-from core.firing_table import query_distance as _ft_query_distance
+from core.firing_table import BallisticProfile
+from core.firing_table import is_extrapolation as _ft_is_extrap
 
 
 class ConfigAngleMeterMixin:
@@ -115,15 +116,25 @@ class ConfigAngleMeterMixin:
             self.request_save()
 
     def query_firing_distance(self, name: str, angle: float) -> float | None:
-        """根据角度查射表，PCHIP 插值+外推。超出外推范围返回 None。"""
+        """根据角度查射表，PCHIP 插值+外推。超出外推范围返回 None。
+
+        M3：profile 按 name 缓存（table 引用 is 判有效）。本函数挂在
+        angle_changed 上（鼠标每次移动触发），不缓存则每次角度更新都要
+        重建 2 次完整 profile（解析+排序+PCHIP 求导）。
+        """
         table = self.get_firing_table(name)
         if not table:
             return None
-        return _ft_query_distance(table, angle)
+        entry = self._firing_profile_cache.get(name)
+        if entry is None or entry[0] is not table:
+            profile = BallisticProfile.from_config(table)
+            self._firing_profile_cache[name] = (table, profile)
+        else:
+            profile = entry[1]
+        return profile.query(angle)
 
     def is_firing_extrapolation(self, name: str, angle: float) -> bool:
         """判断角度是否超出标定范围（即当前结果为外推）。"""
-        from core.firing_table import is_extrapolation as _ft_is_extrap
         table = self.get_firing_table(name)
         if not table:
             return False

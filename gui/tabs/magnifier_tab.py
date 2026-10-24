@@ -1,7 +1,7 @@
 """放大镜设置页
 电闸(模块加载) / 开关(功能+窗口) / 暂离(只控可视) 三概念分离
 """
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QCheckBox, QDoubleSpinBox, QGridLayout, QInputDialog, QLabel,
     QListWidget, QListWidgetItem, QSpinBox, QVBoxLayout, QMenu, QWidget,
@@ -21,6 +21,11 @@ class MagnifierTab(QWidget):
         self.config = config
         self.hotkey = hotkey
         self.overlay = None
+        # M12：preset 搜索防抖 timer（180ms）
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(180)
+        self._search_timer.timeout.connect(self._apply_preset_search)
 
         self._build_ui()
         self._connect_ui()
@@ -145,7 +150,7 @@ class MagnifierTab(QWidget):
         self.preset_panel.add_requested.connect(self._on_add_preset)
         self.preset_panel.rename_requested.connect(self._on_rename_preset)
         self.preset_panel.delete_requested.connect(self._on_delete_preset)
-        self.preset_search.textChanged.connect(self._refresh_preset_list)
+        self.preset_search.textChanged.connect(self._on_preset_search)
         self.preset_tag_filter.currentIndexChanged.connect(self._refresh_preset_list)
         self.tag_list.itemChanged.connect(self._on_tag_toggled)
 
@@ -223,6 +228,13 @@ class MagnifierTab(QWidget):
         for data in self.config.get_magnifier_presets().values():
             all_tags.update(data.get("tags", []))
         self.preset_panel.set_tag_options(sorted(all_tags))
+
+    def _on_preset_search(self, _text):
+        """M12：只重启防抖 timer，停止输入 180ms 后才真正过滤。"""
+        self._search_timer.start()
+
+    def _apply_preset_search(self):
+        self._refresh_preset_list()
 
     def _refresh_preset_list(self):
         current = self.config.get_current_magnifier_preset()

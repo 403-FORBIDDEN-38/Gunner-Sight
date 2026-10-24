@@ -27,6 +27,11 @@ from PyQt5.QtWidgets import (
 )
 
 from core.config_manager import ConfigManager
+from core.cleanup import (
+    collect_tab_cleanup_steps,
+    collect_window_cleanup_steps,
+    run_cleanup_steps,
+)
 from core.hotkey_manager import HotkeyManager
 from core.overlay import OverlayRenderer
 from core.resource_manager import ResourceManager
@@ -661,10 +666,43 @@ class MainWindow(QMainWindow):
                     if checked:
                         w.set_function_active(wh.is_suspended)
                 widget.enable_check.toggled.connect(_on_distance_toggle)
+        elif index == self.TAB_ADAPT:  # 适配设置
+            # M15：主题色重应用的公共信号入口（tab 不反向调私有 API）
+            widget.theme_reapply_requested.connect(self._on_theme_reapply_requested)
         elif index == self.TAB_RESOURCE:  # 资源库：切换到时刷新树
             widget.refresh()
 
     # ==================== 跨页回调 ====================
+
+    def _on_theme_reapply_requested(self, which):
+        """M15：adapt_tab 改了主题色。改的是当前主题才重应用整套样式
+        （QSS + 滚轮 overlay 强调色）——判断逻辑收口在 MainWindow。"""
+        if self._current_theme == which:
+            self._apply_theme(self._current_theme)
+
+    def on_ammo_wheel_ready(self):
+        """M17：ammo_wheel 后台创建后的补偿入口（main.py 后台任务调用）。
+
+        标定测距 tab 若先于 wheel 实例化，创建时 wheel is None：初始同步和
+        toggled 连接都不建立，之后无补偿路径——暂离中测距不激活，直到用户
+        手动切一次启用框。此处补齐同步与连接。
+        """
+        tab = self.get_tab(self.TAB_DISTANCE_METER)
+        wheel = getattr(self, "ammo_wheel", None)
+        if tab is None or wheel is None:
+            return
+        tab.set_function_active(wheel.is_suspended)
+
+        def _on_distance_toggle(checked, w=tab, wh=wheel):
+            if checked:
+                w.set_function_active(wh.is_suspended)
+
+        # 先无条件断开旧连接再连（幂等收口，HANDOVER §十二）
+        try:
+            tab.enable_check.toggled.disconnect()
+        except TypeError:
+            pass  # 没有旧连接
+        tab.enable_check.toggled.connect(_on_distance_toggle)
 
     def _on_magnification_changed(self, _index):
         self._refresh_status_bar()
@@ -729,7 +767,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         import time
-        import traceback as _tb
         _t0 = time.perf_counter()
         try:
             # P1: UI未初始化时直接关闭
@@ -745,35 +782,16 @@ class MainWindow(QMainWindow):
                 logger.info(f"[关闭异常] 隐藏overlay: {e}")
             logger.info(f"[性能] 关闭-窗口隐藏 耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
 
-            # 只对已创建的tab执行shutdown
-            _shutdown_map = {self.TAB_ANGLE_METER: "角度仪", self.TAB_DISTANCE_METER: "标定测距", self.TAB_SQUAD_MACRO: "建队宏"}
-            _shutdown_fns = []
-            for _idx, _name in _shutdown_map.items():
-                _w = self.get_tab(_idx)
-                if _w is not None:
-                    _shutdown_fns.append((_name, lambda w=_w: w.shutdown()))
-            # 放大镜：cleanup()停worker线程+释放mss GDI资源
-            _mag = self.get_tab(self.TAB_MAGNIFIER)
-            if _mag is not None:
-                _shutdown_fns.append(("放大镜", lambda w=_mag: w.cleanup()))
-            _shutdown_fns.extend([
-                ("热键", lambda: self.hotkey.shutdown()),
-                ("Overlay信号", lambda: self.overlay.shutdown() if self.overlay else None),
-                ("配置保存", lambda: self.config.save_config()),
-            ])
-            for _name, _fn in _shutdown_fns:
-                _ts = time.perf_counter()
-                try:
-                    _fn()
-                    logger.info(f"[性能] 关闭-{_name} 耗时={(time.perf_counter()-_ts)*1000:.0f}ms")
-                except Exception as e:
-                    logger.info(f"[关闭异常] {_name}: {e}")
-                    _tb.print_exc()
+            # M19：清理清单统一走 core.cleanup 契约（含 M18 弹种滚轮 stop），
+            # 与 main.py aboutToQuit / conftest / export_gui_facts 同一份
+            _steps = (collect_tab_cleanup_steps(self)
+                      + collect_window_cleanup_steps(self))
+            run_cleanup_steps(_steps, on_step=lambda _name, _ms: logger.info(
+                f"[性能] 关闭-{_name} 耗时={_ms:.0f}ms"))
 
             logger.info(f"[性能] 关闭总耗时={(time.perf_counter()-_t0)*1000:.0f}ms")
         except Exception as e:
             logger.info(f"[关闭异常] closeEvent顶层: {e}")
-            _tb.print_exc()
         finally:
             try:
                 self.tab_stack.deleteLater()

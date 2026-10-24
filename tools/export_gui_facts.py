@@ -217,20 +217,14 @@ for k in ("magnifier", "angle_meter", "distance_meter", "squad_macro", "mascot")
     lines.append(f"| {k} | {sec.get('enabled')} |")
 lines.append("")
 
-(ROOT / "docs" / "GUI_INVENTORY.md").write_text("\n".join(lines), encoding="utf-8", newline="\r\n")
+# 离屏构造用 mkdtemp 临时 config，info 页「数据目录」标签会带出随机路径——
+# 每次重生成都不同的内容不该进事实底稿，统一替换为占位符（否则文档不可复现）
+_doc = "\n".join(lines).replace(str(cfg.config_dir), "<临时数据目录>")
+(ROOT / "docs" / "GUI_INVENTORY.md").write_text(_doc, encoding="utf-8", newline="\r\n")
 print(f"已生成 docs/GUI_INVENTORY.md：{len(lines)} 行")
 print(f"  控件清单覆盖 {len(NAMES)} 页；出厂载具 {len(factory.get('vehicles', {}))} 个")
 
 # 收尾：离屏构造起了放大镜抓屏线程，不清理会报 "QThread: Destroyed while thread is still running"
-for idx in range(10):
-    _tab = win.get_tab(idx)
-    if _tab is None:
-        continue
-    for _m in ("shutdown", "cleanup", "_shutdown_engine", "_destroy_engine",
-               "_shutdown_macro"):
-        _fn = getattr(_tab, _m, None)
-        if callable(_fn):
-            try:
-                _fn()
-            except Exception:
-                pass
+# M19：清理清单统一走 core.cleanup 契约（与 closeEvent 同一份，不再本地试五个历史方法名）
+from core.cleanup import collect_tab_cleanup_steps, run_cleanup_steps  # noqa: E402
+run_cleanup_steps(collect_tab_cleanup_steps(win))

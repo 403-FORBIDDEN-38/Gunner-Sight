@@ -268,6 +268,12 @@ def _main():
     app.processEvents()
     from core.ammo_wheel_selector import AmmoWheelSelector
     app.processEvents()
+    from core.cleanup import (
+        collect_tab_cleanup_steps,
+        collect_window_cleanup_steps,
+        run_cleanup_steps,
+    )
+    app.processEvents()
     from core.overlay import OverlayRenderer
     app.processEvents()
     from core.resource_manager import ResourceManager
@@ -356,6 +362,8 @@ def _main():
         logger.info(f"[性能] 热键注册 耗时={(time.perf_counter()-_bt)*1000:.0f}ms")
         # 滚轮切换弹种模块（保存到 window 避免被 GC）
         window.ammo_wheel = AmmoWheelSelector(state, config)
+        # M17：补偿先于 wheel 实例化的标定测距 tab（初始同步 + toggled 连接）
+        window.on_ammo_wheel_ready()
         hotkey.pause1_triggered.connect(window.ammo_wheel.on_suspend_key1)
         hotkey.pause2_triggered.connect(window.ammo_wheel.on_suspend_key2)
         # 弹种热键命令 → 结束预选列表。必须额外接这一路：选中的就是当前弹种时
@@ -458,17 +466,15 @@ def _main():
     # 原实现访问 window.magnifier_tab（懒加载属性），会在退出时现场新建整个
     # 放大镜tab（此时 tab_stack 已 deleteLater），是纯粹的浪费与隐患。
     def _cleanup():
+        # M18/M19：兜底路径此前只停 overlay+放大镜，漏停的线程/钩子
+        # 不报错、只是活着。现在跑完整清理契约（与 closeEvent 同一份清单；
+        # 正常退出时本函数是第二道，各清理动作均幂等）。
         try:
-            if overlay is not None:
-                overlay.shutdown()
+            _steps = (collect_tab_cleanup_steps(window)
+                      + collect_window_cleanup_steps(window))
+            run_cleanup_steps(_steps)
         except Exception as e:
-            logger.warning(f"[Main] 退出清理 Overlay 失败: {e}")
-        try:
-            tab = window.get_tab(window.TAB_MAGNIFIER)
-            if tab is not None:
-                tab.cleanup()
-        except Exception as e:
-            logger.warning(f"[Main] 退出清理放大镜失败: {e}")
+            logger.warning(f"[Main] 退出清理失败: {e}")
     app.aboutToQuit.connect(_cleanup)
 
     sys.exit(app.exec_())

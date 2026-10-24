@@ -230,11 +230,18 @@ class HotkeyManager(QObject):
         self._mouse_hotkeys.clear()
 
     def _unregister_all_keyboard_hotkeys(self):
-        """注销所有键盘热键（直接unhook_all，不重复操作）"""
-        try:
-            keyboard.unhook_all()
-        except Exception:
-            pass
+        """注销所有键盘热键（只摘自己装的全局钩子，不重复操作）
+
+        M4：不用 keyboard.unhook_all()——那是全局公共服务，局部重注册
+        挥舞它会静默杀掉任何其他模块（含未来引入的库）注册的钩子。
+        只摘自己的 self._keyboard_global_hook（见 _register_keyboard_hotkey）。
+        """
+        hook = self._keyboard_global_hook
+        if hook is not None:
+            try:
+                keyboard.unhook(hook)
+            except Exception:
+                pass
         self._keyboard_global_hook = None
         self._keyboard_hotkeys.clear()
 

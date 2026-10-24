@@ -60,6 +60,37 @@ class HotkeyLineEdit(QLineEdit):
         self._key = ""
         self._pending_modifier = None  # 待决修饰键
         self._has_non_modifier = False  # 本次捕获是否已按过非修饰键
+        # M14：销毁路径兜底。deleteLater 直析构（hotkey_tab refresh 重建控件）
+        # 不发 closeEvent，只有 destroyed 能兜住「捕获态被销毁 → 钩子不释放」。
+        # 必须用 lambda 捕获 self 调方法：PyQt5 中 destroyed 连到对象自身的
+        # 绑定方法时 slot 静默不触发（析构期间拒绝调用对象自身的 Python 方法）。
+        self.destroyed.connect(lambda *_a: self._release_capture_hook())
+
+    def _release_capture_hook(self):
+        """M14：断开全局鼠标钩子并释放引用（捕获结束或被销毁都必须走到）。
+
+        捕获态被 deleteLater 时 _finish_capture 永不调用——Qt 自动断信号，
+        但 hook.release() 没人调：引用计数泄漏、全局低级鼠标钩子常驻到
+        进程退出（hotkey_tab refresh 反复重建控件会持续叠加）。
+        """
+        hook, self._mouse_hook = self._mouse_hook, None
+        self._capturing = False
+        if hook is None:
+            return
+        try:
+            hook.mouse_down.disconnect(self._on_global_mouse)
+        except TypeError:
+            pass
+        try:
+            hook.mouse_wheel.disconnect(self._on_global_mouse_wheel)
+        except TypeError:
+            pass
+        hook.release()
+
+    def closeEvent(self, event):
+        # M14：可见控件关闭路径的兜底（destroyed 之前的正常关闭）
+        self._release_capture_hook()
+        super().closeEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -140,16 +171,7 @@ class HotkeyLineEdit(QLineEdit):
     def _finish_capture(self, key):
         self._capturing = False
         if self._mouse_hook:
-            try:
-                self._mouse_hook.mouse_down.disconnect(self._on_global_mouse)
-            except TypeError:
-                pass
-            try:
-                self._mouse_hook.mouse_wheel.disconnect(self._on_global_mouse_wheel)
-            except TypeError:
-                pass
-            self._mouse_hook.release()
-            self._mouse_hook = None
+            self._release_capture_hook()
         self._key = key or ""
         if key:
             self.setText(HotkeyManager.get_key_name(key))

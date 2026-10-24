@@ -134,12 +134,15 @@
       - QLabel 「宽高比:」
       - QComboBox 3 项: ['16:9', '16:10', '4:3']  当前=「16:9」
       - QLabel 「sx=1.000 sy=1.000」
+      - QLabel 「适配逻辑:」
+      - QLabel 「横向」
+      - QComboBox 2 项: ['增加', '拉伸']  当前=「增加」
+      - QLabel 「竖向」
+      - QComboBox 2 项: ['增加', '拉伸']  当前=「增加」
       - QLabel 「横向缩放 sx:」
       - QDoubleSpinBox range=[0.05, 3.0] 当前=0.05  decimals=3
-      - QComboBox 2 项: ['增加', '拉伸']  当前=「增加」
       - QLabel 「竖向缩放 sy:」
       - QDoubleSpinBox range=[0.05, 3.0] 当前=0.05  decimals=3
-      - QComboBox 2 项: ['增加', '拉伸']  当前=「增加」
   - QGroupBox 「主题色设置」  flat
     - QLabel 「深色主题:」
     - QPushButton <无文字，纯色块/图标>
@@ -382,9 +385,12 @@
 
 ```
   - QLabel 「GUNNER SIGHT」  objectName=info_title
-  - QLabel 「V0.0140300174」  objectName=hint_text
+  - QLabel 「V0.0140300180」  objectName=hint_text
+  - QLabel 「数据目录: <临时数据目录>」  objectName=hint_text
+  - QLabel 「Dedicated to Xiaocheng」  objectName=hint_text
   - QLabel 「屏幕准星辅助软件 — 依程序状态显示对应的炮镜图片，支持载具/弹种/倍率三级切换、一键反色、放大镜、标定测距、角度仪、建」  objectName=hint_text
   - QLabel 「本项目为免费工具，本人不收取任何费用。若遇到他人以"代下、安装、指导、内部版"等名义收费，请谨慎判断，谨防信息差，避免为」  objectName=free_notice
+  - QLabel 「所有视觉素材版权归原作者所有，仅个人非商用。详见 CREDITS.md。」  objectName=hint_text
   - QPushButton 「简述说明」
   - QPushButton 「用户手册」
   - QCheckBox 「召唤惊天一条区」  checked=False
@@ -392,7 +398,7 @@
 
 ## 出厂配置关键值（**随包发布**的那份 config）
 
-> 来源：发布包 `config/config.json`
+> 来源：git HEAD:config/config.json
 > **用户拿到手看到的就是这些值**。使用者运行后本机 config 会变——
 > 工作区 `config/config.json` 是**当前状态**，不是出厂值，别混。
 

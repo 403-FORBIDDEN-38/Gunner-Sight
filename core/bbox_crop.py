@@ -14,9 +14,10 @@
 - 预扫描缓存：启动后台扫所有图存 json，之后切换跳过 250ms 扫描
 """
 import json
+import threading
 from pathlib import Path
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QMutex, QThread, QWaitCondition, pyqtSignal
 from PyQt5.QtGui import QImage
 
 from core.logger import logger
@@ -150,6 +151,10 @@ class BboxCache:
         self._res_dir = Path(resources_dir) if resources_dir else self._path.parent
         self._data = {}
         self._dirty = False
+        # M2：跨线程锁。主线程 get()/has() 与扫描线程 get()/set()/save() 并发访问
+        # self._data，json.dump 迭代期 dict 增删可抛 RuntimeError（此前被 scanner
+        # 的 except 吞掉，缓存静默丢失）。RLock：has() 内部调 get() 需可重入。
+        self._lock = threading.RLock()
         self.load()
         self.cleanup()
 
@@ -168,76 +173,83 @@ class BboxCache:
         return str(self._res_dir / rel_path).replace("\\", "/")
 
     def load(self):
-        if not self._path.exists():
-            return
-        try:
-            with open(self._path, "r", encoding="utf-8") as f:
-                self._data = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            self._data = {}
-            self._path.unlink(missing_ok=True)
+        with self._lock:
+            if not self._path.exists():
+                return
+            try:
+                with open(self._path, "r", encoding="utf-8") as f:
+                    self._data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                self._data = {}
+                self._path.unlink(missing_ok=True)
 
     def cleanup(self):
         """删除文件不存在或 mtime 不匹配的孤儿条目"""
-        removed = 0
-        for rel in list(self._data.keys()):
-            p = Path(self._to_abs(rel))
-            if not p.exists():
-                del self._data[rel]
-                removed += 1
-                continue
-            try:
-                mtime = p.stat().st_mtime_ns
-            except OSError:
-                del self._data[rel]
-                removed += 1
-                continue
-            if self._data[rel].get("mtime") != mtime:
-                del self._data[rel]
-                removed += 1
-        if removed > 0:
-            self._dirty = True
-            self.save()
+        with self._lock:
+            removed = 0
+            for rel in list(self._data.keys()):
+                p = Path(self._to_abs(rel))
+                if not p.exists():
+                    del self._data[rel]
+                    removed += 1
+                    continue
+                try:
+                    mtime = p.stat().st_mtime_ns
+                except OSError:
+                    del self._data[rel]
+                    removed += 1
+                    continue
+                if self._data[rel].get("mtime") != mtime:
+                    del self._data[rel]
+                    removed += 1
+            if removed > 0:
+                self._dirty = True
+                self.save()
 
     def save(self):
-        if not self._dirty:
-            return
-        try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, separators=(",", ":"))
-            self._dirty = False
-        except OSError:
-            pass
+        with self._lock:
+            if not self._dirty:
+                return
+            try:
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._path, "w", encoding="utf-8") as f:
+                    json.dump(self._data, f, separators=(",", ":"))
+                self._dirty = False
+            except OSError:
+                pass
 
     def get(self, path, mtime):
         """查询缓存，命中且 mtime 匹配返回 bbox tuple，否则 None。结构异常的条目自动清除。"""
-        rel = self._to_rel(path)
-        entry = self._data.get(rel)
-        if not isinstance(entry, dict):
-            if entry is not None:
-                del self._data[rel]
-                self._dirty = True
+        with self._lock:
+            rel = self._to_rel(path)
+            entry = self._data.get(rel)
+            if not isinstance(entry, dict):
+                if entry is not None:
+                    del self._data[rel]
+                    self._dirty = True
+                return None
+            if entry.get("mtime") == mtime and isinstance(entry.get("bbox"), list) and len(entry["bbox"]) == 4:
+                return tuple(entry["bbox"])
             return None
-        if entry.get("mtime") == mtime and isinstance(entry.get("bbox"), list) and len(entry["bbox"]) == 4:
-            return tuple(entry["bbox"])
-        return None
 
     def set(self, path, bbox, mtime, orig_size):
         """写入缓存"""
-        rel = self._to_rel(path)
-        self._data[rel] = {
-            "bbox": list(bbox),
-            "mtime": mtime,
-            "orig_size": list(orig_size),
-        }
-        self._dirty = True
+        with self._lock:
+            rel = self._to_rel(path)
+            self._data[rel] = {
+                "bbox": list(bbox),
+                "mtime": mtime,
+                "orig_size": list(orig_size),
+            }
+            self._dirty = True
 
     def has(self, path, mtime):
-        return self.get(path, mtime) is not None
+        with self._lock:
+            return self.get(path, mtime) is not None
 
     def all_paths(self):
-        return [self._to_abs(rel) for rel in self._data]
+        with self._lock:
+            return [self._to_abs(rel) for rel in self._data]
 
 
 class BboxScanner(QThread):
@@ -247,7 +259,15 @@ class BboxScanner(QThread):
     - 支持按 task_id 取消
     - 支持预计算 bbox（跳过扫描）
     - 扫描完发 scan_done 信号，自动写回 BboxCache
+
+    M1 常驻模式：线程只由 request_stop() 退出，队列空时在 QWaitCondition 上
+    等待，永不因空闲自退。任务到达 wakeOne 唤醒。这从根上消灭了旧起停模式
+    的竞态——旧模式 isRunning() 在 run() 判空退出后、finished 前仍为 True，
+    submit 看到 True 不 start()，任务成孤儿（_pending_scans 永久不清、
+    本次会话该路径加载不出图）；且 submit 无法区分「线程正在跑」与「线程
+    正在死」，wait() 旧线程会误等一个健康线程（每次 submit 卡满超时）。
     """
+
     scan_done = pyqtSignal(str, object)  # path, CropResult（或 None）
 
     def __init__(self, bbox_cache=None, parent=None):
@@ -256,6 +276,11 @@ class BboxScanner(QThread):
         self._task_id = 0
         self._cancelled = set()
         self._cache = bbox_cache
+        # 队列互斥 + 到达通知 + 退出请求 + 已启动标志（只 start 一次）
+        self._mutex = QMutex()
+        self._cond = QWaitCondition()
+        self._exit = False
+        self._started = False
 
     def set_cache(self, cache):
         self._cache = cache
@@ -264,46 +289,90 @@ class BboxScanner(QThread):
         """提交高优先级任务（用户切换），插到队首"""
         tid = self._task_id
         self._task_id += 1
+        self._mutex.lock()
         self._tasks.insert(0, (path, tid))
-        if not self.isRunning():
+        need_start = not self._started
+        if need_start:
+            self._started = True
+        self._cond.wakeOne()
+        self._mutex.unlock()
+        if need_start:
             self.start()
         return tid
 
     def submit_many(self, paths):
         """批量提交低优先级任务（预扫描），插到队尾"""
         tids = []
+        self._mutex.lock()
         for p in paths:
             tid = self._task_id
             self._task_id += 1
             self._tasks.append((p, tid))
             tids.append(tid)
-        if not self.isRunning():
+        need_start = not self._started
+        if need_start:
+            self._started = True
+        self._cond.wakeAll()
+        self._mutex.unlock()
+        if need_start:
             self.start()
         return tids
 
     def cancel(self, task_id):
+        self._mutex.lock()
         self._cancelled.add(task_id)
+        self._mutex.unlock()
 
     def cancel_all(self):
+        self._mutex.lock()
         self._cancelled.update(tid for _, tid in self._tasks)
+        self._mutex.unlock()
 
     def pending_count(self):
-        return len(self._tasks)
+        self._mutex.lock()
+        n = len(self._tasks)
+        self._mutex.unlock()
+        return n
+
+    def request_stop(self):
+        """请求线程退出（唯一退出路径）。调用方负责随后 wait() 收敛。
+
+        同时清空未处理任务：关闭语义下 prescan 的剩余队列不需要跑完，
+        wait() 只需等当前一张处理完（否则长队列下 wait 必然超时，
+        线程比窗口活得还久）。
+        """
+        self._mutex.lock()
+        self._exit = True
+        self._tasks.clear()
+        self._cond.wakeOne()
+        self._mutex.unlock()
 
     def run(self):
-        while self._tasks:
+        # 每轮循环边界持锁：while 条件、pop、取消检查都在锁内；
+        # 只在 _process / emit / save（不触碰共享状态）时放锁。
+        self._mutex.lock()
+        while True:
+            while not self._tasks and not self._exit:
+                self._cond.wait(self._mutex)
+            if self._exit:
+                self._mutex.unlock()
+                return
             path, tid = self._tasks.pop(0)
             if tid in self._cancelled:
                 self._cancelled.discard(tid)
                 continue
+            self._mutex.unlock()
             try:
                 result = self._process(path)
             except Exception as e:
                 logger.warning(f"[BboxScanner] 处理失败 {path}: {e}")
                 result = None
+            # 处理期间可能被取消：取消的任务不发信号
+            self._mutex.lock()
             if tid in self._cancelled:
                 self._cancelled.discard(tid)
                 continue
+            self._mutex.unlock()
             self.scan_done.emit(path, result)
             # 每处理完一张保存一次缓存
             if self._cache:
@@ -311,6 +380,7 @@ class BboxScanner(QThread):
                     self._cache.save()
                 except Exception as e:
                     logger.warning(f"[BboxScanner] 缓存保存失败: {e}")
+            self._mutex.lock()
 
     def _process(self, path):
         """处理单张图：有缓存 bbox 则跳过扫描，无则扫描并写缓存"""

@@ -10,7 +10,7 @@
 - FilterListPanel: 搜索+标签筛选+双标签列表+新建/重命名/删除 骨架
 - set_silent: 设值不触发信号的唯一实现（try/finally 保证信号恢复）
 """
-from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
+from PyQt5.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QPainter
 from PyQt5.QtWidgets import (
     QApplication,
@@ -131,6 +131,12 @@ class VehicleFilterWidget(QWidget):
         super().__init__(parent)
         self._mode = mode
         self._vehicles = []
+        # M12：搜索防抖（180ms）。textChanged 每按键全量重建列表，载具上百条
+        # 时输入明显卡顿；停止输入后才过滤一次。
+        self._filter_timer = QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(180)
+        self._filter_timer.timeout.connect(self.filter_changed)
         self._build_ui()
 
     def _build_ui(self):
@@ -141,10 +147,10 @@ class VehicleFilterWidget(QWidget):
         filter_row = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("搜索载具...")
-        self.search.textChanged.connect(self.filter_changed)
+        self.search.textChanged.connect(self._on_filter_input)
         filter_row.addWidget(self.search, 2)
         self.tag_combo = QComboBox()
-        self.tag_combo.currentIndexChanged.connect(self.filter_changed)
+        self.tag_combo.currentIndexChanged.connect(self._on_filter_input)
         filter_row.addWidget(self.tag_combo, 1)
         layout.addLayout(filter_row)
 
@@ -160,6 +166,10 @@ class VehicleFilterWidget(QWidget):
         layout.addWidget(self.list, 1)
 
     FAVORITE_TAG = "收藏"
+
+    def _on_filter_input(self):
+        """M12：输入/切标签只重启防抖 timer，停止 180ms 后才 emit filter_changed。"""
+        self._filter_timer.start()
 
     def set_tags(self, tags):
         current = self.tag_combo.currentData()

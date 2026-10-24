@@ -95,6 +95,15 @@ class OverlayWindow(ClickThroughOverlay):
         # 启动即后台补扫全资源库
         self._prescan_all_resources()
 
+    def closeEvent(self, event):
+        # M1：scanner 是常驻线程（队列空时 wait，不自退）。窗口关闭必须显式
+        # 请求退出并等它结束——否则窗口销毁后 scan_done 仍 emit 到已删对象。
+        scanner = getattr(self, "_scanner", None)
+        if scanner is not None:
+            scanner.request_stop()
+            scanner.wait(2000)
+        super().closeEvent(event)
+
     def _prescan_all_resources(self):
         """后台遍历resources目录，补扫缺失bbox的图片。"""
         try:
@@ -231,11 +240,15 @@ class OverlayWindow(ClickThroughOverlay):
         if len(self._crop_cache) >= self._crop_cache_max:
             self._crop_cache.popitem(last=False)
         self._crop_cache[path] = (result, mtime)
-        # 总是更新 pixmap 缓存（避免 fallback 原图残留导致 bbox/pixmap 不匹配）
-        pixmap = QPixmap.fromImage(result.image)
-        if len(self._crosshair_pixmap_cache) >= self._crosshair_pixmap_cache_max:
-            self._crosshair_pixmap_cache.popitem(last=False)
-        self._crosshair_pixmap_cache[path] = (pixmap, mtime, result.orig_w, result.orig_h, result.bbox_x, result.bbox_y)
+        # M5：仅对当前准星路径构建 pixmap（GPU 上传只属于准星）。UI 层全屏整图
+        # （2K 载具/弹种图）只进 crop 缓存，不再塞进 crosshair pixmap 缓存
+        # （上限 50，白白 GPU 上传+挤占准星缓存）。非当前路径的准星图下次切回时
+        # 走 _load_crosshair 的 miss 分支现建，行为不变。
+        if path == self._crosshair_path:
+            pixmap = QPixmap.fromImage(result.image)
+            if len(self._crosshair_pixmap_cache) >= self._crosshair_pixmap_cache_max:
+                self._crosshair_pixmap_cache.popitem(last=False)
+            self._crosshair_pixmap_cache[path] = (pixmap, mtime, result.orig_w, result.orig_h, result.bbox_x, result.bbox_y)
         # 如果是当前层，更新并刷新；清除反色缓存避免旧图残留
         if path == self._crosshair_path:
             self._crosshair_crop = result
@@ -538,6 +551,13 @@ class OverlayRenderer:
                 sig.disconnect(slot)
             except TypeError:
                 pass  # 未连接
+        # M1：停掉 overlay 内的常驻 scanner 线程（closeEvent 之外的双保险，
+        # 覆盖 overlay 未经 close 直接丢弃的路径）
+        overlay = getattr(self, "overlay", None)
+        scanner = getattr(overlay, "_scanner", None) if overlay is not None else None
+        if scanner is not None:
+            scanner.request_stop()
+            scanner.wait(2000)
 
     def _sync_reference_resolution(self):
         if not self.overlay:

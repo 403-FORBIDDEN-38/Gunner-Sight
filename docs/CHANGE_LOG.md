@@ -4,6 +4,54 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-24 批次 3：中坏味道十五项（浪 A/B/C1/C2/C3/D）
+
+> 依据 docs/reviews/CODE_REVIEW_2026-10-24.md 中坏味道清单，执行 docs/reviews/FIX_PLAN_2026-10-24.md 批次 3。
+> 版本号 V0.0140300179 → V0.0140300180；测试 54 → 91 passed（新增 37 个契约测试，分六个测试文件）。
+> 编号说明：FIX_PLAN 批次 3 清单的 M13/M15 与 CODE_REVIEW 原编号有错位，执行时标签以 CODE_REVIEW 为准（M15=adapt 公共信号、M17=splitter+ammo_wheel 补偿），FIX_PLAN 已完成标注处附对照。
+
+### 浪 A：core 稳定性与性能（5 项）
+
+- **M1 BboxScanner 起停竞态 → 常驻线程**（core/bbox_crop.py）：原实现每次 submit 起停 QThread，stop/start 窗口期 submit 会踩到"线程已死但引用还在"/重复 start。**首版修复已回退**：用 `_running` 标志 + submit 里 `wait(1000)` 等旧线程——start() 后新线程 run() 置位前也有窗口，此窗口内 submit 的 wait 会等一个**健康运行中**的线程；tab 构造的 prescan 连续触发几十次 submit，全量测试从 30s 劣化到 527s（单个用例 160s）。最终方案 QMutex + QWaitCondition **常驻模式**：只 request_stop 退出，`_started` 保证只 start 一次，request_stop 清队列使 wait 只等当前一张。conftest teardown 补 overlay.shutdown() 停 scanner。
+- **M2 BboxCache 加锁**（core/bbox_crop.py）：load/cleanup/save/get/set/has/all_paths 全部持 threading.RLock。**审查报告的症状描述不准**：预期的「迭代期增删 RuntimeError」不可复现——CPython 的 `json.dump` 是 C 实现、持 GIL 原子执行。锁的价值改为「_dirty 复合竞争防护 + 序列化器演进防御」，测试保留作回归。
+- **M3 射表查询缓存**（core/config/angle_meter.py、base.py）：query_firing_distance 每次全量构建 BallisticProfile → 按 name 缓存 profile（table 引用 `is` 判有效）。鼠标级热路径。
+- **M4 热键 unhook 误伤**（core/hotkey_manager.py）：_unregister_all_keyboard_hotkeys 从 `keyboard.unhook_all()` 改为 `keyboard.unhook(hook)`，只摘自己的钩子。
+- **M5 crosshair pixmap 缓存污染**（core/overlay.py）：_on_scan_done 仅 `path == self._crosshair_path` 才构建 QPixmap，UI 全屏整图不再进 crosshair 缓存。
+
+### 浪 B：vehicle_config_tab 列表语义（3 项）
+
+- **M10 重命名误报**：取消/空名/同名静默 return，不再弹"重命名成功"。
+- **M11 mag 列表回写抑制**：_refresh_mag_list 选中恢复包 _suppress_mag_writeback + try/finally 复位。
+- **M17 splitter 停止才存**：_on_splitter_moved 只打脏标记，eventFilter 拦 handle 的 MouseButtonRelease 才存尺寸（拖拽中每像素写盘 → 停止写一次）。resource_tab 同改。
+
+### 浪 C1：搜索防抖（5 页 + 1 共用控件）
+
+- **M12**：textChanged 每按键全量重建列表（资源页还叠加磁盘列举+引用索引重建）→ 180ms singleShot 防抖，停止输入才过滤一次。覆盖 vehicle_config / resource / magnifier preset / angle_meter profile / VehicleFilterWidget（overview、squad_macro、angle_meter link 三处共用）。
+- **接口变更**：**既有测试 test_widgets.py::test_list_row_restored_under_filter 同步更新**——原假设搜索后同步过滤，加 `QTest.qWait(400)` 跨过防抖窗口（测试对象是选中恢复，不是防抖本身）。
+- **范围决策：增量过滤本轮不做**——77 载具规模防抖后重建 5-10ms 无感；资源树增量有父子可见性坑，收益/风险比差。留待确有性能证据再议。
+
+### 浪 C2：跨页信号与补偿（2 项）
+
+- **M15 adapt_tab 越权读 window 私有状态**：新增公共信号 `theme_reapply_requested(str)`，_pick_accent 只 emit 不再读 window 私有状态/调私有方法；main_window 连信号 + _on_theme_reapply_requested（仅当前主题才 _apply_theme）。
+- **M17 补偿**：main_window 新增 `on_ammo_wheel_ready()`（补同步 set_function_active + 先断再连 toggled），main.py 后台任务创建 AmmoWheelSelector 后调用——此前 wheel 未创建时 toggled 连接缺失。
+
+### 浪 C3：异常路径兜底（2 项）
+
+- **M14 热键捕获 hook 释放**（gui/hotkey_widgets.py）：抽出 _release_capture_hook()；`destroyed` 连 **lambda 捕获 self**（PyQt 坑：destroyed 连对象自身绑定方法时 slot 静默不触发）；加 closeEvent 兜底。
+- **M16 `_loading` 标志泄漏**（gui/tabs/angle_meter_tab.py）：_load_profile_params 整体 try/finally 复位——中途抛异常会把"加载中"锁死，后续交互全部静默失效。
+
+### 浪 D：退出路径收口（2 项）
+
+- **M18 ammo_wheel.stop() 进退出路径**：滚轮常驻鼠标钩子（MouseHook）与超时定时器，此前四份清理实现（closeEvent / aboutToQuit / conftest / export_gui_facts）没有一处停它——关窗后钩子还挂着，滚轮事件继续注入。
+- **M19 清理契约 SSOT**（core/cleanup.py，在既有 safe_call 基础上扩建）：TAB_CLEANUP_STEPS 表 + `collect_tab_cleanup_steps`（get_tab 纯查询，不触发懒加载）+ `collect_window_cleanup_steps` + `run_cleanup_steps`（safe_call 逐项隔离 + on_step 耗时回调）。四份调用方收敛为一份：main_window.closeEvent（保留逐项耗时日志）、main.py aboutToQuit 兜底（原只停 overlay+放大镜，扩为全契约）、conftest teardown、export_gui_facts（删五个历史方法名探测）。各清理动作幂等（正常退出双跑安全）。
+- **验证纪律**：浪 D 有牙证明——把 main_window.py 临时换回 HEAD 版，test_close_event_stops_ammo_wheel 必红（stop_called=False），恢复后 md5 一致。
+- **新增测试**（37 个）：test_wave_a_core(7) / test_wave_b_tabs(8) / test_wave_c1_search(6) / test_wave_c2_signals(4) / test_wave_c3_fallbacks(4) / test_wave_d_contract(8)。
+- **顺带**：pyproject 增 `[tool.pytest.ini_options] testpaths=["tests"]`（裸 pytest 会连 backups/ 里的历史副本一起收集，ImportPathMismatchError 中断全量验证）；export_gui_facts 产物归一化（mkdtemp 随机路径 → `<临时数据目录>` 占位，重生成可复现，双跑指纹一致）；GUI_INVENTORY.md 重新生成（版本号/数据目录行/版权行/适配页控件重排）。
+- **验证**：pytest 91 passed、compileall 全过、audit_docs 29/29、export_gui_facts 实跑 + 双跑指纹一致、浪 D 有牙证明。
+- 遗留（待用户手动验证）：splitter 拖拽停存手感、搜索防抖延迟观感、滚轮/角度仪既有手感项——真实 GUI 操作，按项目测试边界先例不自动化。
+
+---
+
 ## 2026-10-24 批次 2：发布兼容性必修（P1/P2/P4/P5/P6/P7 + 2.8）
 
 > 依据 docs/reviews/PORTABILITY_REVIEW_2026-10-24.md，执行 docs/reviews/FIX_PLAN_2026-10-24.md 批次 2。

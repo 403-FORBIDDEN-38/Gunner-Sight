@@ -3,7 +3,7 @@ import shutil
 from collections import Counter
 from pathlib import Path
 
-from PyQt5.QtCore import QSize, Qt, QUrl
+from PyQt5.QtCore import QEvent, QSize, Qt, QTimer, QUrl
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QSizePolicy,
     QSplitter,
+    QSplitterHandle,
     QPushButton,
     QSlider,
     QTreeWidget,
@@ -42,6 +43,14 @@ class ResourceTab(QWidget):
         self._expanded_dirs = set()  # 已展开的目录相对路径
         self._reference_index = {}  # {路径: [载具名,...]}
         self._pixmap_cache = {}
+        # M17：splitter 拖动结束（handle release）才落盘的脏标记
+        self._splitter_dirty = False
+        # M12：搜索防抖 timer（180ms）。资源页每次按键除重建树外还叠加
+        # 引用索引重建 + 磁盘列举 + 递归聚合，是全场最重的搜索路径。
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(180)
+        self._search_timer.timeout.connect(self._apply_resource_search)
         self._build_ui()
         self._connect_ui_signals()
 
@@ -167,9 +176,24 @@ class ResourceTab(QWidget):
         self.splitter.setStretchFactor(1, 2)
         saved = self.config.get_splitter_sizes("resource_tab", [400, 800])
         self.splitter.setSizes(saved)
-        self.splitter.splitterMoved.connect(lambda: self.config.set_splitter_sizes(
-            "resource_tab", self.splitter.sizes()))
+        # M17：拖动中只标记脏，handle release（拖动结束）时才写 config。
+        # splitterMoved 逐像素触发，直接写是高频入队（500ms 防抖被反复重启）。
+        self.splitter.splitterMoved.connect(self._on_splitter_moved)
+        for _hi in range(1, self.splitter.count()):
+            self.splitter.handle(_hi).installEventFilter(self)
         layout.addWidget(self.splitter)
+
+    def _on_splitter_moved(self, _pos, _index):
+        """M17：splitter 拖动中只标记脏，release 时才落盘（见 eventFilter）。"""
+        self._splitter_dirty = True
+
+    def eventFilter(self, obj, event):
+        # M17：splitter handle 的鼠标 release = 拖动结束，此时才保存尺寸。
+        if event.type() == QEvent.MouseButtonRelease and self._splitter_dirty:
+            if isinstance(obj, QSplitterHandle):
+                self._splitter_dirty = False
+                self.config.set_splitter_sizes("resource_tab", self.splitter.sizes())
+        return super().eventFilter(obj, event)
 
     def _connect_ui_signals(self):
         self.import_resource_btn.clicked.connect(self._on_import_resource)
@@ -395,6 +419,10 @@ class ResourceTab(QWidget):
             self._expanded_dirs.discard(path)
 
     def _on_resource_search(self, _text):
+        """M12：只重启防抖 timer，停止输入 180ms 后才真正过滤。"""
+        self._search_timer.start()
+
+    def _apply_resource_search(self):
         self._refresh_tree()
 
     def _on_resource_selected(self, current, _previous):
