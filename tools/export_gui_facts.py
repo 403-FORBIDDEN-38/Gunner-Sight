@@ -4,7 +4,7 @@
 - 控件结构：离屏构造 MainWindow（用 tmp config，干净状态），遍历 QWidget 树
 - 出厂数值：直接读 config/config.json（**这才是用户拿到手看到的值**，不是代码默认值）
 
-输出：GUI_INVENTORY.md
+输出：docs/GUI_INVENTORY.md
 """
 import os
 import sys
@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-ROOT = Path(".").resolve()
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from PyQt5.QtWidgets import (          # noqa: E402
@@ -217,8 +217,8 @@ for k in ("magnifier", "angle_meter", "distance_meter", "squad_macro", "mascot")
     lines.append(f"| {k} | {sec.get('enabled')} |")
 lines.append("")
 
-Path("GUI_INVENTORY.md").write_text("\n".join(lines), encoding="utf-8", newline="\r\n")
-print(f"已生成 GUI_INVENTORY.md：{len(lines)} 行")
+(ROOT / "docs" / "GUI_INVENTORY.md").write_text("\n".join(lines), encoding="utf-8", newline="\r\n")
+print(f"已生成 docs/GUI_INVENTORY.md：{len(lines)} 行")
 print(f"  控件清单覆盖 {len(NAMES)} 页；出厂载具 {len(factory.get('vehicles', {}))} 个")
 
 # 收尾：离屏构造起了放大镜抓屏线程，不清理会报 "QThread: Destroyed while thread is still running"

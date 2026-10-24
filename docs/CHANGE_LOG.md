@@ -1,8 +1,116 @@
 # GunnerSight 变更日志
 
-> 按时间线记所有动作（含回退）。HANDOVER.md 只写当前状态，需要更新时从软件状态 + 本日志里挑有价值的事总结。
+> 按时间线记所有动作（含回退）。docs/HANDOVER.md 只写当前状态，需要更新时从软件状态 + 本日志里挑有价值的事总结。
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
+
+## 2026-10-24 AGENTS.md 保守档手术：切除故事与劝诫修辞
+
+> 用户批准（保守档，过几天亲自复审）。动因：文件随历代 agent 增改脱离定位——
+> 禁故事却写故事、"三条铁律"实为四条、长度违背"短到能记住"；读者是 agent，
+> 文体却像写给人类同事。
+
+7 处替换（CRLF 字节级，逐处断言，186 → 182 行）：
+
+- 开头定位：删伪目标"短到能记住"，改为"只放判据和动作，不放故事"+ 指针到
+  HANDOVER/CHANGE_LOG（从根上消解自相矛盾，标准从长度改为信噪比）
+- §0.4 删劝诫句"一次计划评审比三次返工便宜"
+- §1 标题"三条铁律" → "铁律"（实际四条）
+- §2.2 删符号真事（删懒加载属性漏 overview_tab，含情节数字）压为"手写必漏"
++ 正确姿势单行；判据与冒烟要求不动
+- §3 重排条目的自述故事（"我先只加了守恒断言……"）压为一句判据
+- §5 文档腐烂事故压为一句 + 指针 CHANGE_LOG「2026-10-08 SSOT 改造」
+- G1 括注"mss 事件"压为"（先例：lock 与实跑版本脱节）"
+
+规则内容零删减——只切文体。版本号未 +1。
+
+---
+
+## 2026-10-24 G3 立项：发布前验收矩阵抄入 HANDOVER §十
+
+> 来源：`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md` 第七节。八项逐字保留，
+> 第 7 项按 `my_beloved` 署名决定改写。当前 P1/P2/P4/P5/P6/P7 未修，矩阵作为
+> 批次 2 修完后的回归关卡；中档脚本（pre_release_check.py）待批次 2 完成后
+> 评估是否值得——现在写只会验一堆已知会挂的项。
+
+---
+
+## 2026-10-24 规矩总审计：测试红线退役与三项规则变动
+
+> 依据：docs/reviews/RULES_AUDIT_2026-10-24.md（52 条规矩四分类过堂）
+
+### 退役
+
+- **AGENTS §4 测试红线（≤30 test function / <10s）正式退役**。用户明判：无红线可言，
+  项目屎山期 117 passed。同步删除 audit_docs 检查⑦（其注释还停在 "<20"，连执行器
+  自身都已漂移；检查数 30→29）。此后测试数量按需增长，不再设上限。
+
+### 新增
+
+- **AGENTS §3 依赖变更实测纪律**（G1）：改 pyproject/uv.lock 后必须实装 + 导入 +
+  跑通相关功能；lock 版本与实际运行环境不符时在 HANDOVER 登记。
+  来源：mss 事件（三份文档互洽、全部过审、合起来是假的）。
+- **规则退役纪律**（G2，元规则）：退役规矩须明面记录于本日志，禁止默默遵守或
+  默默违反。本次红线退役即首例。
+
+### 修订
+
+- AGENTS §3 换行符括注改述：CRLF/LF 混存（实测 39/24 约六四开），删去
+  "config_manager.py 是 LF" 的失真举例。
+- HANDOVER §十一 §2 空房子暂缓令补理由：2026-10-24 用户确认维持
+  （硬编码即理论最优解 + 无改造意愿，原话含"懒"）。
+- HANDOVER §十一・五 "不该动的"清单改述：从"别浪费额度"框架改为 agent 无关的
+  "零收益、非零风险"。
+- HANDOVER §十一・六 手册打磨标记完成：DS v4.1 flash 执行，用户确认收尾。
+
+### 决定
+
+- AGENTS.md 永久不进仓库（含用户审美取向，只用于约束自己）；不制作脱敏公开版。
+- 版本号未 +1（纯文档/工具变更，AGENTS §6）。
+
+---
+
+## 2026-10-24 工程整理：.workbuddy 隔离与打包前自动备份
+
+### 改动
+
+- .gitignore 增加 .workbuddy/：Agent 工作区数据（项目记忆）仅存本机，不进版本控制。该目录从未被 git 跟踪（git ls-files 为空），此前只是未被忽略，以 ?? 形式暴露在 git status
+- backups/GunnerSight_src_20261024_154439/（用户备份）中误扫入的 .workbuddy/ 已剔除（497 → 496 文件，源码部分未动）
+- tools/build.bat 增加打包前自动备份：robocopy . backups\auto_before_build /MIR，排除 .git dist backups .workbuddy __pycache__ .pytest_cache .ruff_cache——落实 docs/HANDOVER.md"每次打包前覆盖、不增殖"约定（此前该约定无任何脚本承载，auto_before_build 一直停留在 10-18 的整理前结构）
+- 已手动刷新一次 auto_before_build（robocopy 退出码 3=复制+清陈旧，485 文件，违禁目录检查为空）
+- 清理源码树 __pycache__ 与 .pytest_cache（解释器字节码缓存，验证命令所产生，随时可再生）
+
+### 未做
+
+- 版本号未 +1：无应用源码变更（AGENTS §6）
+
+---
+
+## 2026-10-24 仓库整理：文档与脚本归类（docs/ 与 tools/）
+
+### 改动
+
+- 根目录只保留 AGENTS.md、README.md、USER_GUIDE.md、LICENSE、main.py、pyproject.toml、uv.lock、.gitignore；LICENSE 按开源生态惯例留根目录（GitHub 自动识别，build.bat 的 --include-data-files 也依赖该路径）
+- 文档归类 docs/：HANDOVER.md、CHANGE_LOG.md、GUI_INVENTORY.md、MANUAL_OUTLINE.md、CREDITS.md、REAL_OVERLAY_RESEARCH.md
+- 审查产物归类 docs/reviews/：CODE_REVIEW_2026-10-24.md、PORTABILITY_REVIEW_2026-10-24.md、FIX_PLAN_2026-10-24.md（三者互引为同目录相对名，仍有效）
+- build.bat 移到 tools/build.bat：开头 cd /d "%~dp0.." 自行回到仓库根目录，任意位置双击或命令行调用均可；图标参数改 resources/app_icon.ico，CREDITS 参数改 docs/CREDITS.md=CREDITS.md（包内文件名不变）
+- app_icon.ico：根目录副本与 resources/app_icon.ico 逐字节相同（md5 一致），git rm 去重，图标唯一位置为 resources/app_icon.ico
+- edit_demo.py（一次性演示脚本，含本机绝对路径）移到 tools/，并加入 .gitignore 仅本机使用
+- .gitignore 增加 frames/（帧图实验产物）
+- 删除根目录 startup_log.txt（空文件、运行时产物、gitignore 已覆盖，启动时自动重建）
+- 引用同步更新：AGENTS.md、README.md、docs/HANDOVER.md（头部/一・五表/第七节目录树/第十节）、tools/audit_docs.py、tools/export_gui_facts.py、tools/build.bat、docs/reviews/ 三份报告（含互相引用的行号）
+
+### 有意保持不变的引用
+
+- CHANGE_LOG 历史条目中的 build.bat / CREDITS.md 等名称：时间线记录当时动作，不回改历史
+- docs/HANDOVER.md 第十二节 BOM 条目里的 HANDOVER.md：2026-10-13 历史笔记，同上
+- main.py get_app_icon_path()：根目录两个查找分支变为无害空转，resources 分支照旧命中，启动路径零改动
+- gui/tabs/info_tab.py 的"详见 CREDITS.md"文案：面向发布版用户（CREDITS.md 随包位于 exe 同级），不是仓库内路径引用
+- MANUAL_OUTLINE.md 内对 GUI_INVENTORY.md 的引用：同迁入 docs/，同目录相对引用仍有效
+
+### 未做
+
+- 版本号未 +1：本次无 core/gui/main.py 应用源码变更（AGENTS §6 文档/测试不算；tools 与 build.bat 属开发工具链）
 
 ---
 

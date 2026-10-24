@@ -5,8 +5,8 @@
 > `AGENTS.md`
 > ；这份文件只讲**这个项目长什么样、为什么这么设计**。
 > 只写 "是什么" 和 "为什么"，**不写故事**。踩过的坑压缩成第十二节的一行速查。
-> 最后更新：2026-10-18（手册重构） · 版本 `V0.0140300177`
-> 变更历史见 `CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
+> 最后更新：2026-10-24（仓库整理） · 版本 `V0.0140300177`
+> 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
 
@@ -16,7 +16,7 @@
 
 * 跑起来：`py main.py`（不需要管理员权限）
 
-* 打包：`build.bat` → `dist/main.dist/GUNNER SIGHT.exe`（见第十节）
+* 打包：`tools/build.bat` → `dist/main.dist/GUNNER SIGHT.exe`（见第十节）
 
 * 源码 / 桌面版是**两份独立目录**（见第十节），改完源码不重打包的话桌面版不会变
 
@@ -28,8 +28,10 @@
 | --- | --- | --- |
 | `README.md` | 路人 / 下载页 | 是什么、怎么装、有什么限制。GitHub 门面，用常规 Markdown 排版 |
 | `USER_GUIDE.md` | 使用者 | 完整操作手册。按**任务**组织，5 章 + 附录 |
-| `HANDOVER.md` | 接手的 agent | 现状与"为什么这么设计"。本文件 |
-| `CHANGE_LOG.md` | 接手的 agent | 时间线，**含回退过的方向**（避免重走死路） |
+| `docs/HANDOVER.md` | 接手的 agent | 现状与"为什么这么设计"。本文件 |
+| `docs/CHANGE_LOG.md` | 接手的 agent | 时间线，**含回退过的方向**（避免重走死路） |
+
+其余项目文档已归类到 `docs/`（2026-10-24 的审查报告与修复计划在 `docs/reviews/`），目录地图见第七节。
 
 **`USER_GUIDE.md` 的写法有硬规矩**（2026-10-18 重写时定的）：
 
@@ -78,7 +80,7 @@ grep 只能给你定义点；只有追调用点，才知道它**被谁、用什�
 「全局钩子无法覆盖管理员权限的游戏窗口」（绝对结论，且项目正在研究 UIAccess，结论可能变）。
 2026-10-18 溯源时删改 9 处，其中 3 处属于这类越界。
 
-**`GUI_INVENTORY.md` 是手册的事实底稿**，由 `tools/export_gui_facts.py`
+**`docs/GUI_INVENTORY.md` 是手册的事实底稿**，由 `tools/export_gui_facts.py`
 遍历 QWidget 树生成（10 页控件名、类型、range、当前值）。
 
 * 手册里的控件名、参数范围、出厂值，**一律以它为准，不要凭印象写**
@@ -348,10 +350,15 @@ gui/
 resources/                  图片/图标/字体/启动横幅
 config/                     运行时配置（打包含此目录）
 tests/                      回归套件（策略见 AGENTS §4）
-docs/archive/               过期文档
-tools/                      开发辅助：audit_docs / audit_manual / export_gui_facts
-GUI_INVENTORY.md            控件与出厂值底稿（tools/export_gui_facts.py 生成，可重跑）
-MANUAL_OUTLINE.md           手册目录与新旧映射（规划产物，已执行完，留作记录）
+docs/                       项目文档（README、USER_GUIDE、AGENTS 在根目录）
+  HANDOVER.md               交接文档（本文件）
+  CHANGE_LOG.md             变更时间线（含回退过的方向）
+  GUI_INVENTORY.md          控件与出厂值底稿（tools/export_gui_facts.py 生成，可重跑）
+  MANUAL_OUTLINE.md         手册目录与新旧映射（规划产物，已执行完，留作记录）
+  CREDITS.md                第三方素材版权声明（随包发布）
+  REAL_OVERLAY_RESEARCH.md  置顶叠加方案研究笔记
+  reviews/                  审查报告与修复计划（2026-10-24）
+tools/                      开发辅助：audit_docs / audit_manual / export_gui_facts / build.bat
 ```
 
 ---
@@ -527,20 +534,20 @@ panel.add_requested / rename_requested / delete_requested
 
 ```
 # 唯一打包脚本（双击或命令行跑）
-build.bat
+tools/build.bat
 ```
 
 **单箭头模型**：源码版是唯一真相来源。桌面版就是源码版打包后的运行副本，没有独立状态。
 
 ```
-源码版 → 自动备份 → 验证 → build.bat → dist/main.dist/ 整目录覆盖桌面版（含 config/）
+源码版 → 自动备份 → 验证 → tools/build.bat → dist/main.dist/ 整目录覆盖桌面版（含 config/）
 ```
 
 * 产物：`dist/main.dist/`，用 `robocopy /MIR` 整目录覆盖桌面版，**包含 config/**。桌面版里额外的文件会被删除——想保留的改动必须放源码版里。
 
-* **唯一打包脚本就是它**。历史上还有个 `release.bat`，是 build.bat 的复制粘贴残留（产物名还不一致：`GunnerSight.exe` vs `GUNNER SIGHT.exe`），已删除。开发版与发布版现在没有区别（config 明文，加密已取消）
+* **唯一打包脚本就是它**。历史上还有个 `release.bat`，是它的复制粘贴残留（产物名还不一致：`GunnerSight.exe` vs `GUNNER SIGHT.exe`），已删除。开发版与发布版现在没有区别（config 明文，加密已取消）
 
-* `build.bat` 只删 `dist\main.dist`，**保留 **`dist\main.build`（Nuitka 的 C 编译缓存）：删掉它会从 60 秒退化成每次全量重编
+* `tools/build.bat` 只删 `dist\main.dist`，**保留 **`dist\main.build`（Nuitka 的 C 编译缓存）：删掉它会从 60 秒退化成每次全量重编
 
 * `.bat` **必须 CRLF**（见 AGENTS §3）
 
@@ -553,7 +560,7 @@ build.bat
 | 自动备份 | 每次打包前 | `backups/auto_before_build/` | 不增殖，新的覆盖旧的 |
 | 用户备份 | 用户说"备份"时 | `backups/GunnerSight_src_<时间戳>/` | 可增殖 |
 
-自动备份排除 `dist/`、`.git/`、`backups/`、`__pycache__/`、`.pytest_cache/`、`.ruff_cache/`。
+自动备份排除 `dist/`、`.git/`、`backups/`、`__pycache__/`、`.pytest_cache/`、`.ruff_cache/`、`.workbuddy/`。
 
 | 路径 | 是什么 |
 | --- | --- |
@@ -573,6 +580,22 @@ build.bat
 **`my_beloved: "Xiaocheng"`** 出现在 `config/config.json` 与 `core/config/base.py` 的默认模板里。
 它是用户**特意保留的署名式字段**：不要删、不要改、不要当成"无用字段"清理。
 开源前做过凭据扫描（api_key / secret / token / password / bearer / sk- 等，0 匹配）。
+
+### 发布前验收矩阵（2026-10-24 立，来源：`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md`）
+
+每项都应在**非作者机器**上过。当前状态：P1/P2/P4/P5/P6/P7 未修，多数项会挂——
+修完再逐项验，挂了就是回归。
+
+| # | 验收项 | 方法 |
+| --- | --- | --- |
+| 1 | 标准安装路径 | 干净环境 `uv sync` + `pip install .` 均成功 |
+| 2 | 从零构建 | 干净 Windows 按 README 产出 dist（含联网下载编译器场景） |
+| 3 | 只读位置运行 | Program Files + 标准用户双击，正常启动、日志降级 TEMP |
+| 4 | 设置持久化 | 上述环境下修改设置，重启后保留 |
+| 5 | 可选模块全开 | 放大镜/角度仪/测距/吉祥物电闸全开，跑 10 分钟看 logs 无异常 |
+| 6 | 压缩包完整性 | 英文 Windows 解压 zip，中文资源目录名与文件数与发布前一致 |
+| 7 | 出厂配置 | 解压成品检查 config.json 与源码版一致（`my_beloved` 是刻意署名，见上文） |
+| 8 | 非 Windows 报错 | Linux 下启动给人话错误而非 ctypes 堆栈 |
 
 ---
 
@@ -603,6 +626,7 @@ build.bat
 * `core/ammo_wheel_selector.py`：确认键硬编码为 `mouse_left`
 
 * 两处都属 "具体功能行为写在代码里"。改造涉及 cfg 结构 + UI + 交互，风险不小，暂缓
+* 2026-10-24 用户确认**维持暂缓**，理由：① 该硬编码即理论最优解；② 无改造意愿（原话："懒"）。这不是"以后再改"，是"就这样"
 
 ### 3. 准星 "大小缩放" 的滑块范围（已统一，2026-10-13）
 
@@ -663,9 +687,9 @@ build.bat
 
 ### C 类：需求/策略，需要用户拍板
 
-* 空房子两处硬编码（见本节的 §2）——改造涉及 cfg 结构 + UI，风险不小
+* 空房子两处硬编码（见本节的 §2）——2026-10-24 用户确认维持暂缓（理论最优解 + 无改造意愿），不再作为待办
 
-### 不该动的（别把额度花在这里）
+### 不该动的（零收益、非零风险）
 
 | 项 | 数量 | 为什么别动 |
 | --- | --- | --- |
@@ -673,17 +697,19 @@ build.bat
 | `E402` 模块导入不在顶部 | 87 | **刻意为之**的懒加载（`main.py` 里 import 之间插 `processEvents()` 让横幅动画不卡）。改成顶部导入会让启动多卡几百毫秒 |
 | `E501` 行长 / `E701` `E702` 一行多语句 | 196 / 25 | 纯风格，零收益；改了一堆 diff 噪音 |
 | `RET505` `SIM102` `SIM105` `PERF102` `PERF203` | ~45 | 纯风格建议。改动要过 AST 重构，收益为零、风险非零 |
+
+> 这些条目与 agent 能力无关：不是"弱 agent 做不了"，而是"对任何人都零收益、非零风险"。
 | 超长函数（`_main` 225 行、`_setup_full_style` 172 行、各 `_build_ui`） | 9 个 | **本质如此**：一个是启动编排、一个是 QSS 字符串、其余是 UI 搭建。硬拆只会增加跳转层级 |
 | "启动慢" | — | **已实测**：322 ms 里 295 ms 是 `QApplication()` 自身（平台插件+字体库+样式）。换任何 Qt 程序都一样，**没有优化空间** |
 | "高频路径有全量刷新" | — | **已核实**：倍率/弹种/载具/overlay/热键的全部接收槽都是增量更新，没有 `clear()+重建`、没有读盘 |
 
 ---
 
-## 十一・六、用户手册打磨（进行中，2026-10-18 讨论定方向，未执行）
+## 十一・六、用户手册打磨（已完成：DS v4.1 flash 执行，2026-10-24 用户确认收尾）
 
-> 给接手的 agent：用户要去找大 agent 做这件事。以下是讨论结论和全部上下文，读完直接能动手。
+> 本计划已执行完毕（DS v4.1 flash）。以下保留讨论结论与全部上下文，作为后续修订依据。
 
-### 当前状态
+### 执行前快照（2026-10-18 讨论时）
 
 - `USER_GUIDE.md`：真铁版，LF 换行。已推 GitHub（master）。2026-10-20 第二轮修正 7 处错误（暂离移交退出权、弹种/载具图片叠加层、倍率无名称输入、比例尺热键循环、删全局组合键前缀）。
 - airsoft 版（390 行简洁命令式）已删除，不保留。
@@ -721,7 +747,7 @@ build.bat
 - 手册里的术语必须与 UI 一致（"定角装填"不是"归零"，config 键名 `auto_reset` 不改但 UI 文本用"定角装填"）
 - 版本号写 `V0.0140300177`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
 - 改完手册不需要升版本号（AGENTS §6：文档/测试不算源码更新）
-- 改完 HANDOVER 必跑 `py tools/audit_docs.py`
+- 改完 docs/HANDOVER 必跑 `py tools/audit_docs.py`
 
 
 ## 十二、坑速查（一行一条，都是实测过的）
@@ -734,7 +760,7 @@ build.bat
 | 用 Python 脚本按内容替换 "0 命中"           | 文件是 CRLF，而匹配串用了 `\n`。按文件实际换行符构造                                 |
 | `json.load` / `ast.parse` 报非法字符   | 文件被 PowerShell `Set-Content` / `>` 写了 BOM。改用 Write 工具或 Python 脚本 |
 | 文件莫名带 BOM（`ast.parse` 报 U+FEFF） | PowerShell `Set-Content` 留下的。去 BOM 用字节级操作；读文件用 `encoding="utf-8-sig"` 更稳。2026-10-13 清掉 9 个（含 `HANDOVER.md` 和 2 份 mascot 文案，后者首字符是脏的） |
-| 备份体积莫名 200MB | 把 `dist/`（**135MB**）或 `.git` 一起备份了。整目录快照排除 `dist .git backups __pycache__ .pytest_cache .ruff_cache` → 约 **40MB** |
+| 备份体积莫名 200MB | 把 `dist/`（**135MB**）或 `.git` 一起备份了。整目录快照排除 `dist .git backups __pycache__ .pytest_cache .ruff_cache .workbuddy` → 约 **40MB** |
 | 脚本批量替换后文件半坏                       | 没做 "预期命中 N 处" 断言。**先断言再落盘**                                      |
 
 **界面类**

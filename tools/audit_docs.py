@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-HAND = (ROOT / "HANDOVER.md").read_text(encoding="utf-8")
+HAND = (ROOT / "docs" / "HANDOVER.md").read_text(encoding="utf-8")
 AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
 results = []
@@ -72,7 +72,7 @@ for name in ("适配设置", "相关"):
     check(f"导航名 '{name}' 与 main_window 一致", name in read("gui/main_window.py"))
 
 # 5. 文档里的项目内路径都存在
-missing = [m.group(1) for m in re.finditer(r"`((?:core|gui|tests|resources|config|docs|backups)/[\w/\.]+)`", HAND)
+missing = [m.group(1) for m in re.finditer(r"`((?:core|gui|tests|resources|config|docs|backups|tools)/[\w/\.]+)`", HAND)
            if not (ROOT / m.group(1)).exists() and not m.group(1).endswith("/")]
 check("HANDOVER 引用的项目内路径都存在", not missing, f"缺失 {sorted(set(missing))[:5]}")
 
@@ -80,12 +80,7 @@ check("HANDOVER 引用的项目内路径都存在", not missing, f"缺失 {sorte
 snaps = list((ROOT / "backups").glob("GunnerSight_src_*")) if (ROOT / "backups").is_dir() else []
 check("文档描述的 backups/GunnerSight_src_* 快照存在", bool(snaps), f"backups/ 下有 {len(snaps)} 个")
 
-# 7. 测试规模红线（AGENTS §4：< 20 个 test function）
-nfunc = sum(len(re.findall(r"^def (test_\w+)", (ROOT / p).read_text(encoding="utf-8"), re.M))
-            for p in [str(x.relative_to(ROOT)) for x in (ROOT / "tests").glob("test_*.py")])
-check(f"测试函数数 {nfunc} ≤ 30（AGENTS §4 红线）", nfunc <= 30)
-
-# 8. 死表达式：HANDOVER 说"应为空"，那就必须是 0（不再去文档里解析数字——那种解析一改措辞就失效）
+# 7. 死表达式：HANDOVER 说"应为空"，那就必须是 0（不再去文档里解析数字——那种解析一改措辞就失效）
 r = subprocess.run([sys.executable, "-m", "ruff", "check", "--select", "F401,F841,F811",
                     "--output-format", "concise", "core", "gui", "main.py", "tests"],
                    capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
@@ -93,18 +88,18 @@ ndead = len([ln for ln in r.stdout.splitlines() if re.search(r"\b(F401|F841|F811
 check(f"死代码 0 处（ruff F401/F841/F811，实际 {ndead} 处）", ndead == 0,
       "; ".join(r.stdout.splitlines()[:3]))
 
-# 9. 文档没被 markdown 转义污染（下划线/星号被反斜杠转义）
+# 8. 文档没被 markdown 转义污染（下划线/星号被反斜杠转义）
 #    反引号内的反斜杠是合法的（可能在演示一条 Windows 路径），所以先剥掉 code span 再查
 def _strip_code_spans(text):
     return re.sub(r"`[^`]*`", "", text)
 
 
-bad = [p for p in ["AGENTS.md", "HANDOVER.md", "CHANGE_LOG.md"]
+bad = [p for p in ["AGENTS.md", "docs/HANDOVER.md", "docs/CHANGE_LOG.md"]
        if re.search(r"\\[_*]", _strip_code_spans((ROOT / p).read_text(encoding="utf-8")))]
 check("文档没有被 markdown 转义污染（`\\_` 之类）", not bad, f"脏文件: {bad}")
 
-# 10. 文档换行风格没被改坏（AGENTS/HANDOVER 是 CRLF）
-for name in ["AGENTS.md", "HANDOVER.md"]:
+# 9. 文档换行风格没被改坏（AGENTS/HANDOVER 是 CRLF）
+for name in ["AGENTS.md", "docs/HANDOVER.md"]:
     d = (ROOT / name).read_bytes()
     check(f"{name} 保持 CRLF", d.count(b"\r\n") == d.count(b"\n") > 0)
 

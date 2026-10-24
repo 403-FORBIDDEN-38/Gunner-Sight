@@ -41,11 +41,12 @@ py main.py
 ## 文档
 
 - **[USER_GUIDE.md](USER_GUIDE.md)** — 完整操作手册（首次使用、日常操作、配置载具、进阶模块、故障排除）
+- **[docs/HANDOVER.md](docs/HANDOVER.md)** — 开发交接文档（架构、已知坑、打包约定，面向开发者）
 
 ## 构建
 
 ```bash
-build.bat
+tools/build.bat
 ```
 
 产出 `dist/main.dist/GUNNER SIGHT.exe`，Nuitka onedir 模式。首次构建约 60 秒，之后利用编译缓存会快得多。
@@ -60,8 +61,8 @@ GunnerSight/
 ├── resources/              分划图片、图标、字体、启动横幅
 ├── config/                 运行时配置（随包发布，明文可改）
 ├── tests/                  回归测试
-├── tools/                  开发辅助脚本
-└── build.bat               打包脚本
+├── docs/                   项目文档（交接、变更日志、审查报告）
+└── tools/                  开发辅助脚本与打包脚本
 ```
 
 发布版目录结构：
@@ -88,7 +89,7 @@ resources/             分划图片资源
 
 Released under the MIT License. 详见 LICENSE。
 
-第三方视觉素材版权归各自原作者所有，详见 CREDITS.md。
+第三方视觉素材版权归各自原作者所有，详见 docs/CREDITS.md。
 
 ## 免责声明
 
@@ -104,7 +105,7 @@ Released under the MIT License. 详见 LICENSE。
 
 若您是某素材的原作者，且认为本软件对该素材的使用超出了您的授权范围，请通过 QQ 3117023693 或 GitHub Issues 联系，将在收到通知后 48 小时内下架相关素材。
 
-本软件按"现状"提供，不附带任何明示或暗示的担保，包括但不限于对适销性、特定用途适用性和非侵权性的担保。详见 CREDITS.md。
+本软件按"现状"提供，不附带任何明示或暗示的担保，包括但不限于对适销性、特定用途适用性和非侵权性的担保。详见 docs/CREDITS.md。
 
 ## 致谢（排名不分先后）
 

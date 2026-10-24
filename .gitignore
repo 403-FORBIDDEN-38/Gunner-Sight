@@ -13,6 +13,9 @@ startup_log.txt
 crash_log.txt
 *.corrupt
 
+# 实验产物（帧图等，随手生成不进库）
+frames/
+
 # 构建临时输出
 build_err.txt
 build_out.txt
@@ -42,3 +45,9 @@ desktop.ini
 
 # 本地开发规范（不公开）
 AGENTS.md
+
+# 本地一次性脚本（含本机绝对路径，仅本机使用）
+edit_demo.py
+
+# Agent 工作区数据（项目记忆等，仅本机不进库）
+.workbuddy/
