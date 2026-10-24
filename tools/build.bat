@@ -1,6 +1,6 @@
 ﻿@echo off
 REM GunnerSight 打包脚本（Nuitka onedir，配置明文）
-REM 用法：双击 build.bat，或命令行执行 build.bat
+REM 用法：双击本文件，或命令行执行 tools/build.bat（自动切到仓库根目录，与调用位置无关）
 REM 产物：dist\main.dist\GUNNER SIGHT.exe
 REM 说明：开发版与发布版已无区别（config 明文，加密已取消），本脚本即发布脚本。
 REM
@@ -11,7 +11,11 @@ REM 复用编译缓存：只清产物 main.dist，保留 main.build（Nuitka 的
 REM 删掉 main.build 会退化成每次全量重编，慢很多。
 
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
+
+REM ---- 自动备份：打包前覆盖 backups\auto_before_build（约定见 docs/HANDOVER.md：不增殖，新覆盖旧）----
+robocopy . backups\auto_before_build /MIR /XD .git dist backups .workbuddy __pycache__ .pytest_cache .ruff_cache /XF *.pyc *.pyo /NFL /NDL /NJH /NJS /R:1 /W:1 >nul
+if %errorlevel% geq 8 echo [警告] 自动备份失败（backups\auto_before_build），仍继续打包
 
 echo [1/2] 清理旧产物（保留编译缓存 main.build）...
 if exist "dist\main.dist" rmdir /s /q "dist\main.dist"
@@ -21,10 +25,10 @@ for /f "delims=" %%v in ('py -c "from gui.tabs.info_tab import APP_VERSION; v=AP
 py -m nuitka main.py ^
     --standalone ^
     --enable-plugin=pyqt5 ^
-    --windows-icon-from-ico=app_icon.ico ^
+    --windows-icon-from-ico=resources/app_icon.ico ^
     --copyright="Copyright © 2026 [403 FORBIDDEN]. Dedicated to Xiaocheng." ^
     --product-version=%APP_VER% ^
-    --include-data-files=CREDITS.md=CREDITS.md ^
+    --include-data-files=docs/CREDITS.md=CREDITS.md ^
     --include-data-files=README.md=README.md ^
     --include-data-files=USER_GUIDE.md=USER_GUIDE.md ^
     --include-data-files=LICENSE=LICENSE ^
