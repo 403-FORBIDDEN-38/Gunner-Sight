@@ -106,6 +106,7 @@ class ConfigBaseMixin:
 
         # 防抖保存
         self._save_timer = None
+        self._save_token = None  # 当前 Timer 的身份令牌：过期回调不得清掉新 Timer 的引用
         self._save_lock = threading.Lock()
 
         # 配置变更回调（统一通知所有监听者，替代到处手动调 refresh）
@@ -231,29 +232,38 @@ class ConfigBaseMixin:
         raise last_err
 
     def save_config(self) -> bool:
-        """立即保存配置到文件"""
+        """立即保存配置到文件（序列化+落盘全程在锁内，杜绝与防抖保存并发写坏文件）"""
         with self._save_lock:
             if self._save_timer:
                 self._save_timer.cancel()
                 self._save_timer = None
+                self._save_token = None
             try:
                 data = self._dump_config()
             except Exception as e:
                 logger.info(f"序列化配置失败: {e}")
                 return False
-        try:
-            self._atomic_write(data)
-            return True
-        except Exception as e:
-            logger.info(f"保存配置失败: {e}")
-            return False
+            try:
+                self._atomic_write(data)
+                return True
+            except Exception as e:
+                logger.info(f"保存配置失败: {e}")
+                return False
 
     def _atomic_write(self, data: str):
-        """原子写：先写临时文件再 os.replace。"""
-        tmp = self.config_file.parent / (self.config_file.name + '.tmp')
-        with open(tmp, 'w', encoding='utf-8') as f:
-            f.write(data)
-        os.replace(tmp, self.config_file)
+        """原子写：先写临时文件再 os.replace。
+        tmp 名带线程标识（锁外双保险）；finally 保证失败路径不残留 .tmp。"""
+        tmp = self.config_file.parent / f"{self.config_file.name}.{threading.get_ident()}.tmp"
+        try:
+            with open(tmp, 'w', encoding='utf-8') as f:
+                f.write(data)
+            os.replace(tmp, self.config_file)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
 
     def add_on_change_callback(self, cb):
         """注册配置变更回调（任何 set_* 触发 request_save 时自动调用）"""
@@ -267,24 +277,33 @@ class ConfigBaseMixin:
                 cb()
             except Exception:
                 pass
-        if self._save_timer:
-            self._save_timer.cancel()
-        self._save_timer = threading.Timer(0.5, self._do_deferred_save)
-        self._save_timer.daemon = True
-        self._save_timer.start()
-
-    def _do_deferred_save(self):
         with self._save_lock:
-            self._save_timer = None
+            if self._save_timer:
+                self._save_timer.cancel()
+            token = object()
+            timer = threading.Timer(0.5, self._do_deferred_save, args=(token,))
+            timer.daemon = True
+            self._save_timer = timer
+            self._save_token = token
+            timer.start()
+
+    def _do_deferred_save(self, token):
+        """防抖到点后的落盘（Timer 线程）。
+        token 不匹配说明自己已被更新的 request_save 取代——不清引用（那是新
+        Timer 的），但照常落盘当前状态。"""
+        with self._save_lock:
+            if self._save_token is token:
+                self._save_timer = None
+                self._save_token = None
             try:
                 data = self._dump_config()
             except Exception as e:
                 logger.info(f"序列化配置失败: {e}")
                 return
-        try:
-            self._atomic_write(data)
-        except Exception as e:
-            logger.info(f"保存配置失败: {e}")
+            try:
+                self._atomic_write(data)
+            except Exception as e:
+                logger.info(f"保存配置失败: {e}")
 
     # ==================== 全局设置 ====================
 

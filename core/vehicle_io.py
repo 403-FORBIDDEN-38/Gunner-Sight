@@ -204,7 +204,16 @@ def _process_image_dirs(
     path_mapping: dict[str, str] = {}
     copied: list[Path] = []
 
+    resources_root = resources_dir.resolve()
     for dir_rel, files in sorted(dir_files.items()):
+        # 路径穿越防护：manifest 是不可信输入，目录条目与文件名都不得越出
+        # resources_dir（否则恶意 .gsv 可借导入把文件写到用户磁盘任意位置）
+        if dir_rel:
+            if not (resources_dir / dir_rel).resolve().is_relative_to(resources_root):
+                raise ValueError(f"非法的资源目录条目（越出 resources）: {dir_rel}")
+        for fname in files:
+            if Path(fname).name != fname:
+                raise ValueError(f"非法的资源文件名: {fname}")
         pkg_dir = images_tmp / dir_rel if dir_rel else images_tmp
         local_dir = resources_dir / dir_rel if dir_rel else resources_dir
 
@@ -228,13 +237,23 @@ def _process_image_dirs(
                 # 2b：有不一致 → 整目录改名导入
                 new_dir_rel = _resolve_dir_name(resources_dir, dir_rel)
 
-        # 执行复制
+        # 执行复制（任一步失败 → 回滚本次导入已复制的全部文件：导入是原子操作，
+        # 中途失败不留孤儿。异常路径上调用方拿不到本函数的局部复制进度，
+        # 所以回滚必须在这里做）
         dst_dir = resources_dir / new_dir_rel if new_dir_rel else resources_dir
         dst_dir.mkdir(parents=True, exist_ok=True)
         for fname in existing_files:
             src = pkg_dir / fname
             dst = dst_dir / fname
-            shutil.copy2(src, dst)
+            try:
+                shutil.copy2(src, dst)
+            except Exception:
+                for done in copied:
+                    try:
+                        done.unlink()
+                    except OSError:
+                        pass
+                raise
             copied.append(dst)
             rel = f"{dir_rel}/{fname}" if dir_rel else fname
             new_rel = f"{new_dir_rel}/{fname}" if new_dir_rel else fname
@@ -302,6 +321,7 @@ def import_vehicle(
         # 4. 目录级图片处理 + 映射表
         image_list = manifest.get("images", [])
         images_tmp = tmp / "images"
+        copied: list[Path] = []
         try:
             path_mapping, copied = _process_image_dirs(
                 images_tmp, resources_dir, image_list

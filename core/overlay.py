@@ -512,6 +512,24 @@ class OverlayRenderer:
         self.state.overlay_toggled.connect(self._on_overlay_toggled)
         self._vehicle_change_in_progress = False
 
+    def shutdown(self):
+        """断开全部 StateMachine 信号（关窗/退出时调用）。
+
+        没有断开路径时，重复构造 OverlayRenderer 会让新旧实例的回调叠加——
+        Qt 信号持引用，旧实例连同 overlay 窗口一起不释放。
+        """
+        for sig, slot in [
+            (self.state.vehicle_changed, self._on_vehicle_changed),
+            (self.state.magnification_changed, self._on_state_changed),
+            (self.state.ammo_type_changed, self._on_state_changed),
+            (self.state.overlay_settings_changed, self._on_overlay_settings_changed),
+            (self.state.overlay_toggled, self._on_overlay_toggled),
+        ]:
+            try:
+                sig.disconnect(slot)
+            except TypeError:
+                pass  # 未连接
+
     def _sync_reference_resolution(self):
         if not self.overlay:
             return

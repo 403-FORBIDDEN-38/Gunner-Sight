@@ -241,10 +241,12 @@ class AmmoWheelSelector(QObject):
         self.apply_accent()
 
     def start(self):
+        self._enabled = True
         self._hook.acquire()
         self._show_compact()
 
     def stop(self):
+        self._enabled = False
         self._hook.release()
         self._compact.hide()
         self._full.hide()

@@ -22,6 +22,7 @@ WDA_EXCLUDEFROMCAPTURE = 0x11
 class _GrabWorker(QThread):
     """副线程：循环 grab + scale，发新帧信号"""
     frame_ready = pyqtSignal(QImage)
+    error = pyqtSignal(str)  # 抓屏线程异常退出（不静默）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,6 +46,22 @@ class _GrabWorker(QThread):
         self._active = True
 
     def run(self):
+        # 整体 try/finally：任何异常路径都保证 mss 句柄释放（泄漏会累积 GDI 资源），
+        # 异常经 error 信号报出而不是静默死亡（调用方只会看到画面不再刷新）。
+        try:
+            self._grab_loop()
+        except Exception as e:
+            logger.exception("[GrabWorker] 抓屏线程异常")
+            self.error.emit(str(e))
+        finally:
+            cam, self._cam = self._cam, None
+            if cam is not None:
+                try:
+                    cam.close()
+                except Exception:
+                    pass
+
+    def _grab_loop(self):
         # 去掉CAPTUREBLT：Squad不是layered window，纯SRCCOPY快20-40%
         import mss.windows.gdi as _gdi
         _gdi.CAPTUREBLT = 0
@@ -76,7 +93,6 @@ class _GrabWorker(QThread):
             elapsed = (time.perf_counter() - t0) * 1000
             sleep_ms = max(0, interval - elapsed)
             self.msleep(int(sleep_ms))
-        self._cam.close()
 
     def stop(self):
         self._running = False
@@ -209,12 +225,17 @@ class MagnifierOverlay(QWidget):
         interval = int(1000 / self._fps)
         self._worker.configure(region, src_size, self.width(), self.height(), interval)
         self._worker.frame_ready.connect(self._on_frame)
+        self._worker.error.connect(self._on_worker_error)
         self._worker.start()
 
     def _stop_worker(self):
         if self._worker:
             self._worker.stop()
             self._worker = None
+
+    def _on_worker_error(self, msg: str):
+        """抓屏线程异常退出（不静默）：日志留痕，用户可重新开关放大镜。"""
+        logger.warning(f"[放大镜] 抓屏线程异常退出: {msg}")
 
     def closeEvent(self, event):
         self._stop_worker()

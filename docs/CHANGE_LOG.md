@@ -4,6 +4,26 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-24 批次 1：正确性必修十项（S2/S3/S4/S5/S7/M1/M3/M6/M9）
+
+> 依据 docs/reviews/CODE_REVIEW_2026-10-24.md，执行 docs/reviews/FIX_PLAN_2026-10-24.md 批次 1。
+> 版本号 V0.0140300177 → V0.0140300178；测试 29 → 42 passed（新增 13 个契约测试）。
+
+- **S2/M7 配置保存并发**（core/config/base.py）：`_atomic_write` 纳入 `_save_lock`（序列化+落盘全程锁内）；tmp 名带线程标识 + finally 清理；防抖 Timer 引入 token，过期回调不再清掉新 Timer 的引用。修复前两条保存路径并发可把半截 JSON 换成正式配置。
+- **S3 .gsv 导入**（core/vehicle_io.py）：manifest 目录条目/文件名路径穿越校验（越界拒绝且不落盘）；复制中途失败时在**复制的发生地**回滚。测试逼出的改进：仅在调用方预初始化 copied 只能挡 NameError，孤儿清理是空转（异常路径上赋值不发生）——导入必须是原子操作。
+- **S4 资源库“复制路径”**（gui/tabs/resource_tab.py）：右键菜单复制分支补 `full_path` 定义，修复必崩。
+- **S5 微调 tuner**（gui/tabs/angle_meter_tab.py）：断开逻辑从 `_init_engine`（对 None 空转的死代码）前移至 `_shutdown_engine`；修复禁用→启用后新旧 tuner 双调（注入翻倍）与每轮泄露。
+- **S7 OverlayRenderer**（core/overlay.py、gui/main_window.py、main.py）：新增 `shutdown()` 断 5 个 StateMachine 信号；closeEvent 与 aboutToQuit 兜底均接线。
+- **M1 refresh_min_max**（core/angle_meter.py）：仅 IDLE 状态更新 current_angle，测量中不再被拽回最小值。
+- **M3 ctypes 签名**（core/win32_utils.py、core/angle_meter.py）：GetWindowLongW/SetWindowLongW/GetLastError/RegisterRawInputDevices/GetRawInputData 补 argtypes/restype（64 位安全；新旧约定已做四探测点逐位对比，行为一致；overlay_base 经共享 user32 实例间接受益）。
+- **M6 ammo_wheel**（core/ammo_wheel_selector.py）：`start()/stop()` 的 `_enabled` 状态对称收口。
+- **M9 放大镜抓屏线程**（core/magnifier.py）：`run()` 整体 try/finally 保证 `_cam.close()`，异常发 error 信号报出而非静默死亡；`_grab_loop` 抽出保持原循环体不动。
+- **新增测试**（13 个）：test_config_save.py（锁内落盘契约 + 并发不损坏 + token 机制）、test_vehicle_io_import.py（穿越拒绝 + 复制失败报原始异常并回滚 + 正常对照）、test_angle_meter_minmax.py、test_overlay_shutdown.py、test_close_path.py（closeEvent 零异常 + tuner 断开探针 + 10 轮循环）。
+- **验证**：pytest 42 passed、py_compile 全过、audit_docs 29/29、离屏真实启动冒烟无异常（超时终止）。
+- 遗留（待用户手动验证）：S4 复制路径、S5 微调单次注入——需真实 GUI/热键操作，按项目测试边界先例不自动化。
+
+---
+
 ## 2026-10-24 AGENTS.md 保守档手术：切除故事与劝诫修辞
 
 > 用户批准（保守档，过几天亲自复审）。动因：文件随历代 agent 增改脱离定位——

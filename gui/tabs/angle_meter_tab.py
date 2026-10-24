@@ -714,10 +714,6 @@ class AngleMeterTab(QWidget):
             (self.hotkey.angle_meter_toggle_triggered, self._on_hotkey_toggle),
             (self.hotkey.angle_meter_calibrate_triggered, self._on_hotkey_calibrate),
             (self.hotkey.angle_meter_reset_triggered, self._on_hotkey_reset),
-            (self.hotkey.angle_meter_up_pressed, getattr(self._up_tuner, 'on_pressed', None)),
-            (self.hotkey.angle_meter_up_released, getattr(self._up_tuner, 'on_released', None)),
-            (self.hotkey.angle_meter_down_pressed, getattr(self._down_tuner, 'on_pressed', None)),
-            (self.hotkey.angle_meter_down_released, getattr(self._down_tuner, 'on_released', None)),
             (self.hotkey.angle_meter_height_up_pressed, getattr(self._height_up_tuner, 'on_pressed', None)),
             (self.hotkey.angle_meter_height_up_released, getattr(self._height_up_tuner, 'on_released', None)),
             (self.hotkey.angle_meter_height_down_pressed, getattr(self._height_down_tuner, 'on_pressed', None)),
@@ -771,6 +767,23 @@ class AngleMeterTab(QWidget):
         self._apply_current_profile_to_tracker()
 
     def _shutdown_engine(self):
+        # 先断开微调 tuner 的热键信号再停用：up/down tuner 每次启用都会重建，
+        # 旧 tuner 置 None 前若不断信号，Qt 信号持引用导致旧 tuner 永不释放，
+        # 且重建后新旧两套同时响应热键（注入翻倍）。height tuner 常驻不重建，
+        # 由 _init_engine 的"先断再连"循环负责。
+        for tuner, sigs in [
+            (self._up_tuner, (self.hotkey.angle_meter_up_pressed,
+                              self.hotkey.angle_meter_up_released)),
+            (self._down_tuner, (self.hotkey.angle_meter_down_pressed,
+                                self.hotkey.angle_meter_down_released)),
+        ]:
+            if tuner is None:
+                continue
+            for sig, slot in ((sigs[0], tuner.on_pressed), (sigs[1], tuner.on_released)):
+                try:
+                    sig.disconnect(slot)
+                except TypeError:
+                    pass  # 未连接
         # 先释放最贵的资源：mss 抓屏句柄（OS 级，泄漏代价最高）
         if self.raw:
             safe_call("raw.close", self.raw.close)

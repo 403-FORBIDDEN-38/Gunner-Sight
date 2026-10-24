@@ -758,6 +758,7 @@ class MainWindow(QMainWindow):
                 _shutdown_fns.append(("放大镜", lambda w=_mag: w.cleanup()))
             _shutdown_fns.extend([
                 ("热键", lambda: self.hotkey.shutdown()),
+                ("Overlay信号", lambda: self.overlay.shutdown() if self.overlay else None),
                 ("配置保存", lambda: self.config.save_config()),
             ])
             for _name, _fn in _shutdown_fns:

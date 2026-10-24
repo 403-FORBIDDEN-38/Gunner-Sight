@@ -421,6 +421,11 @@ def _main():
     # 放大镜tab（此时 tab_stack 已 deleteLater），是纯粹的浪费与隐患。
     def _cleanup():
         try:
+            if overlay is not None:
+                overlay.shutdown()
+        except Exception as e:
+            logger.warning(f"[Main] 退出清理 Overlay 失败: {e}")
+        try:
             tab = window.get_tab(window.TAB_MAGNIFIER)
             if tab is not None:
                 tab.cleanup()

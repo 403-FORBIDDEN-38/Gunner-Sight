@@ -690,6 +690,7 @@ class ResourceTab(QWidget):
         elif item and chosen == action_copy:
             node_data = item.data(0, Qt.UserRole)
             rel_path = node_data[1]
+            full_path = Path(self.resources.resources_dir) / rel_path
             from PyQt5.QtWidgets import QApplication
             QApplication.clipboard().setText(str(full_path))
         elif item and chosen == action_delete:

@@ -37,6 +37,19 @@ class _RAWINPUT(ctypes.Structure):
     _fields_ = [("header", _RAWINPUTHEADER), ("mouse", _RAWMOUSE)]
 
 
+# Raw Input API 严格签名（64 位安全，风格对齐 core/mouse_hook.py；
+# user32 是 core/win32_utils 导出的共享实例，声明对全项目生效）
+user32.RegisterRawInputDevices.argtypes = [
+    ctypes.POINTER(_RAWINPUTDEVICE), ctypes.c_uint, ctypes.c_uint,
+]
+user32.RegisterRawInputDevices.restype = ctypes.wintypes.BOOL
+user32.GetRawInputData.argtypes = [
+    ctypes.wintypes.HANDLE, ctypes.c_uint, ctypes.c_void_p,
+    ctypes.POINTER(ctypes.wintypes.UINT), ctypes.c_uint,
+]
+user32.GetRawInputData.restype = ctypes.wintypes.UINT
+
+
 # ============================================================
 # 1. RawInputReader
 # ============================================================
@@ -235,12 +248,13 @@ class AngleTracker(QObject):
         return self._min_max_provider()[1]
 
     def refresh_min_max(self):
-        """从 provider 重读 min/max，更新 current_angle（IDLE 状态时）"""
+        """从 provider 重读 min/max，更新 current_angle（仅 IDLE 状态）"""
+        if self.state != self.STATE_IDLE:
+            return
         min_angle = self.active_min_angle
         if min_angle is not None:
             self.current_angle = min_angle
-            if self.state == self.STATE_IDLE:
-                self.angle_changed.emit(self.current_angle)
+            self.angle_changed.emit(self.current_angle)
 
     def start(self):
         if self.state != self.STATE_IDLE:
