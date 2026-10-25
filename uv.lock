@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "gunnersight"
-version = "0.140300180"
+version = "0.140300181"
 source = { editable = "." }
 dependencies = [
     { name = "keyboard" },

@@ -4,6 +4,52 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-25 批次 4：回归修复与账本（浪 1-4）
+
+> 依据 docs/reviews/CONSOLIDATED_ACTIONS_FOR_STEP5.md（三轮交叉审查合并处置单，基线 186faf0）。
+> 版本号 V0.0140300180 → V0.0140300181；测试 91 → 107 passed。
+> 编号说明：处置单的 P0/P1/P2/P3 是「本轮处置优先级」，与 CODE_REVIEW 的 S/M/P 编号无关；映射见 FIX_PLAN 附表。
+
+### 浪 1：P0 两项 + 桌宠生命周期
+
+- **P0-1 无参 disconnect 抹掉别人的槽**（gui/main_window.py）：on_ammo_wheel_ready 的补偿连接用 `toggled.disconnect()`（无参 = 清空该信号**全部**槽），把标定测距 tab 自己的电闸 `_on_enable_toggle` 一并抹掉 → 勾选框彻底失效（不写配置/不起停引擎/不注册热键）。触发链：config 启用标定测距 → 预创建 tab 连电闸 → 100ms 后 wheel 就绪走补偿。**91 passed 全绿的原因**：旧测试只断言「新连接生效」，不锁「碰过的旧槽还活着」。
+  - 修法：创建路径与补偿路径的两份同款闭包（同一功能两个实现）收敛为实例方法 `self._on_distance_toggle`；补偿路径 `disconnect(self._on_distance_toggle)` 定向摘除。
+  - **规矩升级**：HANDOVER §十二「先断再连」补边界——无参 disconnect 只准用在自己拥有、打算全清的信号上。
+  - 有牙证明：HEAD 版 main_window 下 `test_ammo_wheel_ready_keeps_tab_own_slot_alive` 必红（配置未被写入），恢复后 md5 一致。
+- **P0-2 桌宠 parent（S6）**（gui/tabs/info_tab.py + main_window.py）：`__init__` 先连信号再 setChecked，config 称启用时同步走创建路径；彼时 tab 未 insertWidget，`window()` 返回自身 → 桌宠 parent 成页面子控件，切 tab 即消失。
+  - 修法：`blockSignals` 包 setChecked；创建交 showEvent / MainWindow 创建回调（新增 TAB_INFO 分支 → `InfoTab.ensure_mascot()`）；`_create_mascot` 断言 `window() is not self`。
+  - **与处置单不符（§〇-3 记账）**：`config.is_mascot_enabled()` 自 2026-09-07（c0973fe）起硬编码 `return False`（「不持久化，每次启动默认关闭」），`set_mascot_enabled` 只写一个全仓无人读的 `_mascot_enabled_runtime`。故处置单描述的触发链**当前生产不可达**——这是**潜在陷阱**：一旦恢复持久化，bug 立刻复活。测试用 monkeypatch 把 getter 钉成 True 锁契约，与持久化策略解耦。**是否恢复 mascot 持久化属产品决策，留待用户拍板**。
+  - 验收按代码设计修正（用户批准）：parent 是主窗口（不是 None，也不是 tab）+ 切页不消失（`isVisible` 依赖祖先链）+ resize 重定位。
+- **桌宠退出生命周期（P0-2 顺带暴露）**：`MascotWidget.hideEvent` 无保护 `_anim.stop()`，窗口销毁级联里踩已删除的 `QPropertyAnimation`（间歇 RuntimeError，新测试首次真创建桌宠才暴露）。分层处置：① `MascotWidget`/`ChatBubble` 增加 `shutdown()`，先停动画/定时器/音频再隐藏（已隐藏则销毁时不再触发 hideEvent——主修复）；② hideEvent 加 RuntimeError 护栏（Qt 自主销毁级联兜底）；③ 桌宠 parent 是主窗口 → 窗口级资源，进 M19 清理契约（`collect_window_cleanup_steps` 新增「桌宠」项 → `InfoTab.shutdown_mascot()`）。
+
+### 浪 2：P1 五项
+
+- **P1-1 uv.lock 与源码割裂**：临时目录实验推翻处置单的病源判断——不是镜像缺失，而是**批次 3 版本号 179→180 后未重锁**（`uv lock --check` 判定 lock 过期，按 pypi.org 重解析 175 包）。pyproject 显式声明 `[[tool.uv.index]]`（aliyun, default=true）后重锁，lock **只变 2 行**（project version + mss specifier），1437 处 source 不动。验证：不设 `UV_DEFAULT_INDEX` 跑 check → exit 0（1ms）。
+- **P1-2 resources 未降级（P5 半修补齐）**：读路径保持 exe 同级（随包出厂资源）；新增 `resources_write_dir`（exe 同级不可写时降级 config 侧 resources）+ `resolve_resource_path()`（读多路径：出厂优先→写目录兜底）。`ResourceManager` 新增 `write_dir`/`get_write_dir()`：list 取并集（assets 仍排除）、get 两处找、import 落写路径、remove/rename 跨路径定位；导入/导出 .gsv 改用写路径。Program Files 标准用户不再静默失败。
+- **P1-3 export 缺 window 侧**：export_gui_facts 补 `collect_window_cleanup_steps`；四调用方双 collector 接线加静态契约测试（§2.3 漏项根因）。
+- **P1-4 M22 `_LibpngFilter` 删除**：它只替换 `sys.stderr`，拦不住 libpng 的 C 层 `fprintf(fd 2)`。留着就是一段撒谎的注释。
+- **P1-5 M11 join 竞态**：`MouseHook._stop` 的 `join(0.5)` 超时补 warning 留痕（线程卡事件队列无法强杀，至少不静默）。
+
+### 浪 3：P2 四项
+
+- **P2-1 S5 补全**：`_shutdown_engine` 里 tuner 置 None 前 `deleteLater()`——parent 是 tab，此前每轮禁用/启用累积一个带 2 个 QTimer 的 QObject。
+- **P2-2 M6 补全**：`AmmoWheelSelector.stop()` 反向断开四条连接（MouseHook 单例两条 + state 两条），TypeError 守卫保证幂等（closeEvent + aboutToQuit 双跑安全）。stop() 是退出路径专用（start 仅 main.py 一处）。
+- **P2-3**：FIX_PLAN 死码清单点名 `RegionSelector`/`PointPicker`/`CrosshairPreviewWidget` + `make_int_spin`；明写 `VehicleFilterWidget` 是活控件（三页 + 两处测试）**不得进删除名单**。
+- **P2-4**：`mss>=10.0,<11`（9→10 的 breaking change 已咬过一次）。
+
+### 浪 4：P3 账本
+
+- **P3-1 版本同步守卫**：`tests/test_batch4_p3_ledger.py` 断言 pyproject version == `APP_VERSION.lstrip("V")`（此前 tests/ 零命中，全靠人工 + 注释约定）。
+- **P3-2 SMP 编号全集对账**：见 FIX_PLAN 附表（S1-S7 / M1-M24 / P1-P17 逐条映射到批次或「不修 + 理由」）。
+- **P3-3 未排期项**：P3/P8/P9/P12/P15/P17 归入批次 5；P11/P13 won't-fix（理由见附表）。
+- **P3-4 M24 补记**：`export_gui_facts` 的 ROOT 早已改 `Path(__file__).resolve().parent.parent`（批次 2 顺手改），但任何批次记录都没提——本条补记，避免将来回溯以为没人管过。
+
+### 横切
+
+- **AGENTS §4 新规矩**：改既有连接/清理/注册项时，必须断言「原有的仍然生效」，不只锁「新加的在工作」（§五 根因的直接对策）。
+- 版本 V0.0140300180 → V0.0140300181（info_tab APP_VERSION + pyproject 双处 + uv.lock 重锁 1 行）。
+- 测试 91 → 107 passed（新增 16：浪1 七项、浪2 六项、浪3 两项、浪4 一项）。
+
 ## 2026-10-24 批次 3：中坏味道十五项（浪 A/B/C1/C2/C3/D）
 
 > 依据 docs/reviews/CODE_REVIEW_2026-10-24.md 中坏味道清单，执行 docs/reviews/FIX_PLAN_2026-10-24.md 批次 3。

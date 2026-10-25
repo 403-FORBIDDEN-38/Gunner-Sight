@@ -5,7 +5,7 @@
 > `AGENTS.md`
 > ；这份文件只讲**这个项目长什么样、为什么这么设计**。
 > 只写 "是什么" 和 "为什么"，**不写故事**。踩过的坑压缩成第十二节的一行速查。
-> 最后更新：2026-10-24（批次 3 中坏味道十五项） · 版本 `V0.0140300180`
+> 最后更新：2026-10-25（批次 4 回归修复与账本） · 版本 `V0.0140300181`
 > 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
@@ -715,6 +715,32 @@ tools/build.bat
 * 各清理动作**幂等**（正常退出 closeEvent + aboutToQuit 双跑安全）；契约测试在
   `tests/test_wave_d_contract.py`（含有牙证明：HEAD 版 main_window 下必红）
 
+### 8. 批次 4：P0 回归修复 + 桌宠生命周期 + P1/P2/P3（已完成 2026-10-25）
+
+* **P0-1（回归）**：`on_ammo_wheel_ready` 的补偿连接曾用无参 `toggled.disconnect()`，
+  清空该信号**全部**槽——标定测距 tab 自己的电闸 `_on_enable_toggle` 被一并抹掉，
+  启用勾选框失效（不写配置/不起停引擎/不注册热键）。修法：闭包提为实例方法
+  `self._on_distance_toggle` + 定向断开。**边界已补进 §十二**：无参 disconnect
+  只准用在自己拥有、且打算全清的信号上。
+* **P0-2（S6）**：info_tab `__init__` 的 setChecked 同步触发创建，桌宠被 parent 到
+  tab 自身。修法：blockSignals + 创建交 showEvent / MainWindow 创建回调
+  `ensure_mascot()` + `window() is not self` 断言。
+  **注意**：`is_mascot_enabled()` 自 2026-09-07 起硬编码 False（不持久化），
+  报告触发链当前不可达——按**潜在陷阱**处置；恢复持久化前先看
+  `tests/test_batch4_regressions.py`。
+* **桌宠生命周期**：`MascotWidget` / `ChatBubble` 增加 `shutdown()`（先停动画 /
+  定时器 / 音频再隐藏），`hideEvent` 加 RuntimeError 护栏；桌宠进 M19 清理契约
+  （`collect_window_cleanup_steps` →「桌宠」→ `InfoTab.shutdown_mascot()`）。
+* **P1**：uv 源显式声明（aliyun default=true，lock 只变版本行）；resources 读写
+  分离（`resources_write_dir` + `resolve_resource_path`；ResourceManager 新增
+  `write_dir` / `get_write_dir()`）；export 补 window 侧 collector；删
+  `_LibpngFilter`（拦不住 C 层 fprintf）；MouseHook join 超时留 warning。
+* **P2**：tuner deleteLater（S5 C++ 对象累积）；`AmmoWheelSelector.stop()` 反向
+  断开四条连接（幂等）；mss 上界 `<11`；FIX_PLAN 死码清单点名
+  （`VehicleFilterWidget` 是活控件，禁入）。
+* **P3**：版本同步守卫测试（`tests/test_batch4_p3_ledger.py`）；SMP 编号全集对账
+  见 FIX_PLAN 附表；未排期项归入批次 5；M24（`ROOT = Path(__file__)`）补记。
+
 ---
 
 ## 十一・五、审查任务书（2026-10-13 三轮审查产出）
@@ -796,7 +822,7 @@ tools/build.bat
 ### 注意事项
 
 - 手册里的术语必须与 UI 一致（"定角装填"不是"归零"，config 键名 `auto_reset` 不改但 UI 文本用"定角装填"）
-- 版本号写 `V0.0140300180`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
+- 版本号写 `V0.0140300181`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
 - 改完手册不需要升版本号（AGENTS §6：文档/测试不算源码更新）
 - 改完 docs/HANDOVER 必跑 `py tools/audit_docs.py`
 
@@ -836,7 +862,7 @@ tools/build.bat
 | 某个功能 "没保存"            | `set_xxx` 里漏了 `request_save()`（写入是防抖的，不调就不落盘）                                                                              |
 | 日志文件里什么也没有 | 文件 sink 曾是 WARNING 级，INFO 全被丢弃（2026-10-13 已修为 INFO）。见八・五 |
 | bbox 缓存对不上            | 删 `config/bbox_cache.json` 重启                                                                                               |
-| 重建引擎后热键触发两次 / 回调重复执行 | 信号重复连接。`_init_engine` 之类必须**先无条件 disconnect 再 connect**（幂等收口），否则每次重建都多挂一个槽 |
+| 重建引擎后热键触发两次 / 回调重复执行 | 信号重复连接。`_init_engine` 之类必须**先无条件 disconnect 再 connect**（幂等收口），否则每次重建都多挂一个槽。**边界：无参 disconnect() 只准用在自己 connect 过的槽上——别人拥有的信号（如 tab 自己的电闸）必须 `disconnect(自己的槽)` 定向断开，否则连别人的一起清空（批次 4 P0-1 实证）** |
 | 标签增删后某些页的下拉里没有新标签 | 漏接 `tags_changed`，见五・五 |
 
 **术语类**
