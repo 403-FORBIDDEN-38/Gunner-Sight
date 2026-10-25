@@ -4,6 +4,32 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-25 打包前自动备份排除 `.venv/`（备份 199MB → 43MB）
+
+**怎么发现的**：查"`gunnersight.egg-info` 这目录是啥"时顺手 `du -sh backups/auto_before_build`，
+发现 199MB 里 156MB 是 `.venv`。
+
+**根因**：`tools/build.bat` 第 24 行的 `/XD` 排除名单写在 `.venv` 出现之前。
+今天 09:19 第一次 `uv sync` 建出 `.venv`（156MB）之后，每次构建前 `robocopy /MIR` 都把它整个复制一遍。
+**排除名单是会随新目录出现而失效的**——这类名单没有自我提醒机制，只能靠发现。
+
+**改了什么**：
+- `tools/build.bat`：`/XD` 加 `.venv`（仍纯 ASCII + CRLF，73/73，0 非 ASCII 字节）
+- 清掉 `backups/auto_before_build/.venv`：199MB → 43MB
+- HANDOVER §十 备份节：排除名单补 `.venv/` + 写清"为什么必须在里面"；
+  本机目录表补 `.venv/` 与 `gunnersight.egg-info/` 两行（回答"这目录是啥"）
+- RULES 坑速查：「备份体积莫名 200MB」原先归因 `dist`/`.git`，**归因不准**——
+  实际主因是 `.venv`；顺带补一句"排除名单写在目录出现之前就会漏"
+
+**顺带对齐目录**：`docs/` 下三份非正式文档被移进 `docs/reviews/`
+（`GUI_INVENTORY` / `MANUAL_OUTLINE` / `REAL_OVERLAY_RESEARCH`，`docs/` 根只留三份 agent 文档 + CREDITS）。
+随之改引用：`tools/export_gui_facts.py` 输出路径（docstring + 写盘 + print 三处）、
+HANDOVER §一・五 正文引用、§六 目录树。
+实跑脚本验证：440 行，与移动前**逐字节一致**（可复现，未把用户运行期配置漂移写进底稿）。
+
+**验证**：`robocopy /L` 干跑确认源 519 文件、涉及 `.venv` 的行数为 0（排除生效）；
+`audit_docs` 34/34。版本号不动（构建脚本，不影响运行时行为）。
+
 ## 2026-10-25 文档三分法：新建 docs/RULES.md，AGENTS.md 降为人格层
 
 > 版本号**不动**（V0.0140300182）——纯文档结构 + 注释引用，无行为变化；

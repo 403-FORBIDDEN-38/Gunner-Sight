@@ -351,7 +351,7 @@ Windows 上非 0 可能是退出期崩溃而非断言失败——先看是不是
 | 用 Python 脚本按内容替换 "0 命中" | 文件是 CRLF，而匹配串用了 `\n`。按文件实际换行符构造 |
 | `json.load` / `ast.parse` 报非法字符 | 文件被 PowerShell `Set-Content` / `>` 写了 BOM。改用 Write 工具或 Python 脚本 |
 | 文件莫名带 BOM（`ast.parse` 报 U+FEFF） | PowerShell `Set-Content` 留下的。去 BOM 用字节级操作；读文件用 `encoding="utf-8-sig"` 更稳 |
-| 备份体积莫名 200MB | 把 `dist/` 或 `.git` 一起备份了。整目录快照排除 `dist .git backups __pycache__ .pytest_cache .ruff_cache .workbuddy` |
+| 备份体积莫名 200MB | 多半是 `.venv/`（156MB，占 78%）被拷进去了，其次才是 `dist/`、`.git/`。整目录快照排除 `dist .git .venv backups __pycache__ .pytest_cache .ruff_cache .workbuddy`。**排除名单写在目录出现之前就会漏**——新增重量级目录时顺手补名单 |
 | 脚本批量替换后文件半坏 | 没做 "预期命中 N 处" 断言。**先断言再落盘** |
 | 编辑 CRLF 文件后整文件 diff 变成 +900/-900 | 工具把换行符归一了。改完字节复核 `data.count(b"\r\n")`；`.md`/`.py` 坏了不会运行失败，但会淹没真实改动的可读性 |
 

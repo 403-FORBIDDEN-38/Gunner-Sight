@@ -4,7 +4,7 @@
 - 控件结构：离屏构造 MainWindow（用 tmp config，干净状态），遍历 QWidget 树
 - 出厂数值：直接读 config/config.json（**这才是用户拿到手看到的值**，不是代码默认值）
 
-输出：docs/GUI_INVENTORY.md
+输出：docs/reviews/GUI_INVENTORY.md
 """
 import os
 import sys
@@ -219,8 +219,8 @@ lines.append("")
 # 离屏构造用 mkdtemp 临时 config，info 页「数据目录」标签会带出随机路径——
 # 每次重生成都不同的内容不该进事实底稿，统一替换为占位符（否则文档不可复现）
 _doc = "\n".join(lines).replace(str(cfg.config_dir), "<临时数据目录>")
-(ROOT / "docs" / "GUI_INVENTORY.md").write_text(_doc, encoding="utf-8", newline="\r\n")
-print(f"已生成 docs/GUI_INVENTORY.md：{len(lines)} 行")
+(ROOT / "docs" / "reviews" / "GUI_INVENTORY.md").write_text(_doc, encoding="utf-8", newline="\r\n")
+print(f"已生成 docs/reviews/GUI_INVENTORY.md：{len(lines)} 行")
 print(f"  控件清单覆盖 {len(NAMES)} 页；出厂载具 {len(factory.get('vehicles', {}))} 个")
 
 # 收尾：离屏构造起了放大镜抓屏线程，不清理会报 "QThread: Destroyed while thread is still running"

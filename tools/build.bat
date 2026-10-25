@@ -21,7 +21,7 @@ where uv >nul 2>nul
 if %errorlevel%==0 set PY_RUN=uv run --with nuitka --with zstandard python
 
 REM ---- auto backup before build: refresh backups\auto_before_build (no accumulation) ----
-robocopy . backups\auto_before_build /MIR /XD .git dist backups .workbuddy __pycache__ .pytest_cache .ruff_cache /XF *.pyc *.pyo /NFL /NDL /NJH /NJS /R:1 /W:1 >nul
+robocopy . backups\auto_before_build /MIR /XD .git .venv dist backups .workbuddy __pycache__ .pytest_cache .ruff_cache /XF *.pyc *.pyo /NFL /NDL /NJH /NJS /R:1 /W:1 >nul
 if %errorlevel% geq 8 echo [WARN] auto backup failed, continuing anyway
 
 echo [1/2] Cleaning old output (keeping build cache)...

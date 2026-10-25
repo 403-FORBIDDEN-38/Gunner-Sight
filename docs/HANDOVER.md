@@ -102,7 +102,7 @@ grep 只能给你定义点；只有追调用点，才知道它**被谁、用什�
 「全局钩子无法覆盖管理员权限的游戏窗口」（绝对结论，且项目正在研究 UIAccess，结论可能变）。
 2026-10-18 溯源时删改 9 处，其中 3 处属于这类越界。
 
-**`docs/GUI_INVENTORY.md` 是手册的事实底稿**，由 `tools/export_gui_facts.py`
+**`docs/reviews/GUI_INVENTORY.md` 是手册的事实底稿**，由 `tools/export_gui_facts.py`
 遍历 QWidget 树生成（10 页控件名、类型、range、当前值）。
 
 * 手册里的控件名、参数范围、出厂值，**一律以它为准，不要凭印象写**
@@ -413,11 +413,11 @@ docs/                       项目文档（README、USER_GUIDE、AGENTS 在根�
   RULES.md                  开发规范——规矩，判据的唯一来源
   HANDOVER.md               交接文档（本文件）
   CHANGE_LOG.md             变更时间线（含回退过的方向）
-  GUI_INVENTORY.md          控件与出厂值底稿（tools/export_gui_facts.py 生成，可重跑）
-  MANUAL_OUTLINE.md         手册目录与新旧映射（规划产物，已执行完，留作记录）
   CREDITS.md                第三方素材版权声明（随包发布）
-  REAL_OVERLAY_RESEARCH.md  置顶叠加方案研究笔记
-  reviews/                  审查报告与修复计划（2026-10-24）
+  reviews/                  审查报告、修复计划、一次性研究笔记与底稿
+    GUI_INVENTORY.md        控件与出厂值底稿（tools/export_gui_facts.py 生成，可重跑）
+    MANUAL_OUTLINE.md       手册目录与新旧映射（已执行完，留作记录）
+    REAL_OVERLAY_RESEARCH.md  置顶叠加方案研究笔记
 tools/                      开发辅助：audit_docs / audit_manual / export_gui_facts / build.bat
 ```
 
@@ -513,7 +513,10 @@ tools/build.bat
 | 自动备份 | 每次打包前 | `backups/auto_before_build/` | 不增殖，新的覆盖旧的 |
 | 用户备份 | 用户说"备份"时 | `backups/GunnerSight_src_<时间戳>/` | 可增殖 |
 
-自动备份排除 `dist/`、`.git/`、`backups/`、`__pycache__/`、`.pytest_cache/`、`.ruff_cache/`、`.workbuddy/`。
+自动备份排除 `dist/`、`.git/`、`.venv/`、`backups/`、`__pycache__/`、`.pytest_cache/`、`.ruff_cache/`、`.workbuddy/`。
+
+**`.venv/` 必须留在这个名单里**：它 156MB，曾占整份备份的 78%。它是 `uv sync` 建出来的虚拟环境（不是源码），
+丢了能重建，备份它只是白写盘。
 
 | 路径 | 是什么 |
 | --- | --- |
@@ -521,6 +524,8 @@ tools/build.bat
 | `<桌面发布版目录>` | 桌面版（打包产物，用户直接双击的） |
 | `GunnerSight\backups\auto_before_build/` | 自动备份（每次打包前覆盖） |
 | `GunnerSight\backups\GunnerSight_src_<时间戳>\` | 用户备份（可增殖） |
+| `GunnerSight\.venv\` | 本地虚拟环境，`uv sync` 建的（156MB，不入库） |
+| `GunnerSight\gunnersight.egg-info\` | 上面那个虚拟环境做"可编辑安装"时，setuptools 顺手写在**源码根目录**的包元数据（包名/版本/依赖清单，12KB）。不入库、可删、删了下次 `uv sync` 又长出来。**别去编辑它**，改它不影响已安装的包 |
 
 ### 开源仓库
 
