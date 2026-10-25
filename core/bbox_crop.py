@@ -12,7 +12,11 @@
 - 任务可取消：切载具时取消旧任务
 - 裁剪比例 < 10% 跳过裁剪，避免复制开销大于收益
 - 预扫描缓存：启动后台扫所有图存 json，之后切换跳过 250ms 扫描
+- 缓存有效性以内容 sha256 为最终判据（mtime 只作快路径）：mtime 在
+  zip（2 秒精度、向下取偶）和 git clone（不保存 mtime）之后必然失真，
+  只认 mtime 会让一份正确的预计算在别人机器上全部失效
 """
+import hashlib
 import json
 import threading
 from pathlib import Path
@@ -21,6 +25,23 @@ from PyQt5.QtCore import QMutex, QThread, QWaitCondition, pyqtSignal
 from PyQt5.QtGui import QImage
 
 from core.logger import logger
+
+
+def _file_sha256(path, chunk=1 << 16):
+    """流式计算文件内容的 sha256（小写十六进制）。读失败返回 None。
+
+    作为缓存有效性的最终判据，替代不可移植的 mtime。开销可忽略：
+    371 张 PNG（约 10.6MB）全量算完约 48ms，单张约 0.1ms；而被它
+    省掉的一次全量 bbox 重扫是 40~76 秒。
+    """
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(chunk), b""):
+                h.update(block)
+    except OSError:
+        return None
+    return h.hexdigest()
 
 
 def find_opaque_bbox(img, alpha_threshold=0):
@@ -184,25 +205,47 @@ class BboxCache:
                 self._path.unlink(missing_ok=True)
 
     def cleanup(self):
-        """删除文件不存在或 mtime 不匹配的孤儿条目"""
+        """删除孤儿条目，并把 mtime 失真而内容未变的条目就地自愈。
+
+        三层判断（启动时一次跑完）：
+        1. 源文件不存在 → 删（孤儿）
+        2. mtime 与记录一致 → 什么都不做（本机日常路径，零 hash 开销）
+        3. mtime 不一致 → 算内容 sha256：
+           - 一致 → 只是 zip 解压 / git clone 改写了时间戳，写回新 mtime（自愈）
+           - 不一致 → 图真换了，条目保留（get() 会判失效，重扫后 set() 覆盖）
+
+        **刻意不因 mtime 不符而删条目**：mtime 在分发后必然失真，若按它删，
+        一份正确的出厂预计算会在别人机器上第一次启动、第一个 get() 之前
+        就被整份清空并写回空文件。
+
+        自愈必须在这里做（而不是只靠 get()）：全部命中的情况下扫描线程
+        不会启动，get() 里的 dirty 没有任何时机落盘，下次启动又要重算一遍。
+        """
         with self._lock:
             removed = 0
+            healed = 0
             for rel in list(self._data.keys()):
                 p = Path(self._to_abs(rel))
-                if not p.exists():
-                    del self._data[rel]
-                    removed += 1
-                    continue
                 try:
-                    mtime = p.stat().st_mtime_ns
+                    st = p.stat()
                 except OSError:
                     del self._data[rel]
                     removed += 1
                     continue
-                if self._data[rel].get("mtime") != mtime:
+                entry = self._data[rel]
+                if not isinstance(entry, dict):
                     del self._data[rel]
                     removed += 1
-            if removed > 0:
+                    continue
+                if entry.get("mtime") == st.st_mtime_ns:
+                    continue
+                expected = entry.get("sha256")
+                if not expected:
+                    continue  # 旧版条目无指纹：留给 get() 判未命中 → 重扫覆盖
+                if _file_sha256(self._to_abs(rel)) == expected:
+                    entry["mtime"] = st.st_mtime_ns
+                    healed += 1
+            if removed or healed:
                 self._dirty = True
                 self.save()
 
@@ -219,33 +262,68 @@ class BboxCache:
                 pass
 
     def get(self, path, mtime):
-        """查询缓存，命中且 mtime 匹配返回 bbox tuple，否则 None。结构异常的条目自动清除。"""
+        """查询缓存，命中返回 bbox tuple，否则 None。
+
+        两级判据：
+        1. mtime 完全一致 → 快路径，不读文件（本机日常路径，零额外开销）
+        2. mtime 不一致 → 算内容 sha256 比对。一致说明只是分发/复制导致
+           时间戳失真，命中并把新 mtime 写回缓存（自愈，每个文件只付一次，
+           之后回到快路径）；不一致说明图真的换过，返回 None 让调用方重扫。
+
+        结构异常、以及旧版遗留的「无 sha256」条目一律按未命中处理。
+        """
+        rel = self._to_rel(path)
         with self._lock:
-            rel = self._to_rel(path)
             entry = self._data.get(rel)
             if not isinstance(entry, dict):
                 if entry is not None:
                     del self._data[rel]
                     self._dirty = True
                 return None
-            if entry.get("mtime") == mtime and isinstance(entry.get("bbox"), list) and len(entry["bbox"]) == 4:
-                return tuple(entry["bbox"])
+            bbox = entry.get("bbox")
+            if not (isinstance(bbox, list) and len(bbox) == 4):
+                return None
+            if entry.get("mtime") == mtime:
+                return tuple(bbox)
+            expected = entry.get("sha256")
+            if not expected:
+                return None
+        # 文件 I/O 放在锁外：get() 会从主线程调用（切图），
+        # 持锁读盘会连带阻塞扫描线程
+        actual = _file_sha256(self._to_abs(rel))
+        if actual is None or actual != expected:
             return None
-
-    def set(self, path, bbox, mtime, orig_size):
-        """写入缓存"""
         with self._lock:
-            rel = self._to_rel(path)
-            self._data[rel] = {
+            entry = self._data.get(rel)
+            if not isinstance(entry, dict) or entry.get("sha256") != expected:
+                return None  # 期间被删/被覆盖，本轮不认
+            entry["mtime"] = mtime
+            self._dirty = True
+            return tuple(entry["bbox"])
+
+    def set(self, path, bbox, mtime, orig_size, sha256=None):
+        """写入缓存。sha256 为空时当场计算（调用方是扫描线程，不在主线程）"""
+        rel = self._to_rel(path)
+        if sha256 is None:
+            sha256 = _file_sha256(self._to_abs(rel))
+        with self._lock:
+            entry = {
                 "bbox": list(bbox),
                 "mtime": mtime,
                 "orig_size": list(orig_size),
             }
+            if sha256:
+                entry["sha256"] = sha256
+            self._data[rel] = entry
             self._dirty = True
 
     def has(self, path, mtime):
-        with self._lock:
-            return self.get(path, mtime) is not None
+        """缓存中是否有该文件的有效 bbox（判据完全同 get）。
+
+        不额外加锁：get() 自身已是原子读，外层再持锁会让锁外那段
+        文件 I/O 重新落回锁内（prescan_paths 在主线程批量调用本方法）。
+        """
+        return self.get(path, mtime) is not None
 
     def all_paths(self):
         with self._lock:

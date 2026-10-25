@@ -399,7 +399,7 @@ GitHub `/releases` 有没有 Draft。**先查再删**：2026-10-25 就是因为�
 | 程序退出时崩溃（退出码非 0，但测试全过） | 悬空的事件过滤器：`installEventFilter` **不持有所有权**，临时对象会被立刻回收，QApplication 上只剩悬空指针。必须用 `wheel_filter.install_no_wheel_filter(app)` |
 | 某个功能 "没保存" | `set_xxx` 里漏了 `request_save()`（写入是防抖的，不调就不落盘） |
 | 日志文件里什么也没有 | 文件 sink 曾是 WARNING 级，INFO 全被丢弃（已修为 DEBUG）。见 HANDOVER §八・五 |
-| bbox 缓存对不上 | 删 `config/bbox_cache.json` 重启 |
+| bbox 缓存对不上 | 先确认图是不是**真换了**（判据是内容 sha256，换图必然失效属正常）。没换却仍重扫 → 删 `config/bbox_cache.json` 重启。**排查时别看 mtime**：它在本机之外必然失真，不是有效信号（见 HANDOVER §四） |
 | 重建引擎后热键触发两次 / 回调重复执行 | 信号重复连接。`_init_engine` 之类必须**先无条件 disconnect 再 connect**（幂等收口）。**边界：无参 `disconnect()` 只准用在自己 connect 过的槽上——别人拥有的信号（如 tab 自己的电闸）必须 `disconnect(自己的槽)` 定向断开**，否则连别人的一起清空 |
 | 标签增删后某些页的下拉里没有新标签 | 漏接 `tags_changed`，见 HANDOVER §五・五 |
 | 鼠标钩子 / 线程停了但钩子还挂着 | 清理清单漏了它。走 `core/cleanup.py` 契约，别在调用方各处补 |

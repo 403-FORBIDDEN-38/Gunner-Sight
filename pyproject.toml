@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gunnersight"
-version = "0.0140300183"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
+version = "0.0140300184"  # 与 gui/tabs/info_tab.py 的 APP_VERSION 保持同步（该常量为唯一权威来源）
 description = "Squad vehicle reticle overlay tool"
 requires-python = ">=3.10,<3.14"  # 上界：PyQt5 5.15.x 的 wheel 覆盖到 3.13
 dependencies = [
