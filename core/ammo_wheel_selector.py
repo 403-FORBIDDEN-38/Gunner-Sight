@@ -246,7 +246,24 @@ class AmmoWheelSelector(QObject):
         self._show_compact()
 
     def stop(self):
+        """退出路径（清理契约调用，幂等）。
+
+        P2-2：反向断开本对象建立的四条连接。前两条挂在 MouseHook 单例上，
+        不断开则 stop 后滚轮/按键事件仍会进本对象；后两条挂在 state 上，
+        同理。targeted disconnect + TypeError 守卫使 closeEvent 与
+        aboutToQuit 双跑安全。
+        """
         self._enabled = False
+        for sig, slot in (
+            (self._hook.mouse_wheel, self._on_wheel),
+            (self._hook.mouse_down, self._on_mouse_down),
+            (self.state.ammo_type_changed, self._on_ammo_changed_external),
+            (self.state.magnification_changed, self._on_magnification_changed),
+        ):
+            try:
+                sig.disconnect(slot)
+            except TypeError:
+                pass  # 未连接（重复 stop）
         self._hook.release()
         self._compact.hide()
         self._full.hide()

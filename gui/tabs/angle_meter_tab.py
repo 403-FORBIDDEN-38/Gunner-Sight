@@ -796,9 +796,13 @@ class AngleMeterTab(QWidget):
         # 其余按原顺序逐项隔离，任何一个失败不影响后续
         if self._up_tuner:
             safe_call("up_tuner.stop", self._up_tuner.stop)
+            # S5：parent 是 tab，不 deleteLater 则每轮禁用/启用都会累积一个
+            # 带 2 个 QTimer 的 QObject（Python 引用丢了，C++ 子对象还挂着）
+            safe_call("up_tuner.deleteLater", self._up_tuner.deleteLater)
             self._up_tuner = None
         if self._down_tuner:
             safe_call("down_tuner.stop", self._down_tuner.stop)
+            safe_call("down_tuner.deleteLater", self._down_tuner.deleteLater)
             self._down_tuner = None
         if self._timer:
             safe_call("timer.stop", self._timer.stop)
