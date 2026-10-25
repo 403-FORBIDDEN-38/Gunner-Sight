@@ -287,6 +287,14 @@ Windows 上非 0 可能是退出期崩溃而非断言失败——先看是不是
 **提交纪律**：本地 commit 随便提（细粒度、一个浪一个提交，回滚粒度才细）；
 **push 前必须问用户**；能用 `git revert` / `git checkout` 回滚的，**不要重写历史**。
 
+**删 tag / 删 Release / 改历史之前，先查它挂着什么**：tag 可能绑着一个 Release，
+Release 的附件可能是几十 MB 的二进制成品。**删 tag 会让关联 Release 变成 Draft**
+——而 Draft 匿名访问和 API 都查不到，**只有 owner 登录才看得见**。
+「看不见」不等于「不存在」，别把状态搞成不确定。
+查法：`git ls-remote --tags origin`（远端 SHA 可能与本地不同，别假定一致）+ 登录态看
+GitHub `/releases` 有没有 Draft。**先查再删**：2026-10-25 就是因为先删了 tag，
+之后才发现有个 67.7MB 的 Draft Release 挂在上面，状态一度不明。
+
 **清理清单只有一份**：`core/cleanup.py` 的 `TAB_CLEANUP_STEPS` +
 `collect_tab_cleanup_steps` / `collect_window_cleanup_steps` / `run_cleanup_steps`。
 四个调用方（`MainWindow.closeEvent`、`main.py` aboutToQuit、`tests/conftest.py` teardown、
@@ -531,3 +539,30 @@ Windows 上非 0 可能是退出期崩溃而非断言失败——先看是不是
   （这个坑踩过两次：只看代码骨架→以为滚轮居中；只看工作区→以为准星出厂关闭，都错了）
 * 控件遍历有个坑：`QSplitter` / `QScrollArea` / `QStackedWidget` 的内容**不在 `layout()` 里**，
   必须问它们自己要，否则整页会被导出成空
+
+---
+
+## 12. 依赖与许可
+
+**库的许可会传染。选库的时候就要看一眼，不是事后补。**
+
+| 依赖的库 | 本项目可以是 |
+| --- | --- |
+| **PyQt5**（GPLv3 / 商业双许可，**无 linking exception**） | **只能 GPL-3.0**（或买商业授权） |
+| PySide6（LGPLv3） | 任意（MIT / Apache / 闭源都行），但要动态链接且允许替换 Qt 库 |
+| MIT / Apache-2.0 的库 | 任意 |
+
+**「不写许可证」是最差选择，不是最安全的**：无许可 = 保留所有权利，别人不能合法使用、
+不能贡献、公司不敢碰；而它**完全不能免除你对 GPL 依赖的义务**——照样得按 GPL 分发。
+既没保护自己，又毁掉项目可用性。**贴错许可比不贴许可好，贴对最好。**
+
+**本项目为什么是 GPL-3.0-only**：依赖 PyQt5 且分发二进制。历史误标 MIT 的经过、
+更正声明、以及"从旧版本回滚的人仍受什么约束"见根目录 `LICENSE-HISTORY.md`。
+**那段历史不要"清洗"**：保留错误记录 + 明确更正，比删掉更诚实、也更容易解释；
+反过来，把历史 LICENSE 改成 GPL 是**伪造**，一旦被旧副本对照，性质从疏忽变欺诈。
+
+**遇到许可冲突时，正确的三选一**：① 自己改用 copyleft 许可；② 换掉那个 copyleft 依赖
+（PyQt5 → PySide6）；③ 买商业授权。**没有第四种。**
+
+**发布物与源码是两回事**：源码历史保留（诚实），带错误许可的**二进制发布包可以撤下**
+（撤下是标准操作，不叫篡改历史）。
