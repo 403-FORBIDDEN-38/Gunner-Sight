@@ -9,8 +9,8 @@
         "overlay_opacity": 1.0,
         "sxsy_mode": "expand",
         "display_resolution": [
-            1920,
-            1080
+            2560,
+            1440
         ],
         "adapt_mode": "preset",
         "sx_override": 1.0,
@@ -7829,7 +7829,7 @@
                 "pitch_min": -80.0,
                 "pitch_max": 80.0,
                 "calibrations": {},
-                "active_calibration_point_count": 11,
+                "active_calibration_point_count": 5,
                 "linked_vehicles": [
                     "AAA 示例载具"
                 ],
@@ -8288,7 +8288,7 @@
             "key2": "",
             "trigger2": "keydown"
         },
-        "squad_name": "MATV M2 RWS",
+        "squad_name": "AAA 示例载具",
         "locked": true,
         "interval_ms": 100,
         "name": "",
