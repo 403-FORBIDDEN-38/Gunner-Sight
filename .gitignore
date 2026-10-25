@@ -51,3 +51,6 @@ edit_demo.py
 
 # Agent 工作区数据（项目记忆等，仅本机不进库）
 .workbuddy/
+
+# 可写性探针临时文件（core/config/base.py::_is_writable；异常中断可能残留）
+.gs_write_probe_*

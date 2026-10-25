@@ -18,7 +18,7 @@ dependencies = [
     "keyboard>=0.13,<1.0",
     "loguru>=0.7,<1.0",
     # >=10.0 是实质要求：core/magnifier.py 的 CAPTUREBLT 放大镜 import mss.windows.gdi（10.x 独有模块结构）
-    "mss>=10.0",
+    "mss>=10.0,<11",  # 上界：9→10 的 breaking change 已咬过一次（S1 由来）
 ]
 
 # 打包链依赖单独成组：默认安装不拉 Nuitka/C 编译器工具链
@@ -32,6 +32,14 @@ py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 include = ["core*", "gui*"]
+
+# 依赖源声明（P1-1）：uv.lock 里 1437 处 source 均为阿里云镜像，此处显式声明
+# （default=true）让「代码里写的」与「实际用的」一致——克隆仓库的人不设
+# UV_DEFAULT_INDEX 也能复现同一份 lock（此前 uv lock --check 判定 lock 过期）。
+# 海外环境可用 `uv sync --index` 或环境变量覆盖。
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
 
 [tool.ruff]
 line-length = 100

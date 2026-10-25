@@ -156,6 +156,9 @@ class MouseHook(QObject):
         # 等待钩子线程结束（最多500ms）
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=0.5)
+            if self._thread.is_alive():
+                # M11：超时说明线程卡在事件队列里，无法强杀——留痕，别静默
+                logger.warning("[MouseHook] 钩子线程 500ms 内未退出（事件队列阻塞？）")
         self._proc_ref = None
         self._thread_id = None
         self._thread = None

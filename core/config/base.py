@@ -154,7 +154,15 @@ class ConfigBaseMixin:
         else:
             self.config_dir = _resolve_portable_config_dir()
         self.config_file = self.config_dir / "config.json"
+
+        # P1-2：资源目录跟随同一套可写探测。读主路径仍是 exe 同级（随包出厂
+        # 资源），只读安装时写路径降级到 config 侧 resources——否则 Program
+        # Files 标准用户导入 .gsv/图片会静默失败。_is_writable 探针会顺手建目录。
         self.resources_dir = get_app_base_dir() / "resources"
+        self.resources_write_dir = (
+            self.resources_dir if _is_writable(self.resources_dir)
+            else self.config_dir / "resources"
+        )
 
         # 确保目录存在（P4：只读环境下创建失败绝不阻断启动，仅记录）
         try:
@@ -162,9 +170,9 @@ class ConfigBaseMixin:
         except Exception as e:
             logger.info(f"[ConfigManager] 创建配置目录失败: {self.config_dir} ({e})")
         try:
-            self.resources_dir.mkdir(parents=True, exist_ok=True)
+            self.resources_write_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            logger.info(f"[ConfigManager] 创建资源目录失败: {self.resources_dir} ({e})")
+            logger.info(f"[ConfigManager] 创建资源写入目录失败: {self.resources_write_dir} ({e})")
 
         # 配置数据（初始为最小骨架，load_config 时从 config.json 加载）
         self._config = self._get_minimal_skeleton()
@@ -188,6 +196,20 @@ class ConfigBaseMixin:
 
         # 加载配置
         self.load_config()
+
+    def resolve_resource_path(self, rel: str) -> Path:
+        """资源相对路径 → 绝对路径（P1-2 读多路径：出厂目录优先，写目录兜底）。
+
+        只读安装下用户新导入的资源只存在于写目录，出厂资源只在读主路径；
+        两处都没有时返回主路径（保持原行为，交给下游判空）。
+        """
+        primary = self.resources_dir / rel
+        if primary.exists():
+            return primary
+        alt = self.resources_write_dir / rel
+        if alt.exists():
+            return alt
+        return primary
 
     def _get_minimal_skeleton(self) -> dict:
         """最小安全骨架：程序启动必需的顶层键，缺失时不崩溃"""

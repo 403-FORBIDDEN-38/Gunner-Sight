@@ -226,3 +226,19 @@ def test_run_cleanup_steps_on_step_callback():
     run_cleanup_steps([("甲", lambda: None), ("乙", lambda: None)],
                       on_step=lambda label, ms: seen.append((label, ms >= 0)))
     assert seen == [("甲", True), ("乙", True)]
+
+
+def test_all_cleanup_call_sites_use_both_collectors():
+    """P1-3：四个清理调用方必须同时接 tab 与 window 两个 collector。
+
+    §2.3 漏项根因：export_gui_facts 只接 tab 侧，window 侧（overlay/hotkey/
+    滚轮/桌宠/配置保存）全漏。静态锁住接线，防再次漂移。
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    for rel in ("gui/main_window.py", "main.py", "tests/conftest.py",
+                "tools/export_gui_facts.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        assert "collect_tab_cleanup_steps" in src, f"{rel} 缺 tab 侧 collector"
+        assert "collect_window_cleanup_steps" in src, f"{rel} 缺 window 侧 collector"

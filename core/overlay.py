@@ -622,7 +622,7 @@ class OverlayRenderer:
             for entry in a_data.get("crosshairs", {}).values():
                 rel = entry.get("path", "").replace("\\", "/")
                 if rel:
-                    paths.add(str(self.config.resources_dir / rel).replace("\\", "/"))
+                    paths.add(str(self.config.resolve_resource_path(rel)).replace("\\", "/"))
         if paths:
             self.overlay.prescan_paths(paths)
 
@@ -700,7 +700,7 @@ class OverlayRenderer:
         if not rel_path:
             return ""
         rel = rel_path.replace("\\", "/")
-        return str(self.config.resources_dir / rel).replace("\\", "/")
+        return str(self.config.resolve_resource_path(rel)).replace("\\", "/")
 
     def _update_scale(self):
         if not self.overlay:

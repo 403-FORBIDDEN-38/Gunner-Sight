@@ -26,29 +26,6 @@ if getattr(sys, 'frozen', False):
     logger.info(f"[诊断] 进程启动到 main.py 执行: {_boot_elapsed*1000:.0f}ms (PyInstaller bootloader + Python 初始化)")
 
 
-class _LibpngFilter:
-    """过滤 stderr 中的 libpng bKGD/iCCP 警告（libpng 直接写 stderr 不走 Qt 日志）"""
-    def __init__(self, stream):
-        self._stream = stream
-        self._buf = ""
-
-    def write(self, s):
-        self._buf += s
-        while "\n" in self._buf:
-            line, self._buf = self._buf.split("\n", 1)
-            if not any(k in line for k in ("libpng", "bKGD", "iCCP")):
-                self._stream.write(line + "\n")
-
-    def flush(self):
-        if self._buf and not any(k in self._buf for k in ("libpng", "bKGD", "iCCP")):
-            self._stream.write(self._buf)
-        self._buf = ""
-        self._stream.flush()
-
-
-sys.stderr = _LibpngFilter(sys.stderr)
-
-
 # 将项目根目录添加到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -318,7 +295,7 @@ def _main():
     logger.info(f"[性能] StateMachine初始化 耗时={(time.perf_counter()-_t2)*1000:.0f}ms")
 
     _t3 = time.perf_counter()
-    resources = ResourceManager()
+    resources = ResourceManager(write_dir=str(config.resources_write_dir))
     logger.info(f"[性能] ResourceManager初始化 耗时={(time.perf_counter()-_t3)*1000:.0f}ms")
 
     _t4 = time.perf_counter()

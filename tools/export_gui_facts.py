@@ -226,5 +226,9 @@ print(f"  控件清单覆盖 {len(NAMES)} 页；出厂载具 {len(factory.get('v
 
 # 收尾：离屏构造起了放大镜抓屏线程，不清理会报 "QThread: Destroyed while thread is still running"
 # M19：清理清单统一走 core.cleanup 契约（与 closeEvent 同一份，不再本地试五个历史方法名）
-from core.cleanup import collect_tab_cleanup_steps, run_cleanup_steps  # noqa: E402
-run_cleanup_steps(collect_tab_cleanup_steps(win))
+from core.cleanup import (  # noqa: E402
+    collect_tab_cleanup_steps,
+    collect_window_cleanup_steps,
+    run_cleanup_steps,
+)
+run_cleanup_steps(collect_tab_cleanup_steps(win) + collect_window_cleanup_steps(win))

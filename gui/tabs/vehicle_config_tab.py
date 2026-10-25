@@ -600,7 +600,7 @@ class VehicleConfigTab(QWidget):
         if not current:
             QMessageBox.information(self, "提示", "请先选择要导出的载具")
             return
-        output = self.resources.get_resources_dir() / (sanitize_filename(current) + ".gsv")
+        output = self.resources.get_write_dir() / (sanitize_filename(current) + ".gsv")
         ok, msg = export_vehicle(
             self.config,
             self.resources.get_resources_dir(),
@@ -619,7 +619,7 @@ class VehicleConfigTab(QWidget):
             return
         from pathlib import Path
         ok, msg, new_name = self.state.import_vehicle(
-            self.resources.get_resources_dir(),
+            self.resources.get_write_dir(),
             Path(path),
         )
         if not ok:

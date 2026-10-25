@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "gunnersight"
-version = "0.140300178"
+version = "0.140300180"
 source = { editable = "." }
 dependencies = [
     { name = "keyboard" },
@@ -34,7 +34,7 @@ build = [
 requires-dist = [
     { name = "keyboard", specifier = ">=0.13,<1.0" },
     { name = "loguru", specifier = ">=0.7,<1.0" },
-    { name = "mss", specifier = ">=10.0" },
+    { name = "mss", specifier = ">=10.0,<11" },
     { name = "nuitka", marker = "extra == 'build'" },
     { name = "pillow", specifier = ">=9.0,<11.0" },
     { name = "pyqt5", specifier = ">=5.15.11,<5.16" },
