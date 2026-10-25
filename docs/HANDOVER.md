@@ -728,6 +728,10 @@ tools/build.bat
   **注意**：`is_mascot_enabled()` 自 2026-09-07 起硬编码 False（不持久化），
   报告触发链当前不可达——按**潜在陷阱**处置；恢复持久化前先看
   `tests/test_batch4_regressions.py`。
+  **2026-10-25 用户拍板：不恢复持久化。** 理由：吉祥物属「菜单性质」的玩意，
+  每次启动默认关闭是设计意图，不是缺陷。故上条触发链维持不可达，本项修复
+  仅作陷阱防护保留（`set_mascot_enabled` 写的 `_mascot_enabled_runtime` 全仓
+  仍无人读，属已知冗余，勿当 bug 修）。
 * **桌宠生命周期**：`MascotWidget` / `ChatBubble` 增加 `shutdown()`（先停动画 /
   定时器 / 音频再隐藏），`hideEvent` 加 RuntimeError 护栏；桌宠进 M19 清理契约
   （`collect_window_cleanup_steps` →「桌宠」→ `InfoTab.shutdown_mascot()`）。
