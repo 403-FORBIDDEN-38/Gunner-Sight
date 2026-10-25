@@ -8,6 +8,7 @@ shake用相对偏移pyqtProperty叠加在跟随位置上，不与QTimer跟随冲
 """
 import os
 from gui.mascot.paths import get_mascot_dir
+from gui.mascot.sound_player import DEFAULT_MASCOT_VOLUME
 import random
 
 from PyQt5.QtCore import (
@@ -111,7 +112,7 @@ class ChatBubble(QWidget):
 
         # 音频播放器（content中的音频文件）
         self._audio_player = QMediaPlayer()
-        self._audio_player.setVolume(10)
+        self._audio_player.setVolume(int(DEFAULT_MASCOT_VOLUME * 100))
         self.hide()
 
     # shake相对偏移属性
@@ -175,12 +176,6 @@ class ChatBubble(QWidget):
         sub = img.copy(rel_x, rel_y, min(cw, img.width() - rel_x), min(ch, img.height() - rel_y))
         self._content_label.setMask(QBitmap.fromImage(sub.createAlphaMask()))
 
-    def set_persistent(self, enabled):
-        self._persistent = enabled
-        if enabled:
-            self._auto_hide_timer.stop()
-        elif self.isVisible():
-            self._auto_hide_timer.start(random.randint(3000, 5000))
 
     def _fade_out(self):
         """淡出动画：透明度1→0，结束后hide并重置透明度。"""
@@ -196,8 +191,6 @@ class ChatBubble(QWidget):
         self.hide()
         self._opacity_effect.setOpacity(1.0)
 
-    def set_volume(self, volume):
-        self._audio_player.setVolume(int(max(0.0, min(1.0, volume)) * 100))
 
     def _pick_text_line(self, filepath):
         """从txt读取所有非空行，随机选一行。文件级有概率，行内平等。"""
@@ -300,7 +293,7 @@ class ChatBubble(QWidget):
             if current_url != fpath or self._audio_player.state() != QMediaPlayer.PlayingState:
                 self._audio_player.stop()
                 self._audio_player.setMedia(QMediaContent(QUrl.fromLocalFile(fpath)))
-                self._audio_player.setVolume(10)  # setMedia会重置音量，必须重设
+                self._audio_player.setVolume(int(DEFAULT_MASCOT_VOLUME * 100))  # setMedia会重置音量，必须重设
                 self._audio_player.play()
             self._content_label.setText("♪")
             self._content_label.setStyleSheet(

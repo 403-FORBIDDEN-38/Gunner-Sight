@@ -83,15 +83,15 @@ class DistanceMeterTab(QWidget):
         ov_group, og = make_group_box("悬浮窗口设置（右下偏移）", layout_cls=QHBoxLayout, flat=True)
 
         og.addWidget(QLabel("横向偏移："))
-        self.offset_x = QDoubleSpinBox()
-        self.offset_x.setRange(0, 2000)
-        self.offset_x.setDecimals(0)
-        og.addWidget(self.offset_x)
+        self.offset_x_spin = QDoubleSpinBox()
+        self.offset_x_spin.setRange(0, 2000)
+        self.offset_x_spin.setDecimals(0)
+        og.addWidget(self.offset_x_spin)
         og.addWidget(QLabel("竖向偏移："))
-        self.offset_y = QDoubleSpinBox()
-        self.offset_y.setRange(0, 2000)
-        self.offset_y.setDecimals(0)
-        og.addWidget(self.offset_y)
+        self.offset_y_spin = QDoubleSpinBox()
+        self.offset_y_spin.setRange(0, 2000)
+        self.offset_y_spin.setDecimals(0)
+        og.addWidget(self.offset_y_spin)
         og.addStretch()
         sc.addWidget(ov_group)
 
@@ -104,15 +104,15 @@ class DistanceMeterTab(QWidget):
         self.hk_measure.hotkey_changed.connect(lambda d: self._on_hotkey_changed("measure", d))
         self.hk_cycle_scale.hotkey_changed.connect(lambda d: self._on_hotkey_changed("cycle_scale", d))
         self.hk_quick_measure.hotkey_changed.connect(lambda d: self._on_hotkey_changed("quick_measure", d))
-        self.offset_x.valueChanged.connect(self._on_offset_changed)
-        self.offset_y.valueChanged.connect(self._on_offset_changed)
+        self.offset_x_spin.valueChanged.connect(self._on_offset_changed)
+        self.offset_y_spin.valueChanged.connect(self._on_offset_changed)
 
     def refresh(self):
         """config→UI 统一加载入口：热键 + 偏移 + 禁用状态"""
         self._load_hotkeys()
         ox, oy = self.config.get_distance_meter_overlay_offset()
-        self.offset_x.setValue(ox)
-        self.offset_y.setValue(oy)
+        self.offset_x_spin.setValue(ox)
+        self.offset_y_spin.setValue(oy)
         self.settings_container.setEnabled(self.config.is_distance_meter_enabled())
 
     def _load_hotkeys(self):
@@ -130,7 +130,7 @@ class DistanceMeterTab(QWidget):
 
     def _on_offset_changed(self):
         self.config.set_distance_meter_overlay_offset(
-            int(self.offset_x.value()), int(self.offset_y.value()))
+            int(self.offset_x_spin.value()), int(self.offset_y_spin.value()))
         if self.overlay is not None:
             self._position_overlay()
 

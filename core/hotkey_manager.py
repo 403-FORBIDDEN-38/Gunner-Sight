@@ -155,7 +155,6 @@ class HotkeyManager(QObject):
     ammo_switch_triggered = pyqtSignal(str)  # 弹种名称
     squad_macro_triggered = pyqtSignal()  # 建队宏
     angle_meter_toggle_triggered = pyqtSignal()  # 角度仪开始/停止
-    angle_meter_pause_triggered = pyqtSignal()  # 角度仪暂离/恢复（保留兼容）
     pause1_triggered = pyqtSignal()  # 暂离键1（地图）
     pause2_triggered = pyqtSignal()  # 暂离键2（指挥面板）
     angle_meter_calibrate_triggered = pyqtSignal()  # 角度仪校准确认
@@ -641,8 +640,6 @@ class HotkeyManager(QObject):
     def _on_angle_meter_toggle(self):
         self.angle_meter_toggle_triggered.emit()
 
-    def _on_angle_meter_pause(self):
-        self.angle_meter_pause_triggered.emit()
 
     def _on_angle_meter_calibrate(self):
         self.angle_meter_calibrate_triggered.emit()

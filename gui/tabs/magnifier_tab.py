@@ -132,7 +132,7 @@ class MagnifierTab(QWidget):
     # ---------- signals ----------
 
     def _connect_ui(self):
-        self.enable_check.toggled.connect(self._on_enable)
+        self.enable_check.toggled.connect(self._on_enable_toggle)
         self.fps_spin.valueChanged.connect(self._on_fps)
         self.radius_spin.valueChanged.connect(self._on_radius)
         self.breath_step_spin.valueChanged.connect(self._on_breath_step)
@@ -342,7 +342,7 @@ class MagnifierTab(QWidget):
 
     # ---------- enable / engine ----------
 
-    def _on_enable(self, checked: bool):
+    def _on_enable_toggle(self, checked: bool):
         self.config.set_magnifier_enabled(checked)
         if checked:
             self._init_engine()

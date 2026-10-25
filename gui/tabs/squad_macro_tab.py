@@ -24,18 +24,16 @@ class SquadMacroTab(QWidget):
         self.config = config
         self.hotkey = hotkey
         self.squad_macro = None
-        self._data_loaded = False
         self._build_ui()
         self._connect_ui_signals()
         # 根源修复：启动时如果已启用就初始化宏，不再等showEvent懒加载
         # （main_window会主动创建启用的进阶模块tab，确保__init__被调用）
         if self.config.is_squad_macro_enabled():
             self._init_macro()
-        # 根源修复：必须在__init__中实际加载数据，不能只设_data_loaded=True
-        # 否则showEvent中的数据加载会被跳过，导致关闭状态不禁用、载具列表为空
+        # 根源修复：必须在__init__中实际加载数据，不能只设标志位
+        # 否则关闭状态不禁用、载具列表为空（批次 5：原 showEvent 懒加载分支已随之删除）
         self.settings_container.setEnabled(self.enable_check.isChecked())
         self._refresh_vehicle_list()
-        self._data_loaded = True
 
     def _build_ui(self):
         # 不用滚动区：内容固定，载具选择组 stretch=1 填满页面剩余高度
@@ -122,7 +120,7 @@ class SquadMacroTab(QWidget):
         outer.addWidget(self.settings_container, 1)
 
     def _connect_ui_signals(self):
-        self.enable_check.stateChanged.connect(self._on_enable_changed)
+        self.enable_check.stateChanged.connect(self._on_enable_toggle)
         self.start_btn.clicked.connect(self._on_start_clicked)
         self.hotkey_edit.hotkey_changed.connect(self._on_hotkey_captured)
         self.console_key_edit.hotkeyCaptured.connect(self._on_console_key_captured)
@@ -132,13 +130,6 @@ class SquadMacroTab(QWidget):
         self.vf.filter_changed.connect(self._refresh_vehicle_list)
         self.vf.vehicle_clicked.connect(self._on_vehicle_clicked)
 
-    def showEvent(self, event):
-        """首次显示时加载数据，避免__init__阻塞"""
-        super().showEvent(event)
-        if not self._data_loaded:
-            self.settings_container.setEnabled(self.enable_check.isChecked())
-            self._refresh_vehicle_list()
-            self._data_loaded = True
 
     def _on_interval_changed(self, value):
         self.config.set_squad_macro_interval(value)
@@ -155,7 +146,7 @@ class SquadMacroTab(QWidget):
                 safe_call("squad_macro.stop", self.squad_macro.stop)
             self.squad_macro = None
 
-    def _on_enable_changed(self, state):
+    def _on_enable_toggle(self, state):
         enabled = state == Qt.Checked
         self.config.set_squad_macro_enabled(enabled)
         self.settings_container.setEnabled(self.enable_check.isChecked())
@@ -236,7 +227,7 @@ class SquadMacroTab(QWidget):
             return
         if self.squad_macro.running:
             self.squad_macro.stop()
-            # 停止后关闭模块：取消启用勾选 -> _on_enable_changed(False) 会释放宏对象并注销热键，
+            # 停止后关闭模块：取消启用勾选 -> _on_enable_toggle(False) 会释放宏对象并注销热键，
             # 防止误触再按一下又启动。同步在GUI线程执行，不依赖工作线程里的QTimer。
             if self.enable_check.isChecked():
                 self.enable_check.setChecked(False)

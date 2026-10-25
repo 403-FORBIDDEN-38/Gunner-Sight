@@ -385,7 +385,7 @@
 
 ```
   - QLabel 「GUNNER SIGHT」  objectName=info_title
-  - QLabel 「V0.0140300180」  objectName=hint_text
+  - QLabel 「V0.0140300182」  objectName=hint_text
   - QLabel 「数据目录: <临时数据目录>」  objectName=hint_text
   - QLabel 「Dedicated to Xiaocheng」  objectName=hint_text
   - QLabel 「屏幕准星辅助软件 — 依程序状态显示对应的炮镜图片，支持载具/弹种/倍率三级切换、一键反色、放大镜、标定测距、角度仪、建」  objectName=hint_text

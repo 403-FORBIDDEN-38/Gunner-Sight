@@ -824,34 +824,6 @@ class VehicleConfigTab(QWidget):
         self.state.remove_magnification(vehicle, idx)
         self._refresh_mag_list()
 
-    def _update_mag_item_text(self, idx):
-        """仅更新指定倍率项的显示文本，不全量重建列表"""
-        vehicle = self._get_selected_vehicle()
-        ammo = self._get_selected_ammo()
-        if not vehicle or not ammo:
-            return
-        mags = self.config.get_magnifications(vehicle, ammo)
-        if idx >= len(mags):
-            return
-        item = self.mag_list.item(idx)
-        if not item:
-            return
-        mag = mags[idx]
-        label = mag.get("label", f"倍率{idx+1}")
-        ch = mag.get("crosshair", "")
-        mode = "独立" if mag.get("use_vehicle_overlay", False) else ""
-        overlay_vehicle = self.config.get_overlay_vehicle_ui(vehicle, ammo, idx)
-        overlay_ammo = self.config.get_overlay_ammo_ui(vehicle, ammo, idx)
-        tags = f"[{mode}]" if mode else ""
-        if overlay_vehicle:
-            tags += "[载具]"
-        if overlay_ammo:
-            tags += "[弹种]"
-        ch_part = format_binding_text(ch)
-        widget = self.mag_list.itemWidget(item)
-        if widget and hasattr(widget, "set_main"):
-            widget.set_main(label)
-            widget.set_sub(f"{tags} {ch_part}" if tags else ch_part)
 
     def _on_overlay_mode_changed(self, _state):
         """缩放偏移模式切换：勾选框状态变化"""

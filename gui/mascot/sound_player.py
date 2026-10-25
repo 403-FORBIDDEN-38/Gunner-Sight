@@ -18,9 +18,13 @@ RELEASE_SOUND = "Ya2.mp3"
 # 高频点击防抖：press音效最小播放间隔（ms），小于此间隔不重启
 PRESS_MIN_INTERVAL_MS = 150
 
+# 桌宠音效默认音量（0~1）。批次 5：原先三套音量源（SoundPlayer 0.1125 /
+# config 默认 0.1125 / ChatBubble 硬编码 10）收敛到这一个常量。
+DEFAULT_MASCOT_VOLUME = 0.1125
+
 
 class SoundPlayer:
-    def __init__(self, resources_dir: str, volume: float = 0.1125):
+    def __init__(self, resources_dir: str, volume: float = DEFAULT_MASCOT_VOLUME):
         self.mascot_dir = get_mascot_dir(resources_dir)
         self.volume = volume
         self._last_press_time = 0  # 上次press播放时间戳（ms）
@@ -34,10 +38,6 @@ class SoundPlayer:
         self._release_player.setMedia(QMediaContent(QUrl.fromLocalFile(
             os.path.join(self.mascot_dir, RELEASE_SOUND))))
 
-    def set_volume(self, volume):
-        self.volume = max(0.0, min(1.0, volume))
-        self._press_player.setVolume(int(self.volume * 100))
-        self._release_player.setVolume(int(self.volume * 100))
 
     def press_down(self):
         """根源优化：高频点击时不频繁打断press音效。

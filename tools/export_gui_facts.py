@@ -16,13 +16,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from PyQt5.QtWidgets import (          # noqa: E402
-    QAbstractItemView, QAbstractSpinBox, QCheckBox, QComboBox, QGroupBox,
+    QAbstractSpinBox, QCheckBox, QComboBox, QGroupBox,
     QLabel, QLineEdit, QListWidget, QPushButton, QRadioButton, QScrollArea,
     QSlider, QSplitter, QStackedWidget, QTableWidget, QTabWidget, QTreeWidget,
     QWidget, QApplication,
 )
 
-SKIP_TYPES = (QWidget,)          # 只跳过"纯 QWidget 容器"（没有文字/参数的）
 MAX_LINES_PER_TAB = 120
 
 app = QApplication.instance() or QApplication(sys.argv)

@@ -1,37 +1,39 @@
-﻿@echo off
-REM GunnerSight 打包脚本（Nuitka onedir，配置明文）
-REM 用法：双击本文件，或命令行执行 tools/build.bat（自动切到仓库根目录，与调用位置无关）
-REM 产物：dist\main.dist\GUNNER SIGHT.exe
-REM 说明：开发版与发布版已无区别（config 明文，加密已取消），本脚本即发布脚本。
+@echo off
+REM GunnerSight build script (Nuitka onedir, plain-text config)
+REM Usage: double-click, or run tools\build.bat from any directory
+REM        (the script cd's to the repo root itself).
+REM Output: dist\main.dist\GUNNER SIGHT.exe
 REM
-REM 注意：本文件必须保持 CRLF 换行！cmd.exe 按 CR 分行，LF-only 会让含中文的
-REM       echo 行被拆成命令执行（build_err.txt 的乱码根源，chcp 解决不了）。
+REM IMPORTANT: keep this file PURE ASCII and CRLF.
+REM   - cmd.exe splits lines on CR, so LF-only breaks Chinese/echo lines.
+REM   - the batch parser under cp65001 drops bytes of multi-byte chars
+REM     (real incident: 'echo <CJK> path' was split into 'echo <char>' +
+REM     an unknown command). ASCII text is the only deterministic fix.
 REM
-REM 复用编译缓存：只清产物 main.dist，保留 main.build（Nuitka 的 C 编译缓存）。
-REM 删掉 main.build 会退化成每次全量重编，慢很多。
+REM Keep Nuitka's C cache (main.build); deleting it forces full rebuilds.
 
 setlocal
 cd /d "%~dp0.."
 
-REM ---- 解释器选择（P2）：有 uv 走 uv run（自动安装构建依赖），否则系统 py 启动器 ----
+REM ---- interpreter selection (P2): prefer uv run, fallback to py launcher ----
 set PY_RUN=py
 where uv >nul 2>nul
 if %errorlevel%==0 set PY_RUN=uv run --with nuitka --with zstandard python
 
-REM ---- 自动备份：打包前覆盖 backups\auto_before_build（约定见 docs/HANDOVER.md：不增殖，新覆盖旧）----
+REM ---- auto backup before build: refresh backups\auto_before_build (no accumulation) ----
 robocopy . backups\auto_before_build /MIR /XD .git dist backups .workbuddy __pycache__ .pytest_cache .ruff_cache /XF *.pyc *.pyo /NFL /NDL /NJH /NJS /R:1 /W:1 >nul
-if %errorlevel% geq 8 echo [警告] 自动备份失败（backups\auto_before_build），仍继续打包
+if %errorlevel% geq 8 echo [WARN] auto backup failed, continuing anyway
 
-echo [1/2] 清理旧产物（保留编译缓存 main.build）...
+echo [1/2] Cleaning old output (keeping build cache)...
 if exist "dist\main.dist" rmdir /s /q "dist\main.dist"
 
-echo [2/2] Nuitka 编译中（复用缓存，用时取决于改动范围）...
+echo [2/2] Nuitka compiling (cache reused)...
 %PY_RUN% -m nuitka --version >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] 未找到 nuitka。请先安装构建依赖：
-    echo   - uv 用户: uv sync --extra build
-    echo   - pip 用户: py -m pip install nuitka zstandard
-    echo   首次构建还需联网下载 MinGW C 编译器（约 100MB）
+    echo [ERROR] nuitka not found. Install build deps first:
+    echo   - uv users:  uv sync --extra build
+    echo   - pip users: py -m pip install nuitka zstandard
+    echo   First build also downloads the MinGW C compiler, about 100MB.
     exit /b 1
 )
 for /f "delims=" %%v in ('%PY_RUN% -c "from gui.tabs.info_tab import APP_VERSION; v=APP_VERSION.lstrip('V'); p=v.split('.'); print(f'{p[0]}.{p[1][0:2]}.{p[1][2:5]}.{int(p[1][5:])}')"') do set APP_VER=%%v
@@ -40,7 +42,7 @@ if not defined APP_VER set APP_VER=0.0.0.0
     --standalone ^
     --enable-plugin=pyqt5 ^
     --windows-icon-from-ico=resources/app_icon.ico ^
-    --copyright="Copyright © 2026 [403 FORBIDDEN]. Dedicated to Xiaocheng." ^
+    --copyright="Copyright (C) 2026 [403 FORBIDDEN]. Dedicated to Xiaocheng." ^
     --product-version=%APP_VER% ^
     --include-data-files=docs/CREDITS.md=CREDITS.md ^
     --include-data-files=README.md=README.md ^
@@ -53,19 +55,19 @@ if not defined APP_VER set APP_VER=0.0.0.0
     --python-flag=safe_path ^
     --include-data-dir=resources=resources ^
     --include-data-dir=config=config ^
-    --jobs=8 ^
+    --jobs=%NUMBER_OF_PROCESSORS% ^
     --output-dir=dist ^
     --assume-yes-for-downloads ^
     --windows-console-mode=disable
 
 if %errorlevel% neq 0 (
-    echo [ERROR] 编译失败，错误码 %errorlevel%
+    echo [ERROR] build failed with code %errorlevel%
     exit /b %errorlevel%
 )
 
 echo.
-echo 编译完成！
-echo 产物路径: %cd%\dist\main.dist\GUNNER SIGHT.exe
-echo 下一步: 把 dist\main.dist 整个目录复制覆盖到桌面版目录
+echo Build complete.
+echo Output: "%cd%\dist\main.dist\GUNNER SIGHT.exe"
+echo Next: copy the whole dist\main.dist over the portable install folder.
 echo.
 pause

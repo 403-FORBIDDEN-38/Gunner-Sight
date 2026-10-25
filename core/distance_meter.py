@@ -235,53 +235,6 @@ class DistanceMeter:
         "mouse_xbutton1": 0x05, "mouse_xbutton2": 0x06,
     }
 
-    def _resolve_combo_vk(self, key_name):
-        """键名 -> 虚拟键码。支持修饰键、鼠标键、字母键、数字键、功能键。"""
-        if not key_name:
-            return None
-        key_lower = key_name.lower().strip()
-        vk = self._COMBO_VK_MAP.get(key_lower)
-        if vk is not None:
-            return vk
-        # 单字符字母/数字键
-        if len(key_lower) == 1:
-            return ord(key_lower.upper())
-        # 功能键 F1-F12
-        if key_lower.startswith("f") and key_lower[1:].isdigit():
-            fnum = int(key_lower[1:])
-            if 1 <= fnum <= 12:
-                return 0x70 + fnum - 1
-        # 其他常见键
-        other_map = {"space": 0x20, "enter": 0x0D, "esc": 0x1B, "tab": 0x09,
-                     "backspace": 0x08, "delete": 0x2E, "insert": 0x2D,
-                     "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
-                     "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
-                     "capslock": 0x14, "numlock": 0x90, "scrolllock": 0x91}
-        return other_map.get(key_lower)
-
-    def is_modifier_pressed(self) -> bool:
-        """检测全局组合键是否按下（在热键绑定页统一设置）。
-        未设置组合键时返回 False（组合功能不触发）。
-        同时检查 key1 和 key2，任一按下即返回 True。"""
-        combo = self._cfg.get_hotkey("global_combo")
-        keys = [combo.get("key1", ""), combo.get("key2", "")]
-        has_any = any(k for k in keys)
-        if not has_any:
-            logger.info("[distance_meter] is_modifier_pressed: global_combo NOT configured (key1/key2 both empty)")
-            return False
-        for key_name in keys:
-            if not key_name:
-                continue
-            vk = self._resolve_combo_vk(key_name)
-            if vk is None:
-                logger.info(f"[distance_meter] is_modifier_pressed: unknown key '{key_name}', vk=None")
-                continue
-            state = user32.GetAsyncKeyState(vk)
-            pressed = bool(state & 0x8000)
-            logger.info(f"[distance_meter] is_modifier_pressed: key='{key_name}' vk=0x{vk:02X} GetAsyncKeyState=0x{state & 0xFFFF:04X} pressed={pressed}")
-            if pressed:
-                return True
-        return False
 
     def set_overlay_position(self, x: int, y: int):
         self._cfg.set_distance_meter_overlay_offset(int(x), int(y))

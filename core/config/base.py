@@ -116,7 +116,6 @@ def _default_angle_meter_segment() -> dict:
         "profiles": {},
         "hotkeys": {
             "toggle": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
-            "pause": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
             "calibrate": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
             "reset": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},
             "up": {"key1": "", "trigger1": "toggle", "key2": "", "trigger2": "toggle"},

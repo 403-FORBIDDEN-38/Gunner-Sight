@@ -4,6 +4,34 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-25 批次 5：轻量与墓碑清理（原 FIX_PLAN 批次 4）
+
+> 版本号 V0.0140300181 → V0.0140300182；测试维持 107 passed（删码/改名不加同义反复测试）。
+> 范围 = FIX_PLAN 原批次 4 清单 + PORTABILITY P3/P8/P9/P12/P15/P17。
+
+- **死代码删除**：AST 定位 + 全仓引用反查为零后再删（`RegionSelector` / `PointPicker` /
+  `CrosshairPreviewWidget` / `make_int_spin` / `_update_mag_item_text` / `SKIP_TYPES` /
+  `ChatBubble.set_persistent`、`set_volume` / `SoundPlayer.set_volume` /
+  `distance_meter.is_modifier_pressed` + `_resolve_combo_vk` /
+  `angle_meter_pause_triggered` + `_on_angle_meter_pause` / `squad_macro_tab.showEvent`
+  懒加载死分支 + `_data_loaded`）。**VehicleFilterWidget 未删**——三处页面 + 两处测试在用
+  （处置单 §2.4 的坑）。
+- **命名统一**：`offset_x/offset_y` → `*_spin`；启用槽三种命名 → `_on_enable_toggle`。
+- **音量三源收敛**：新常量 `DEFAULT_MASCOT_VOLUME=0.1125`；ChatBubble 原 `setVolume(10)`
+  与 SoundPlayer/config 的 0.1125 不一致，统一走常量。
+- **P3 build.bat**：**根因不是 BOM**——cmd 批处理解析器在 UTF-8 下会吞多字节字符
+  （真实事故：`echo 产物路径:` 被拆成 `echo 产` + 未知命令 `物路径:`，报"不是内部或
+  外部命令"；先去的 BOM + `chcp 65001` + 路径加引号三招都没治好，第二次构建仍复现）。
+  最终方案：批处理文本改**纯 ASCII + CRLF**（中文说明留在 CHANGE_LOG/HANDOVER），
+  `--jobs` 改 `%NUMBER_OF_PROCESSORS%`。**教训**：.bat 里不要写中文——不是编码页问题，
+  是解析器本身的缺陷。
+- **P8/P9/P12**：requires-python 上界 `<3.14`；非 Windows 平台守卫；删 PyInstaller
+  `_MEIPASS` 死路径（项目用 Nuitka onedir）。
+- **P15/P17**：README x64 声明与 build.bat 解释器自适应在批次 2 已落地，本批次复核确认。
+- **明确不修**（FIX_PLAN §零 硬约束覆盖）：CODE_REVIEW §三 的性能细节（逐像素扫描、
+  paintEvent 新建 QFont、滚轮全量重建）与其余一致性项——收益低于风险，且同属
+  「高频路径已核实为增量」的保护名单。§三 为选摘、无编号，故不逐条映射（附表已说明）。
+
 ## 2026-10-25 批次 4：回归修复与账本（浪 1-4）
 
 > 依据 docs/reviews/CONSOLIDATED_ACTIONS_FOR_STEP5.md（三轮交叉审查合并处置单，基线 186faf0）。

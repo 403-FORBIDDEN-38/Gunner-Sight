@@ -11,6 +11,12 @@ import tempfile
 import time
 import traceback
 
+# P9：仅 Windows——全局钩子 / 窗口样式 / GDI 抓屏全依赖 Win32 API。
+# 非 Windows 直接给出可读结论，不要抛一串 ctypes 堆栈。
+if sys.platform != "win32":
+    print("GunnerSight 仅支持 Windows：依赖 Win32 API（全局热键钩子 / 窗口样式 / GDI 抓屏）。")
+    sys.exit(1)
+
 
 # 诊断：测量进程启动到 main.py 执行的时间（PyInstaller bootloader 开销）
 if getattr(sys, 'frozen', False):
@@ -37,13 +43,7 @@ from core.config_manager import get_app_base_dir
 
 
 def get_app_icon_path():
-    """获取应用程序图标的路径（兼容开发环境和打包后）"""
-    # 打包后：PyInstaller 临时目录
-    if hasattr(sys, '_MEIPASS'):
-        meipass_icon = os.path.join(sys._MEIPASS, 'app_icon.ico')
-        if os.path.exists(meipass_icon):
-            return meipass_icon
-
+    """获取应用程序图标的路径（开发环境 / Nuitka onedir 发布版）"""
     # 开发环境：脚本所在目录
     script_dir = os.path.dirname(os.path.abspath(__file__))
     dev_icon = os.path.join(script_dir, 'app_icon.ico')

@@ -3,25 +3,19 @@
 - OptimizedListWidget: setUniformItemSizes 修复滚动后点击错位
 - HotkeyLineEdit: 按键捕获输入框（键盘+鼠标）
 - HotkeyPairWidget: 功能标签 + 两个热键绑定框（统一双键格式）
-- RegionSelector/PointPicker: 全屏区域/坐标选择器
 - VehicleFilterWidget: 载具筛选+列表组合控件（select/click/check 三种模式）
-- CrosshairPreviewWidget: 准星预览控件
 - LinkedSpinSlider: 输入框+滑块双向联动（自带防回路）
 - FilterListPanel: 搜索+标签筛选+双标签列表+新建/重命名/删除 骨架
 - set_silent: 设值不触发信号的唯一实现（try/finally 保证信号恢复）
 """
-from PyQt5.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QPainter
+from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
-    QApplication,
     QComboBox,
-    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QRubberBand,
     QSizePolicy,
     QTableWidget,
     QHeaderView,
@@ -40,80 +34,6 @@ class OptimizedListWidget(QListWidget):
         self.setResizeMode(QListWidget.Adjust)
 
 
-class RegionSelector(QDialog):
-    """全屏半透明区域选择器（模态对话框，阻塞其他窗口输入）"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setCursor(Qt.CrossCursor)
-        self.setModal(True)
-        screen = QApplication.primaryScreen().geometry()
-        self.setGeometry(screen)
-        self._origin = QPoint()
-        self._rubber = QRubberBand(QRubberBand.Rectangle, self)
-        self.result_rect = None
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.fillRect(self.rect(), QColor(0, 0, 0, 80))
-        p.setPen(QColor(255, 255, 255, 200))
-        p.setFont(QFont("Arial", 10))
-        p.drawText(self.rect(), Qt.AlignTop | Qt.AlignHCenter, "拖动鼠标选择区域，ESC 取消")
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self._origin = e.pos()
-            self._rubber.setGeometry(QRect(self._origin, QSize()))
-            self._rubber.show()
-
-    def mouseMoveEvent(self, e):
-        if self._rubber.isVisible():
-            self._rubber.setGeometry(QRect(self._origin, e.pos()).normalized())
-
-    def mouseReleaseEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            rect = QRect(self._origin, e.pos()).normalized()
-            if rect.width() > 5 and rect.height() > 5:
-                self.result_rect = rect
-                self.accept()
-            else:
-                self.reject()
-
-    def keyPressEvent(self, e):
-        if e.key() == Qt.Key_Escape:
-            self.reject()
-
-
-class PointPicker(QDialog):
-    """全屏点击坐标选择器，可带提示文字（模态对话框）"""
-    def __init__(self, hint: str = "", parent=None):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setCursor(Qt.CrossCursor)
-        self.setModal(True)
-        screen = QApplication.primaryScreen().geometry()
-        self.setGeometry(screen)
-        self._hint = hint
-        self.result_pos = None
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.fillRect(self.rect(), QColor(0, 0, 0, 80))
-        if self._hint:
-            p.setPen(QColor(255, 255, 0))
-            p.setFont(QFont("Arial", 10))
-            p.drawText(self.rect().adjusted(0, 30, 0, 0), Qt.AlignHCenter | Qt.AlignTop, self._hint)
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.result_pos = (e.globalX(), e.globalY())
-            self.accept()
-
-    def keyPressEvent(self, e):
-        if e.key() == Qt.Key_Escape:
-            self.reject()
 
 
 class VehicleFilterWidget(QWidget):
@@ -281,35 +201,6 @@ class VehicleFilterWidget(QWidget):
         self.vehicle_toggled.emit(item.data(Qt.UserRole), item.checkState() == Qt.Checked)
 
 
-class CrosshairPreviewWidget(QWidget):
-    """准星预览控件：居中显示 QPixmap，支持缩放"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._pixmap = None
-        self._scale = 100
-        self.setMinimumSize(200, 200)
-        self.setObjectName("preview_box")
-
-    def set_crosshair(self, pixmap):
-        self._pixmap = pixmap
-        self.update()
-
-    def set_scale(self, value):
-        self._scale = value
-        self.update()
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        if not self._pixmap or self._pixmap.isNull():
-            return
-        p = QPainter(self)
-        scaled = self._pixmap.scaled(
-            int(self._pixmap.width() * self._scale / 100),
-            int(self._pixmap.height() * self._scale / 100),
-            Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        x = (self.width() - scaled.width()) // 2
-        y = (self.height() - scaled.height()) // 2
-        p.drawPixmap(x, y, scaled)
 
 
 class DualLabelItem(QWidget):
@@ -614,20 +505,6 @@ def make_settings_container(spacing: int = 8):
     return container, layout
 
 
-def make_int_spin(min_val: int, max_val: int, width: int = 90, value: int | None = None,
-                  suffix: str | None = None, single_step: int | None = None):
-    """创建整数输入框（统一 range + 宽度，可选 value/suffix/single_step）"""
-    from PyQt5.QtWidgets import QSpinBox
-    spin = QSpinBox()
-    spin.setRange(min_val, max_val)
-    spin.setMaximumWidth(width)
-    if value is not None:
-        spin.setValue(value)
-    if suffix:
-        spin.setSuffix(suffix)
-    if single_step:
-        spin.setSingleStep(single_step)
-    return spin
 
 
 def make_button_row(button_specs):

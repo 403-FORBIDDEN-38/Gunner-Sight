@@ -5,7 +5,7 @@
 > `AGENTS.md`
 > ；这份文件只讲**这个项目长什么样、为什么这么设计**。
 > 只写 "是什么" 和 "为什么"，**不写故事**。踩过的坑压缩成第十二节的一行速查。
-> 最后更新：2026-10-25（批次 4 回归修复与账本） · 版本 `V0.0140300181`
+> 最后更新：2026-10-25（批次 5 轻量与墓碑清理） · 版本 `V0.0140300182`
 > 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
@@ -741,6 +741,33 @@ tools/build.bat
 * **P3**：版本同步守卫测试（`tests/test_batch4_p3_ledger.py`）；SMP 编号全集对账
   见 FIX_PLAN 附表；未排期项归入批次 5；M24（`ROOT = Path(__file__)`）补记。
 
+### 9. 批次 5：轻量与墓碑清理（已完成 2026-10-25）
+
+* **死代码删除**（AST 定位 + 全仓引用反查为零）：`gui/widgets.py` 的
+  `RegionSelector` / `PointPicker` / `CrosshairPreviewWidget` / `make_int_spin`；
+  `vehicle_config_tab._update_mag_item_text`；`export_gui_facts.SKIP_TYPES`；
+  `ChatBubble.set_persistent` / `set_volume`；`SoundPlayer.set_volume`；
+  `distance_meter.is_modifier_pressed` + `_resolve_combo_vk`（及其读取的
+  `global_combo`）；`hotkey_manager.angle_meter_pause_triggered` +
+  `_on_angle_meter_pause`；`squad_macro_tab.showEvent` 懒加载死分支
+  （`_data_loaded` 在 `__init__` 必已为 True）。
+* **命名统一**：`distance_meter_tab` 的 `offset_x/offset_y` → `*_spin`；启用槽
+  三种命名收敛为 `_on_enable_toggle`（magnifier 的 `_on_enable`、squad 的
+  `_on_enable_changed`）。
+* **音量常量单一权威**：`gui/mascot/sound_player.py::DEFAULT_MASCOT_VOLUME`
+  （0.1125）；ChatBubble 原硬编码 10（=0.10）统一走它。
+* **P3 build.bat**：根因不是 BOM 本身——cmd 的批处理解析器在 UTF-8 下会**吞多字节
+  字符**（实测 `echo 产物路径:` 被拆成 `echo 产` + 未知命令 `物路径:`，报"不是内部或
+  外部命令"；仅去 BOM/加 `chcp 65001` 治不了）。最终把批处理文本改为**纯 ASCII +
+  CRLF**（中文说明留在本文档），`--jobs=8` → `%NUMBER_OF_PROCESSORS%`，产物路径行
+  加引号。真实 Nuitka 构建已验证：exit 0、无未知命令、产物生成。
+* **P8**：`requires-python = ">=3.10,<3.14"`。
+* **P9**：`main.py` 启动前平台守卫（非 Windows 给可读结论，不抛 ctypes 堆栈）。
+* **P12**：删除 `_MEIPASS`（PyInstaller）死路径——本项目用 Nuitka onedir。
+* **P15/P17**：README 已有 x64 声明、build.bat 已有解释器自适应（批次 2 落地），
+  本批次实测复核。
+* `ruff --select F401,F841,F811` 清零（9 处删码后的未用导入一并处理）。
+
 ---
 
 ## 十一・五、审查任务书（2026-10-13 三轮审查产出）
@@ -822,7 +849,7 @@ tools/build.bat
 ### 注意事项
 
 - 手册里的术语必须与 UI 一致（"定角装填"不是"归零"，config 键名 `auto_reset` 不改但 UI 文本用"定角装填"）
-- 版本号写 `V0.0140300181`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
+- 版本号写 `V0.0140300182`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
 - 改完手册不需要升版本号（AGENTS §6：文档/测试不算源码更新）
 - 改完 docs/HANDOVER 必跑 `py tools/audit_docs.py`
 

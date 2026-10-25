@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QVBoxLa
 from core.resource_manager import ResourceManager
 from gui.mascot import ChatBubble, MascotWidget, SoundPlayer
 
-APP_VERSION = "V0.0140300181"
+APP_VERSION = "V0.0140300182"
 DEDICATION = "Dedicated to Xiaocheng"
 
 
@@ -124,7 +124,7 @@ class InfoTab(QWidget):
             "parent 成 tab 自身会让桌宠随页面切换消失（P0-2）")
         res_dir = str(self.resources.get_resources_dir())
 
-        self._sound = SoundPlayer(res_dir, volume=0.1125)
+        self._sound = SoundPlayer(res_dir)
         self._bubble = ChatBubble(res_dir, parent=parent)
 
         self._mascot = MascotWidget(res_dir, parent=parent)
