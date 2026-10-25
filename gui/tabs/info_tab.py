@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QVBoxLa
 from core.resource_manager import ResourceManager
 from gui.mascot import ChatBubble, MascotWidget, SoundPlayer
 
-APP_VERSION = "V0.0140300182"
+APP_VERSION = "V0.0140300183"
 DEDICATION = "Dedicated to Xiaocheng"
 
 

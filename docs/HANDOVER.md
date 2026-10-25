@@ -4,7 +4,7 @@
 > **规矩**（怎么做才是对的、做错会怎样）在 `docs/RULES.md`；这份文件只讲
 > **这个项目长什么样、为什么这么设计**。
 > 只写 "是什么" 和 "为什么"：**不写故事、不记战绩、不写"某批次已完成"**。
-> 最后复核：2026-10-25 · 版本 `V0.0140300182`
+> 最后复核：2026-10-25 · 版本 `V0.0140300183`
 > 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
@@ -70,7 +70,7 @@
 **术语与数字**：
 
 * 术语必须与 UI 一致（"定角装填"不是"归零"；config 键名 `auto_reset` 不改，但 UI 文本用"定角装填"）
-* 版本号写 `V0.0140300182`，从 `gui/tabs/info_tab.py` 的 `APP_VERSION` 同步，禁止第二处硬编码
+* 版本号写 `V0.0140300183`，从 `gui/tabs/info_tab.py` 的 `APP_VERSION` 同步，禁止第二处硬编码
 * 改手册不需要升版本号（文档不算源码更新，见 `docs/RULES.md` §7）
 
 **参照物**：KAC SR25 真铁手册中译版（同目录有英文原件与配图目录）。它硬在哪：安全语气说清后果
@@ -614,5 +614,4 @@ tools/build.bat
 | 吉祥物启用态不持久化 | `config.is_mascot_enabled()` 硬编码返回 False，每次启动默认关闭；`set_mascot_enabled` 写的 `_mascot_enabled_runtime` 全仓无人读。 | **2026-10-25 用户拍板**：吉祥物是"彩蛋性质"的玩意，每次启动关闭是设计意图而不是缺陷。**别给它加持久化**；那个字段是已知冗余，勿当 bug 修。 |
 | `_connect_tab_signals` 是一棵 if-elif 树 | 7 个分支按 `tab_index` 硬编；"载具页已存在就补连 `tags_changed`"这段在角度仪/建队宏/放大镜**重复了三遍** | **结构性债，未排期**。正确形态是 `{tab_index: connect_fn}` 注册表。每加一个 tab 就要改这棵树 → 迟早漏连。新增 tab 时**必须同时接两条**：`data_changed`（数据）与 `tags_changed`（标签过滤下拉） |
 | 两份热键控件拷贝 | `PauseHotkeyWidget` 与 `HotkeyPairWidget` 是同一套控件的两份实现，连 trigger 映射字典都是复制的 | 违反 §1.1「同一功能一个实现」的**已知例外**，暂不合并（要同时动热键页与暂停页布局）。改其中一份时，另一份的对应 bug 要一起判断 |
-| `magnifier` 直调 `user32` 且没设签名 | `core/magnifier.py` 有 4 处 `ctypes.windll.user32`（`SetWindowDisplayAffinity` / `GetSystemMetrics`），**都没有 `argtypes`**。HWND 默认按 C `int` 传，64 位上会被截断 | 现在能用纯属**碰巧**（HWND 实际值几乎都小于 2³²）。修法两行：设 `argtypes`/`restype`。新增 Win32 调用**不准**再跳过签名（见 RULES §6 门禁盲区） |
 | Real Overlay（游戏内叠加）未实现 | 普通置顶透明窗对 DX12 全屏独占无效，需要 UIAccess / hook 层方案 | 2026-10 做过一轮技术调研，结论是成本高、稳定性不可接受，功能没做。**调研笔记已删**（技术有保鲜期），真要做请重新调研，不要照着旧结论做 |

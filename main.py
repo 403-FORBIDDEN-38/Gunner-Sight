@@ -204,8 +204,15 @@ def main():
         # "双击什么都没发生"。QApplication 之前的致命错误用 MessageBoxW 保证可见（P4）。
         if getattr(sys, 'frozen', False):
             try:
+                # 这里故意不 import core.win32_utils：本函数跑在"核心模块可能已经坏掉"
+                # 的启动失败路径上，多依赖一个项目模块就多一种连报错都弹不出来的可能。
                 import ctypes
-                ctypes.windll.user32.MessageBoxW(
+                from ctypes import wintypes
+                _msgbox = ctypes.windll.user32.MessageBoxW
+                _msgbox.argtypes = [wintypes.HWND, wintypes.LPCWSTR,
+                                    wintypes.LPCWSTR, wintypes.UINT]
+                _msgbox.restype = ctypes.c_int
+                _msgbox(
                     0, f"GUNNER SIGHT 启动失败，错误已写入 crash_log.txt：\n\n{traceback.format_exc()[-1500:]}",
                     "GUNNER SIGHT", 0x10)
             except Exception:

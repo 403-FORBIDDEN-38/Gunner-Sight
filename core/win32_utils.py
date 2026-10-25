@@ -18,6 +18,10 @@ WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
 
+# SetWindowDisplayAffinity 的 dwAffinity 取值：把窗口从截屏/录屏里排除（放大镜不拍自己）
+WDA_NONE = 0x00000000
+WDA_EXCLUDEFROMCAPTURE = 0x00000011
+
 # === mouse_event 常量（简单可靠，try/finally确保UP必发） ===
 MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
@@ -69,6 +73,14 @@ user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
 user32.SetWindowLongW.restype = wintypes.LONG
 kernel32.GetLastError.argtypes = []
 kernel32.GetLastError.restype = wintypes.DWORD
+
+# 截屏屏蔽与屏幕度量。
+# SetWindowDisplayAffinity 的 HWND 必须显式声明 argtypes：不声明时 ctypes 按 C int
+# 传参，64 位下高位句柄会被截断（现在能用是因为 HWND 实际值几乎都 < 2^32，纯属碰巧）。
+user32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
+user32.SetWindowDisplayAffinity.restype = wintypes.BOOL
+user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+user32.GetSystemMetrics.restype = ctypes.c_int
 
 
 def release_mouse_capture():

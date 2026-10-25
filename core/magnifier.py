@@ -7,16 +7,14 @@
 
 截屏+缩放跑在副线程，主线程只负责paint。
 """
-import ctypes
 import threading
 import time
 import mss
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, QRect, QThread, pyqtSignal, pyqtSlot
 from core.logger import logger
+from core.win32_utils import WDA_EXCLUDEFROMCAPTURE, user32
 from PyQt5.QtGui import QPainter, QColor, QPen, QRegion, QImage, QPixmap
-
-WDA_EXCLUDEFROMCAPTURE = 0x11
 
 
 class _GrabWorker(QThread):
@@ -187,7 +185,7 @@ class MagnifierOverlay(QWidget):
         if should_show:
             self._reposition()
             self.show()
-            ctypes.windll.user32.SetWindowDisplayAffinity(
+            user32.SetWindowDisplayAffinity(
                 int(self.winId()), WDA_EXCLUDEFROMCAPTURE
             )
         else:
@@ -205,13 +203,13 @@ class MagnifierOverlay(QWidget):
         self._reposition()
 
     def _reposition(self):
-        sw = ctypes.windll.user32.GetSystemMetrics(0)
-        sh = ctypes.windll.user32.GetSystemMetrics(1)
+        sw = user32.GetSystemMetrics(0)
+        sh = user32.GetSystemMetrics(1)
         self.move((sw - self.width()) // 2 + self._ox, (sh - self.height()) // 2 + self._oy)
 
     def _compute_region(self):
-        sw = ctypes.windll.user32.GetSystemMetrics(0)
-        sh = ctypes.windll.user32.GetSystemMetrics(1)
+        sw = user32.GetSystemMetrics(0)
+        sh = user32.GetSystemMetrics(1)
         cx, cy = sw // 2, sh // 2
         src_size = max(2, int(self._radius * 2 / self._zoom))
         left = cx - src_size // 2

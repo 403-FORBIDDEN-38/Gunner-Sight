@@ -4,6 +4,42 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-25 修 Win32 签名缺陷：magnifier 归队统一入口，ctypes 门禁从"提醒"变"可执行"
+
+> 版本号 V0.0140300182 → V0.0140300183；测试 107 → 110 passed（新增 3 项契约测试）。
+
+**缺陷**：`core/magnifier.py` 有 4 处 `ctypes.windll.user32`（`SetWindowDisplayAffinity` ×1、
+`GetSystemMetrics` ×4），**都没有 `argtypes`**。不声明签名时 ctypes 按 C `int` 传参，
+64 位下 HWND 句柄被截断成 32 位。程序一直没坏，是因为**实际 HWND 值几乎都小于 2³²**——纯属碰巧。
+
+**为什么值得修而不是"反正没坏"**：这是那种"上线三个月后在某个用户机器上炸、且炸得莫名其妙"
+的缺陷。发作时表现为放大镜把截屏排除打在错误的窗口上（或直接静默失败），
+日志里只会留下一个 `SetWindowDisplayAffinity returned 0`，看不出是截断。
+
+**修法**（不是就地补两行，而是让它归队）：
+- `core/win32_utils.py` 早就是"唯一 Win32 入口"（文件里写着"禁止各自 `ctypes.windll.user32`"），
+  10 个模块都遵守，只有 magnifier 例外。补齐这条约定比就地补签名更治本。
+- `win32_utils` 新增 `SetWindowDisplayAffinity` / `GetSystemMetrics` 的 `argtypes`/`restype`，
+  并把 `WDA_EXCLUDEFROMCAPTURE`（及其配对值 `WDA_NONE`）常量收口到常量区。
+- `magnifier` 改为 `from core.win32_utils import WDA_EXCLUDEFROMCAPTURE, user32`，
+  4 处直调改走 `user32`，`import ctypes` 随之删除（已无其他用途）。
+- `main.py` 的崩溃兜底 `MessageBoxW` **故意不 import win32_utils**：它跑在"核心模块可能已经坏掉"
+  的启动失败路径上，多依赖一个项目模块就多一种连报错都弹不出来的可能。改为就地设 `argtypes`
+  （只依赖标准库），理由写进代码注释。
+
+**新增门禁 `tests/test_win32_entry.py`（3 项）**：此前 RULES §6 写着"ctypes 签名没有任何检查项，
+这是唯一防线"，等于承认全靠人眼。现在三条断言：① 除三个白名单文件外禁止
+`ctypes.windll.user32` / `WinDLL("user32")` 直调；② `REQUIRED_SIGNATURES` 里 12 个在用 API
+都必须已设 `argtypes`；③ 返回 BOOL/int 的 API `restype` 必须明确。
+**有牙已验证**：临时注释掉一行 `argtypes`，测试立即变红并报出函数名；恢复后与备份逐字节一致。
+
+**代价**：新增 API 时必须同步往 `REQUIRED_SIGNATURES` 里加一条，否则测试给不了保护。
+这条已写进 RULES §6（把原文的"没有工具兜底"改成"有检查但只覆盖已登记的"）。
+
+**验证**：pytest 110 passed、ruff F401/F841/F811 全绿、py_compile 全过；
+实跑确认签名与真实实参兼容（真 winId 调用返回 0 不抛异常，传 >2³² 的假句柄也完整传下去未截断）。
+HANDOVER §十二「magnifier 直调 user32 且没设签名」这条已知债**修完即删**（判据已进 RULES §6）。
+
 ## 2026-10-25 审查档案归档：删 docs/reviews/ 11 份，17 条判据先榨后删
 
 > 版本号**不动**（V0.0140300182）：只删档案 + 改文档，无行为变化。
