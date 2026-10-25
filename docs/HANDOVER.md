@@ -34,7 +34,9 @@
 三份 agent 文档按**时间性**分工，一条信息只能有一个家：
 **判据进 RULES、事实进 HANDOVER、经过进 LOG。** 判据细则写在 `docs/RULES.md` §10。
 
-其余项目文档已归类到 `docs/`（2026-10-24 的审查报告与修复计划在 `docs/reviews/`），目录地图见第七节。
+其余项目文档已归类到 `docs/`。**审查报告不留在仓库里**：2026-10-24 那一批审查、修复计划、
+交叉复核（共 11 份）已经归档删除，判据已提炼进 RULES、现状进本文件、经过进 CHANGE_LOG。
+需要看原文用 `git log --diff-filter=D -- docs/reviews/` 找，再从历史里取。
 
 **`USER_GUIDE.md` 的写法有硬规矩**（2026-10-18 重写时定的）：
 
@@ -102,8 +104,10 @@ grep 只能给你定义点；只有追调用点，才知道它**被谁、用什�
 「全局钩子无法覆盖管理员权限的游戏窗口」（绝对结论，且项目正在研究 UIAccess，结论可能变）。
 2026-10-18 溯源时删改 9 处，其中 3 处属于这类越界。
 
-**`docs/reviews/GUI_INVENTORY.md` 是手册的事实底稿**，由 `tools/export_gui_facts.py`
-遍历 QWidget 树生成（10 页控件名、类型、range、当前值）。
+**手册的事实底稿**由 `tools/export_gui_facts.py` 生成（输出到 `build/GUI_INVENTORY.md`，
+`build/` 是 gitignore 的构建产物目录）。**它是生成物，不入库**——和 `.venv` / `egg-info` 同理，
+留在仓库里只会过期成假事实。
+它遍历 QWidget 树导出 10 页控件名、类型、range、当前值。
 
 * 手册里的控件名、参数范围、出厂值，**一律以它为准，不要凭印象写**
 * 出厂值取自**发布包**的 `config.json`，不是工作区——工作区是使用者当前状态，随时会变
@@ -249,6 +253,11 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 
   改配置的代码**不要**自己去写文件
 
+* **锁内 IO 是有意的，别优化出去**：`_atomic_write` 全程持 `_save_lock`——序列化 + 302KB 落盘 +
+  最多 3×50ms 重试，全在锁里。极端情况会让 UI 线程卡 ~150ms，这是**主动接受的代价**。
+  把落盘挪出锁看起来能提速，实际正好回到「配置并发保存损坏」那个最贵的 bug（四层防御就是为它建的）。
+  这条写在 CHANGE_LOG 里只是"事实"，在这里才是"别再动它"。
+
 * **配置必须向后兼容**。软件已发布（2026-10-18 起），用户手上有旧 cfg。
 
   改配置格式时必须保证：旧 cfg 加载不崩溃、新字段有默认值兜底、语义变更（如角度仪坐标从绝对改相对）在 CHANGE_LOG 标 breaking change 并说明影响。
@@ -290,6 +299,12 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 **角度仪的灵敏度换算**：换算发生在**读取时**，存的是原始测量点——所以已有校准数据会自动
 被纠正、不需要重校。但校准会**快照当时的灵敏度**：灵敏度必须在**校准之前**填好，
 否则那条曲线此后永远不自动换算（刻意的保守行为：宁可不动也不按 0 缩放）。
+
+**射表 profile 缓存靠「对象同一性」**：缓存判据是 `entry[0] is not table`——
+只有**换了一个新的 table 对象**才算失效，**原地修改射表内容不会让缓存失效**。
+表现是"用户改了射表数据但读数不更新，且不报任何错"（这个项目最怕的失败形态）。
+所以写回路径必须**替换引用**，不准原地改 dict。当前 UI 恰好每次新建顶层 dict，
+属于**碰巧对**，不是契约对——哪天有人改成原地更新就会静默失效。
 
 **放大镜的 UI 约定**：顶部 48px 大示数是当前倍率；基本参数用 `QGridLayout` 6 列 3 行（外框半径 / 截屏帧率 / X 偏移；屏息半径步长 / 屏息倍率步长 / Y 偏移）；
 
@@ -414,10 +429,6 @@ docs/                       项目文档（README、USER_GUIDE、AGENTS 在根�
   HANDOVER.md               交接文档（本文件）
   CHANGE_LOG.md             变更时间线（含回退过的方向）
   CREDITS.md                第三方素材版权声明（随包发布）
-  reviews/                  审查报告、修复计划、一次性研究笔记与底稿
-    GUI_INVENTORY.md        控件与出厂值底稿（tools/export_gui_facts.py 生成，可重跑）
-    MANUAL_OUTLINE.md       手册目录与新旧映射（已执行完，留作记录）
-    REAL_OVERLAY_RESEARCH.md  置顶叠加方案研究笔记
 tools/                      开发辅助：audit_docs / audit_manual / export_gui_facts / build.bat
 ```
 
@@ -501,10 +512,23 @@ tools/build.bat
 
   构建依赖放 `[project.optional-dependencies] build`（nuitka + zstandard），不进默认安装
 
+  **但「装得上」不等于「能用」**：wheel 只含 `core*` / `gui*` / `main`，
+  **不含 `config/` 和 `resources/`**。`pip install .` 之后启动会自己建配置骨架，
+  但没有任何准星图——是个空壳。本项目按**源码仓库**分发，pip 安装只用于验证构建链能过，
+  不是支持路径。
+
 * **依赖源显式声明**：`pyproject.toml` 的 `[[tool.uv.index]]` 指向 aliyun（`default = true`），
   不再依赖环境变量或本机 pip 配置。克隆仓库的人 `uv sync` 直接能跑
 
 * `--include-data-dir=config=config` 会把当前 `config.json` 打进包，所以 config 目录的变化也会进发布包
+
+* **资源目录名不止"有中文"这一种危险**：`resources/` 下还有 20+ 个**含空格或逗号**的英文目录
+  （如 `USMC, LAV-25`）。拼路径、`robocopy`、zip 打包都容易被它们咬到——路径一律加引号，
+  不要用字符串拼接去凑路径。
+
+* **发布包必须在 Windows 侧打包**：`.gsv` 由 Python `zipfile` 写 UTF-8 标志位，
+  第三方压缩器不在支持路径内；在 Linux/CI 上打 zip，中文与含空格目录名会乱码，
+  表现是对应载具准星不显示，**且不报错**。
 
 ### 备份
 
@@ -540,14 +564,14 @@ tools/build.bat
 它是用户**特意保留的署名式字段**：不要删、不要改、不要当成"无用字段"清理。
 开源前做过凭据扫描（api_key / secret / token / password / bearer / sk- 等，0 匹配）。
 
-### 发布前验收矩阵（来源：`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md`）
+### 发布前验收矩阵（来源：2026-10-24 发布兼容性专项审查；原文已归档删除，结论见 CHANGE_LOG）
 
 每项都应在**非作者机器**上过。本机已过 ①②⑤⑥⑦⑧（逐项证据见 CHANGE_LOG 2026-10-24）。
 **仍缺 ②③④ 三项，欠账登记在 §十一**——不在这里重复一遍。挂了就是回归，回来查。
 
 | # | 验收项 | 方法 |
 | --- | --- | --- |
-| 1 | 标准安装路径 | 干净环境 `uv sync` + `pip install .` 均成功 |
+| 1 | 标准安装路径 | 干净环境 `uv sync` + `pip install .` 均成功。**这项只证明构建链能过**：`pip install .` 装完是空壳（无 `config/`、`resources/`），真正可用的分发形态是源码仓库或 dist |
 | 2 | 从零构建 | 干净 Windows 按 README 产出 dist（含联网下载编译器场景） |
 | 3 | 只读位置运行 | Program Files + 标准用户双击，正常启动、日志降级 TEMP |
 | 4 | 设置持久化 | 上述环境下修改设置，重启后保留 |
@@ -566,7 +590,7 @@ tools/build.bat
 
 ### 发布前验收：仍缺"非作者机器"三项
 
-`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md` 的 8 项验收，本机已过 ①②⑤⑥⑦⑧
+`docs/reviews/` 那批审查（原文已归档删除，结论见 CHANGE_LOG）列过 8 项验收，本机已过 ①②⑤⑥⑦⑧
 （批次 2 后 P1/P2/P4/P5/P6/P7 已修，见 CHANGE_LOG）。**仍待非作者机器**——本机结构上验不了：
 
 | # | 项 | 为什么本机验不了 |
@@ -588,3 +612,7 @@ tools/build.bat
 | 焦点在桌面时滚轮切弹种失效 | 前台为桌面（Progman/WorkerW）时滚动滚轮，弹种预选不弹出；切回任意其他窗口立即恢复。2026-10-18 日志确认：底层钩子 WH_MOUSE_LL 在桌面前台时收不到 WM_MOUSEWHEEL 事件（`[MouseHook] WHEEL` 零行），非代码 Bug。 | 无解，Windows 底层行为。使用时确保前台窗口不是桌面。 |
 | 空房子：两处硬编码 | 建队按键序列与时序（`core/squad_macro.py`）、弹种滚轮确认键 `mouse_left`（`core/ammo_wheel_selector.py`）仍在代码里，cfg 只有 enabled + 热键。 | **2026-10-24 用户拍板"就这样"**：① 该硬编码即理论最优解；② 无改造意愿。不是"以后再改"，别再提。 |
 | 吉祥物启用态不持久化 | `config.is_mascot_enabled()` 硬编码返回 False，每次启动默认关闭；`set_mascot_enabled` 写的 `_mascot_enabled_runtime` 全仓无人读。 | **2026-10-25 用户拍板**：吉祥物是"彩蛋性质"的玩意，每次启动关闭是设计意图而不是缺陷。**别给它加持久化**；那个字段是已知冗余，勿当 bug 修。 |
+| `_connect_tab_signals` 是一棵 if-elif 树 | 7 个分支按 `tab_index` 硬编；"载具页已存在就补连 `tags_changed`"这段在角度仪/建队宏/放大镜**重复了三遍** | **结构性债，未排期**。正确形态是 `{tab_index: connect_fn}` 注册表。每加一个 tab 就要改这棵树 → 迟早漏连。新增 tab 时**必须同时接两条**：`data_changed`（数据）与 `tags_changed`（标签过滤下拉） |
+| 两份热键控件拷贝 | `PauseHotkeyWidget` 与 `HotkeyPairWidget` 是同一套控件的两份实现，连 trigger 映射字典都是复制的 | 违反 §1.1「同一功能一个实现」的**已知例外**，暂不合并（要同时动热键页与暂停页布局）。改其中一份时，另一份的对应 bug 要一起判断 |
+| `magnifier` 直调 `user32` 且没设签名 | `core/magnifier.py` 有 4 处 `ctypes.windll.user32`（`SetWindowDisplayAffinity` / `GetSystemMetrics`），**都没有 `argtypes`**。HWND 默认按 C `int` 传，64 位上会被截断 | 现在能用纯属**碰巧**（HWND 实际值几乎都小于 2³²）。修法两行：设 `argtypes`/`restype`。新增 Win32 调用**不准**再跳过签名（见 RULES §6 门禁盲区） |
+| Real Overlay（游戏内叠加）未实现 | 普通置顶透明窗对 DX12 全屏独占无效，需要 UIAccess / hook 层方案 | 2026-10 做过一轮技术调研，结论是成本高、稳定性不可接受，功能没做。**调研笔记已删**（技术有保鲜期），真要做请重新调研，不要照着旧结论做 |

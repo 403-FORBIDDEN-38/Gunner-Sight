@@ -4,6 +4,167 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-25 审查档案归档：删 docs/reviews/ 11 份，17 条判据先榨后删
+
+> 版本号**不动**（V0.0140300182）：只删档案 + 改文档，无行为变化。
+> **指针重定向**：历史上 3 处「见 FIX_PLAN 附表」（批次 4 的 P3-2、P3-3，批次 5 的编号说明）
+> 现在指向**本条末尾的附表**。原文件已删；历史正文按「只追加不修改」保持原样，不做回改。
+
+**动机**：`docs/reviews/` 混装三类东西——一次性审查报告、元审查套娃（审查「审查者的审查」）、
+活资产。前两类是**对话存档，不是知识**，留着只会让后人以为还有 900 行没处理。
+
+**但不能直接删**：同一天早上刚演过一遍「删段落连带删掉 9 条判据」。
+所以先做逐份通读 + 关键词反查（在 RULES / HANDOVER / CHANGE_LOG 里 grep 确认确实没有），
+捞出 **17 条不可替代信息**，其中 1 条是硬前置。
+
+**硬前置：SMP 编号处置表**（原 FIX_PLAN 附表，48 条）——P3-2/P3-3 的唯一载体，
+知识库里只有指针没有副本。已整表迁到本条末尾。
+
+**新补进知识库的判据（原先只活在审查报告里）**：
+
+- RULES §6 提交纪律（本地可提交 / push 前问 / 能用 git 回滚就别重写）
+- RULES §2.2 反向验收（「代码落地了」≠「改对了」，每条断开/释放/停止/置空单独复核）
+- RULES §10 账本纪律（按编号全集机械对账；跳过或改判必须留一行「不修 + 理由」）
+  + 审阅结论的写法（能跑命令的必须实测；跨文档摆一张表能反查自相矛盾）
+- RULES §9 闭包形式的槽**无法定向断开**，必须先提成实例方法
+- RULES §6 机械门禁两处盲区：ruff 门禁不含 `tools/`；ctypes 签名无任何检查
+- HANDOVER §四 锁内 IO 是**有意取舍**（别为了性能把落盘移出锁，移出去正好回到 S2 并发损坏）
+- HANDOVER §十 `pip install .` 装得上但是**空壳**（wheel 不含 `config/`、`resources/`）
+- HANDOVER §四・五 射表 profile 缓存靠**对象同一性**，原地改内容不会失效（静默无报错）
+- HANDOVER §十 `resources/` 下有 20+ 个含空格/逗号的英文目录名（如 `USMC, LAV-25`）
+- HANDOVER §十二 三项结构性已知债（`_connect_tab_signals` if-elif 树、两份热键控件拷贝、
+  `magnifier` 直调 user32 绕过统一入口）
+- 本条下方：`json.dump` 的 **补正**、mss「版本无关导入」为何被否、P11/P13 won't-fix 的真实理由
+
+### 补正：`json.dump` 不是「持 GIL 原子执行」
+
+2026-10-24 批次 3 的 M4 条目里写过「CPython 的 `json.dump` 是 C 实现、持 GIL 原子执行」。
+**这个表述不准确，现补正**：
+
+`json.dump` 的实际形态是 `for chunk in iterencode(obj): fp.write(chunk)`——它是**生成器逐块写**，
+每次 `fp.write` 都会释放 GIL，生成器的迭代状态跨 yield 保留。所以它**不是**一个不可分割的操作。
+
+这直接影响 M4 的定性：`_dump_config` 里那 3 次 `RuntimeError` 重试不是「防御不存在的问题」，
+而是**症状真实发生过的疤痕**。错的是当时的解释，不是重试本身。
+
+### 已否决方案的失败原因（补记，防止后人重选同一条路）
+
+- **mss「写 try/except 做版本无关导入，兼容 9 和 10」——做不到**：
+  两个版本的 `CAPTUREBLT` 分居 `mss/windows.py`（模块级）与 `mss/windows/gdi.py`，
+  `import mss.windows as _gdi` 不能通吃。所以只能锁版本，没有「一套代码兼容两个大版本」的写法。
+  当前约束 `>=10.0,<11`；将来放宽前必须重看这条。
+- **P11 won't-fix（中文目录名压缩）的真实理由**：本项目**仅 Windows 分发**；
+  `.gsv` 由 Python `zipfile` 写入 UTF-8 标志位，第三方压缩器不在支持路径内。
+  由此推出一条操作约束：**发布包必须在 Windows 侧打包**，否则中文与含空格目录名会乱码，
+  对应载具准星不显示，且不会报错。
+- **P13 won't-fix（外链声明）**：全仓零网络代码（无 requests / urllib / socket 调用，已实测）。
+
+### 附表：SMP 编号全集处置（原 `docs/reviews/FIX_PLAN_2026-10-24.md` 附表，迁移）
+
+机械提取：`grep -ohE '^#+ [SMP][0-9]+' docs/reviews/*.md | sort -u`（22 个标题编号）
++ CODE_REVIEW §二/§三 表格行内编号，逐条映射：
+
+**S 级（CODE_REVIEW §一，7 项）**
+
+| 编号 | 处置 |
+|---|---|
+| S1 放大镜线程启动即死 | 批次 1（worker try/finally）；定性修正见 CODE_REVIEW 附录 B；依赖约束批次 2 |
+| S2 配置保存并发 | 批次 1（原子写入锁） |
+| S3 .gsv 导入未绑定变量 / 路径穿越 | 批次 1（S3a/S3b） |
+| S4 复制路径 NameError | 批次 1 |
+| S5 tuner 重复连接 | 批次 1（断开逻辑前移）+ 批次 4 浪3（C++ 释放，半修补齐） |
+| S6 桌宠 parent | 批次 4 浪1（潜在陷阱处置） |
+| S7 OverlayRenderer 无断开 | 批次 1 |
+
+**M 级（CODE_REVIEW §二，24 项）**
+
+| 编号 | 处置 |
+|---|---|
+| M1 refresh_min_max 越权 | 批次 1 |
+| M2 scanner 竞态 | 批次 3（FIX_PLAN M1） |
+| M3 ctypes 缺签名 | 批次 1 |
+| M4 BboxCache 无锁 | 批次 3（FIX_PLAN M2；症状描述修正见本条「补正」） |
+| M5 射表重建 | 批次 3（FIX_PLAN M3） |
+| M6 stop 语义 | 批次 1（_enabled）+ 批次 4 浪3（信号断开） |
+| M7 deferred save 引用 | 批次 1（与 S2 合并） |
+| M8 unhook_all | 批次 3（FIX_PLAN M4） |
+| M9 放大镜 worker | 批次 1（与 S1 合并） |
+| M10 crosshair pixmap | 批次 3（FIX_PLAN M5） |
+| M11 join 竞态 | 批次 4 浪2 |
+| M12 重命名误报 | 批次 3（FIX_PLAN M10） |
+| M13 mag 回写抑制 | 批次 3（FIX_PLAN M11） |
+| M14 搜索防抖 | 批次 3（FIX_PLAN M12；增量过滤不做的理由见批次 3 条目） |
+| M15 adapt 私有 API | 批次 3（FIX_PLAN M13） |
+| M16 热键捕获 hook 泄漏 | 批次 3（FIX_PLAN M14） |
+| M17 wheel 补偿 | 批次 3（FIX_PLAN M15）→ 引入 P0 回归 → 批次 4 浪1 修复 |
+| M18 _loading try/finally | 批次 3（FIX_PLAN M16） |
+| M19 splitter 高频写 | 批次 3（FIX_PLAN M17） |
+| M20 ammo_wheel acquire 不释放 | 批次 3（FIX_PLAN M18：stop 进退出路径） |
+| M21 启动日志裸 open | 批次 2（P4 三处 try + %TEMP% 降级） |
+| M22 _LibpngFilter | 批次 4 浪2（删除） |
+| M23 清理契约四份 | 批次 3（FIX_PLAN M19）+ 批次 4 浪2（export window 侧） |
+| M24 ROOT 依赖 CWD | 批次 2 已顺手修（无记录）→ 批次 4 浪4 补记 |
+
+**P 级（PORTABILITY_REVIEW，17 项）**
+
+| 编号 | 处置 |
+|---|---|
+| P1 | 批次 2 |
+| P2 | 批次 2 |
+| P3 build.bat BOM / jobs 硬编码 | 批次 5 |
+| P4 | 批次 2 |
+| P5 | 批次 2 + 批次 4 浪2（resources 半修补齐） |
+| P6 | 批次 2 |
+| P7 | 批次 2 |
+| P8 requires-python 上界 | 批次 5 |
+| P9 非 Windows 平台守卫 | 批次 5 |
+| P10 | 批次 2（拍板 D；载具数修正 77） |
+| P11 中文目录名压缩 | **won't-fix**：仅 Windows 分发；`.gsv` 由 Python zipfile 写 UTF-8 标志，第三方压缩器不属支持路径 |
+| P12 图标死分支 | 批次 5 |
+| P13 外链声明 | **won't-fix**：全仓零网络代码（实证），仅文档文本含第三方地址 |
+| P14 GS_DEBUG | 无需处置（审查结论：干净） |
+| P15 x64-only 声明 | 批次 5（README 一行） |
+| P16 | 无需处置（审查结论：无问题） |
+| P17 py 启动器假设 | 批次 2 随 P2 修复（build.bat 解释器自适应）；批次 5 实测复核 |
+
+**未单独编号的轻级条目（CODE_REVIEW §三）**：该节是「选摘」，未逐条编号，故不做逐条映射。
+其中「死代码 / 命名统一 / 魔法数字」三组由批次 5 承接；性能细节与其余一致性项**明确不修**
+（收益低于风险，同类项已在 RULES「别去修的东西」清单内）。
+
+### 删掉的三份「活资产」及理由
+
+| 文件 | 为什么敢删 |
+|---|---|
+| `GUI_INVENTORY.md` | 是**可重跑产物**（`tools/export_gui_facts.py`，20 秒重建），不是文档。留着反而会过期成假事实——与 `.venv` / `egg-info` 不入库同理：**生成物不该入库** |
+| `MANUAL_OUTLINE.md` | 手册组织结构的提案，手册已按它写完，规划无人再读 |
+| `REAL_OVERLAY_RESEARCH.md` | Real Overlay 功能**至今未实现**（全仓 grep `real_overlay` 零命中）。技术调研有保鲜期，将来真要做应当重做而不是照着 2026-10 的笔记做。**元信息已登记进 HANDOVER §十二** |
+
+## 2026-10-25 许可证 MIT → GPL-3.0-only（PyQt5 是 GPLv3，MIT 声明不成立）
+
+> 版本号不动（V0.0140300182）：改的是分发条款，不是源码行为，按 RULES §7 不 +1。
+> 下一个真有行为更新的版本起，发布物按 GPL-3.0-only 分发。
+
+**怎么发现的**：用户问「我的依赖是不是太小众变态」，去查 PyPI 文件清单，发现
+`pyqt5-qt5` 全平台只有 `5.15.2` 提供 Windows 二进制（5.15.3 零文件、5.15.11~19 只有 mac/linux）。
+顺手核许可，发现冲突。
+
+**问题**：本仓 `LICENSE` 是 MIT，而 PyQt5 是 **GPL v3 / 商业授权**双许可且**无 linking exception**。
+程序 import PyQt5，整体分发就必须走 GPL v3。README 写 `Released under the MIT License` 与实际不符。
+不是「选错了库」，而是这个组合本身不成立——MIT + GPL 依赖是业内经典坑。
+
+**处置**：`LICENSE` 全文替换为 GPLv3 官方文本（未做任何删改）；README §许可 同步改写。
+依赖兼容性已逐个核对：PyQt5 (GPLv3) / Qt5 (GPLv3) / Pillow (HPND) / loguru·mss·keyboard (MIT) /
+Nuitka (Apache-2.0)，全部与 GPLv3 相容，没有第二个冲突。
+
+**关于「要不要补救历史版本」**：**不需要，也没法**。MIT 是**不可撤销**许可——
+已按 MIT 发布的版本（tag `v0.0140300177` 及之前）永久保持 MIT，拿到的人可以继续按 MIT 使用它。
+改 LICENSE 只对**之后的版本**生效。本仓尚无正式 Release、未对外宣传，实际持有者极少，
+所以「历史版本仍是 MIT」在法律上无害、在事实上也几乎没人被影响。
+
+**未做**：`pyproject.toml` 仍然没有 `license` 字段（本来也没有）。wheel 元数据靠 setuptools
+自动带的 `License-File: LICENSE`，所以换 LICENSE 内容即已生效。要显式声明 SPDX 得等
+`setuptools>=77`，暂不动。
+
 ## 2026-10-25 打包前自动备份排除 `.venv/`（备份 199MB → 43MB）
 
 **怎么发现的**：查"`gunnersight.egg-info` 这目录是啥"时顺手 `du -sh backups/auto_before_build`，

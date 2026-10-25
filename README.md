@@ -91,7 +91,12 @@ resources/             分划图片资源
 
 ## 许可
 
-Released under the MIT License. 详见 LICENSE。
+Copyright (c) 2026 403-FORBIDDEN-38
+
+本项目以 **GPL-3.0-only**（GNU General Public License v3.0）分发，全文见 `LICENSE`。
+
+原因：本项目依赖 PyQt5，而 PyQt5 是 GPLv3 / 商业授权双许可（**无 linking exception**），
+所以只要分发依赖它的二进制，整体就必须按 GPLv3 走。
 
 第三方视觉素材版权归各自原作者所有，详见 docs/CREDITS.md。
 
