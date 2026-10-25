@@ -48,6 +48,7 @@ if not defined APP_VER set APP_VER=0.0.0.0
     --include-data-files=README.md=README.md ^
     --include-data-files=USER_GUIDE.md=USER_GUIDE.md ^
     --include-data-files=LICENSE=LICENSE ^
+    --include-data-files=docs/THIRD_PARTY_NOTICES.md=THIRD_PARTY_NOTICES.md ^
     --output-filename="GUNNER SIGHT.exe" ^
     --python-flag=no_docstrings ^
     --python-flag=no_asserts ^
