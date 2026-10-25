@@ -569,7 +569,7 @@ tools/build.bat
 
 * `tools/build.bat` 只删 `dist\main.dist`，**保留 **`dist\main.build`（Nuitka 的 C 编译缓存）：删掉它会从 60 秒退化成每次全量重编
 
-* `.bat` **必须 CRLF**（见 AGENTS §3）
+* `.bat` **必须 CRLF 且全文纯 ASCII**（见 AGENTS §3 与 §十二；中文写进 `.bat` 会被解析器吞字符）
 
 * `tools/build.bat` **解释器自适应**（2026-10-24 批次 2，P2）：有 `uv` 走
 
@@ -728,7 +728,7 @@ tools/build.bat
   **注意**：`is_mascot_enabled()` 自 2026-09-07 起硬编码 False（不持久化），
   报告触发链当前不可达——按**潜在陷阱**处置；恢复持久化前先看
   `tests/test_batch4_regressions.py`。
-  **2026-10-25 用户拍板：不恢复持久化。** 理由：吉祥物属「菜单性质」的玩意，
+  **2026-10-25 用户拍板：不恢复持久化。** 理由：吉祥物属「彩蛋性质」的玩意，
   每次启动默认关闭是设计意图，不是缺陷。故上条触发链维持不可达，本项修复
   仅作陷阱防护保留（`set_mascot_enabled` 写的 `_mascot_enabled_runtime` 全仓
   仍无人读，属已知冗余，勿当 bug 修）。
@@ -864,7 +864,8 @@ tools/build.bat
 
 | 症状                                | 根因 / 解法                                                          |
 | --------------------------------- | ---------------------------------------------------------------- |
-| `.bat` 里含中文的 `echo` 报 "不是内部或外部命令" | 文件是 LF。cmd.exe 按 CR 分行，跟中文 / 代码页无关，`chcp 65001` 无效。改成 CRLF       |
+| `.bat` 里含中文的 `echo` 报 "不是内部或外部命令" | **CRLF 未必是真凶**。先查换行符（LF-only 确实会被按 CR 拆行）；若已是 CRLF 仍报，那是解析器**吞多字节字符**（2026-10-25 实测：`echo 产物路径:` 被拆成 `echo 产` + `物路径:`；去 BOM / `chcp 65001` / 加引号全都治不了）。正解：整个 `.bat` 改**纯 ASCII**，中文说明搬进文档 |
+| `.bat` 报 "此时不应有 ." 并秒退 | `if (...)` 块内出现 **ASCII 括号**（如 `echo ...(~100MB)`），cmd 当成嵌套块。换成逗号或全角括号 |
 | 用 Python 脚本按内容替换 "0 命中"           | 文件是 CRLF，而匹配串用了 `\n`。按文件实际换行符构造                                 |
 | `json.load` / `ast.parse` 报非法字符   | 文件被 PowerShell `Set-Content` / `>` 写了 BOM。改用 Write 工具或 Python 脚本 |
 | 文件莫名带 BOM（`ast.parse` 报 U+FEFF） | PowerShell `Set-Content` 留下的。去 BOM 用字节级操作；读文件用 `encoding="utf-8-sig"` 更稳。2026-10-13 清掉 9 个（含 `HANDOVER.md` 和 2 份 mascot 文案，后者首字符是脏的） |

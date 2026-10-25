@@ -46,7 +46,7 @@
   - 有牙证明：HEAD 版 main_window 下 `test_ammo_wheel_ready_keeps_tab_own_slot_alive` 必红（配置未被写入），恢复后 md5 一致。
 - **P0-2 桌宠 parent（S6）**（gui/tabs/info_tab.py + main_window.py）：`__init__` 先连信号再 setChecked，config 称启用时同步走创建路径；彼时 tab 未 insertWidget，`window()` 返回自身 → 桌宠 parent 成页面子控件，切 tab 即消失。
   - 修法：`blockSignals` 包 setChecked；创建交 showEvent / MainWindow 创建回调（新增 TAB_INFO 分支 → `InfoTab.ensure_mascot()`）；`_create_mascot` 断言 `window() is not self`。
-  - **与处置单不符（§〇-3 记账）**：`config.is_mascot_enabled()` 自 2026-09-07（c0973fe）起硬编码 `return False`（「不持久化，每次启动默认关闭」），`set_mascot_enabled` 只写一个全仓无人读的 `_mascot_enabled_runtime`。故处置单描述的触发链**当前生产不可达**——这是**潜在陷阱**：一旦恢复持久化，bug 立刻复活。测试用 monkeypatch 把 getter 钉成 True 锁契约，与持久化策略解耦。**是否恢复 mascot 持久化属产品决策——2026-10-25 用户拍板：不恢复。** 理由：吉祥物是「菜单性质」的玩意，每次启动默认关闭是设计意图。修复转为永久陷阱防护。
+  - **与处置单不符（§〇-3 记账）**：`config.is_mascot_enabled()` 自 2026-09-07（c0973fe）起硬编码 `return False`（「不持久化，每次启动默认关闭」），`set_mascot_enabled` 只写一个全仓无人读的 `_mascot_enabled_runtime`。故处置单描述的触发链**当前生产不可达**——这是**潜在陷阱**：一旦恢复持久化，bug 立刻复活。测试用 monkeypatch 把 getter 钉成 True 锁契约，与持久化策略解耦。**是否恢复 mascot 持久化属产品决策——2026-10-25 用户拍板：不恢复。** 理由：吉祥物是「彩蛋性质」的玩意，每次启动默认关闭是设计意图。修复转为永久陷阱防护。
   - 验收按代码设计修正（用户批准）：parent 是主窗口（不是 None，也不是 tab）+ 切页不消失（`isVisible` 依赖祖先链）+ resize 重定位。
 - **桌宠退出生命周期（P0-2 顺带暴露）**：`MascotWidget.hideEvent` 无保护 `_anim.stop()`，窗口销毁级联里踩已删除的 `QPropertyAnimation`（间歇 RuntimeError，新测试首次真创建桌宠才暴露）。分层处置：① `MascotWidget`/`ChatBubble` 增加 `shutdown()`，先停动画/定时器/音频再隐藏（已隐藏则销毁时不再触发 hideEvent——主修复）；② hideEvent 加 RuntimeError 护栏（Qt 自主销毁级联兜底）；③ 桌宠 parent 是主窗口 → 窗口级资源，进 M19 清理契约（`collect_window_cleanup_steps` 新增「桌宠」项 → `InfoTab.shutdown_mascot()`）。
 
