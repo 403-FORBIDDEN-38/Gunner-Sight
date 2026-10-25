@@ -344,6 +344,8 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 ## 七、目录地图
 
 ```
+LICENSE                     当前许可全文：GPL-3.0-only
+LICENSE-HISTORY.md          许可更正声明（历史 MIT 时期的分层说明，见第十节末）
 main.py                     启动/退出编排、跨模块接线（信号 connect 都在这）
 core/
   colors.py                 颜色唯一来源（主题 + 状态色 + 叠加层色）
@@ -521,6 +523,16 @@ tools/build.bat
 | 6 | 压缩包完整性 | 英文 Windows 解压 zip，中文资源目录名与文件数与发布前一致 |
 | 7 | 出厂配置 | 解压成品检查 config.json 与源码版一致（`my_beloved` 是刻意署名，见上文） |
 | 8 | 非 Windows 报错 | Linux 下启动给人话错误而非 ctypes 堆栈 |
+
+### 许可：GPL-3.0-only，不可改回 MIT
+
+当前许可是 **GPL-3.0-only**，全文在根目录 `LICENSE`。原因见 `README.md` 许可节：
+依赖 PyQt5（GPLv3 / 商业双许可，**无 linking exception**），分发二进制就必须整体 GPLv3。
+
+历史 `136d148` 至 `592feac` 之前误标 MIT，**已更正**。更正声明、以及"从历史版本回滚的人
+仍受什么约束"在 `LICENSE-HISTORY.md`——**别把那段 MIT 当成可用的授权依据**：
+本项目对 PyQt5 没有版权也没有授权资格，那份声明就 PyQt5 部分自始无效。
+发布标签 `v0.0140300177`（指向 MIT 时期）已删除。
 
 ---
 

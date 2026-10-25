@@ -98,6 +98,10 @@ Copyright (c) 2026 403-FORBIDDEN-38
 原因：本项目依赖 PyQt5，而 PyQt5 是 GPLv3 / 商业授权双许可（**无 linking exception**），
 所以只要分发依赖它的二进制，整体就必须按 GPLv3 走。
 
+**许可更正说明**：本项目早期版本（`136d148` 至 `592feac` 之前）误标为 MIT，那是错的。
+更正声明、时间线、以及"从历史版本回滚时你仍然受什么约束"见 **`LICENSE-HISTORY.md`**。
+一句话：**历史版本里的 MIT 声明不能豁免你对 PyQt5 的 GPL 义务。**
+
 第三方视觉素材版权归各自原作者所有，详见 docs/CREDITS.md。
 
 ## 免责声明
