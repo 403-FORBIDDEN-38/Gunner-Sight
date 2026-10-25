@@ -7,7 +7,7 @@ export_gui_facts）没有一处停它——关窗后钩子还挂着，滚轮事�
 test_close_event_stops_ammo_wheel 在旧代码上必红（旧清单无「弹种滚轮」项）。
 
 M19：清理契约 SSOT（core/cleanup.py）。四份调用方只负责「什么时候跑」，
-「清理什么、调什么方法」只有一份。AGENTS §2.1「中断即泄漏」：
+「清理什么、调什么方法」只有一份。docs/RULES.md §2.1「中断即泄漏」：
 run_cleanup_steps 逐项 safe_call 隔离，一项崩不影响其余。
 """
 from core.cleanup import (
@@ -207,7 +207,7 @@ def test_close_event_stops_ammo_wheel(window):
             setattr(tabs[idx], method, fn)
 
 
-# ---------------- 逐项隔离（AGENTS §2.1） ----------------
+# ---------------- 逐项隔离（docs/RULES.md §2.1） ----------------
 
 def test_run_cleanup_steps_isolates_failures():
     """中断即泄漏：一项抛异常不阻断后续项。"""

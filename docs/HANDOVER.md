@@ -1,11 +1,10 @@
 # GunnerSight 交接文档
 
-> **读者**：第一次拿到这个项目的人 /agent。目标：读完之后能独立改代码。
-> **规则**（怎么做才是对的）在
-> `AGENTS.md`
-> ；这份文件只讲**这个项目长什么样、为什么这么设计**。
-> 只写 "是什么" 和 "为什么"，**不写故事**。踩过的坑压缩成第十二节的一行速查。
-> 最后更新：2026-10-25（批次 5 轻量与墓碑清理） · 版本 `V0.0140300182`
+> **读者**：第一次拿到这个项目的人 / agent。目标：读完之后能独立改代码。
+> **规矩**（怎么做才是对的、做错会怎样）在 `docs/RULES.md`；这份文件只讲
+> **这个项目长什么样、为什么这么设计**。
+> 只写 "是什么" 和 "为什么"：**不写故事、不记战绩、不写"某批次已完成"**。
+> 最后复核：2026-10-25 · 版本 `V0.0140300182`
 > 变更历史见 `docs/CHANGE_LOG.md`（按时间线）；本文件只写当前状态。
 
 ---
@@ -22,14 +21,18 @@
 
 ---
 
-## 一・五、四份文档各管什么
+## 一・五、五份文档各管什么
 
 | 文件 | 读者 | 内容 |
 | --- | --- | --- |
 | `README.md` | 路人 / 下载页 | 是什么、怎么装、有什么限制。GitHub 门面，用常规 Markdown 排版 |
 | `USER_GUIDE.md` | 使用者 | 完整操作手册。按**任务**组织，5 章 + 附录 |
-| `docs/HANDOVER.md` | 接手的 agent | 现状与"为什么这么设计"。本文件 |
-| `docs/CHANGE_LOG.md` | 接手的 agent | 时间线，**含回退过的方向**（避免重走死路） |
+| `docs/RULES.md` | 改代码的人 / agent | **未来**：规矩。该怎么做、做错会怎样，含坑速查与"别去修的东西"。判据的唯一来源 |
+| `docs/HANDOVER.md` | 接手的 agent | **现状**：长什么样、为什么这么设计。本文件 |
+| `docs/CHANGE_LOG.md` | 接手的 agent | **过去**：时间线，含回退过的方向（避免重走死路） |
+
+三份 agent 文档按**时间性**分工，一条信息只能有一个家：
+**判据进 RULES、事实进 HANDOVER、经过进 LOG。** 判据细则写在 `docs/RULES.md` §10。
 
 其余项目文档已归类到 `docs/`（2026-10-24 的审查报告与修复计划在 `docs/reviews/`），目录地图见第七节。
 
@@ -53,6 +56,25 @@
 **为什么后两项只列不判**：写在文档里的标准会和手册一起漂移，写成可执行检查它自己会报错；
 但"这句断言有没有依据"必须人判断，所以不让它影响退出码。
 
+### 手册的内容口径（重写手册前必读）
+
+**写法**（硬约束）：
+
+* **通读一遍过**：不回看不重看，概念解释紧跟操作步骤，无附录割裂
+* **去人化、去误差**：不提供情绪价值，只提供确定性
+* **基于用户操作视角（GUI）**：从用户在界面上看到什么、点什么出发，不是从代码模块出发
+* **配图**：用户已有截图（载具配置页浅色、准星面板、适配设置页）。需要更多时向用户要，不要自己截
+
+**术语与数字**：
+
+* 术语必须与 UI 一致（"定角装填"不是"归零"；config 键名 `auto_reset` 不改，但 UI 文本用"定角装填"）
+* 版本号写 `V0.0140300182`，从 `gui/tabs/info_tab.py` 的 `APP_VERSION` 同步，禁止第二处硬编码
+* 改手册不需要升版本号（文档不算源码更新，见 `docs/RULES.md` §7）
+
+**参照物**：KAC SR25 真铁手册中译版（同目录有英文原件与配图目录）。它硬在哪：安全语气说清后果
+（"警告""绝不要""必须"）、有"工作原理"一节、操作是编号 SOP 且每步有可验证结果、
+排错是三列表格、没有讨好语言。手册应当向它看齐，而不是向"友好产品文档"看齐。
+
 ### 写手册时最容易犯的错：验了「函数存在」，没验「走哪条路径」
 
 2026-10-18 一次审查抓出 6 处同类错误——**每一处都有"证据"，但证据不是证据链**：
@@ -62,7 +84,7 @@
 | 反色按一次切换，再按一次恢复 | `toggle_invert_colors()` 存在 | 注册时 `trigger1 = "hold"`（按下+松开各触发一次）→ **实际是按住式** |
 | 选中弹种后分划换成该图 | `set_crosshair()` 存在 | 实际走 `set_layers(准星图, 载具图, 弹种图)` → **三层叠加，不是替换** |
 | 偏移范围 ±500 | 自己导出的控件快照写着 500 | 代码后来改成了 **±2000** |
-| 放大镜预设不持久化 | HANDOVER §十三 的旧记录 | 早已修，`current_preset` 有 get/set |
+| 放大镜预设不持久化 | 旧版 HANDOVER 的过时记录 | 早已修，`current_preset` 有 get/set |
 | 倍率可以输入名称 | 列表里有"添加"按钮 | `add_magnification(vehicle)` **无参**，自动编号 |
 | 两个暂离键是两套独立状态 | 代码里有 `SUSPENDED_KEY1/2` 两个常量 | `_handle_suspend_key` 里按另一个键**只移交退出权，不 emit** |
 
@@ -118,9 +140,13 @@ main()
     12. app.exec_()
 ```
 
-**退出**：`closeEvent` 只对**已创建**的 tab 调 `shutdown()/cleanup()`，然后`hotkey.shutdown()` + `config.save_config()`，最后 `quit()`。
+**退出**：`closeEvent` 先隐藏窗口，再跑**一份清理契约**——
+`collect_tab_cleanup_steps(self) + collect_window_cleanup_steps(self)` 交给
+`run_cleanup_steps()`（逐项 `safe_call` 隔离 + 每步耗时日志），然后 `hotkey.shutdown()` +
+`config.save_config()`，最后 `quit()`。清单本体在 `core/cleanup.py`，**不在这里逐项列**。
 
-`main.py` 另外挂了 `aboutToQuit` 兜底清理放大镜（`closeEvent` 没走时的保险）。
+`main.py` 另外挂了 `aboutToQuit`，跑的是**同一份契约**（不是"只清放大镜"那套旧兜底）。
+正常退出时它是第二道，所以各清理动作必须**幂等**——双跑安全。
 
 **为什么要 "分阶段 + 单发定时器"**：窗口先显示出来（用户马上看到界面），重活放到事件循环里做。所以**不要把这些 `singleShot` 改成同步调用**——那会让启动黑屏更久。
 
@@ -235,6 +261,15 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 
   （历史残留不会一直躺在用户 cfg 里）。**删模块时记得往这个集合里加一条**
 
+**资源目录读写分离**（两条路径，别混）：
+
+* `config.resources_dir` = **读**主路径（exe 同级的出厂资源）
+* `config.resources_write_dir` = **写**路径（主路径不可写时降级到 config 侧）
+* `config.resolve_resource_path(rel)`：出厂优先 → 写目录兜底。**读图片一律走它**，
+  不要自己拼 `resources_dir / rel`——装到 Program Files 这类只读位置时会读不到
+* `ResourceManager(write_dir=...)` / `get_write_dir()`：list 取两目录并集，
+  import / export `.gsv` 落到写路径
+
 ---
 
 ## 四・五、各模块引擎速查
@@ -245,12 +280,16 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 | ----- | ------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 准星面板  | `core/overlay.py`               | `overview_tab.py`        | 透明置顶窗口，画分划图；缩放 / 偏移 / 不透明度三参数，载具可覆盖全局                                                                                                                                                                        |
 | 滚轮切弹种 | `core/ammo_wheel_selector.py` | 无独立 tab                   | 滚轮打开预选列表，2s 超时或左键确定收尾；**弹种热键命令也要收尾**（热键选中的就是当前弹种时状态机不发信号）；位置偏移存 `global_settings.wheel_offset_x/y`（`config.get_wheel_offset()` / `set_wheel_offset(x, y)`），准星面板可调                                                                                                                                                    |
-| 角度仪   | `core/angle_meter.py`          | `angle_meter_tab.py`    | Raw Input 读鼠标增量 → 查校准曲线 → 角度；灵敏度换算见十一・5                                                                                                                                                                      |
+| 角度仪   | `core/angle_meter.py`          | `angle_meter_tab.py`    | Raw Input 读鼠标增量 → 查校准曲线 → 角度；**灵敏度换算在读取时做**，见本节下方                                                                                                                                                                      |
 | 标定测距  | `core/distance_meter.py`       | `distance_meter_tab.py` | 屏幕标定 + 地图测距                                                                                                                                                                                                  |
 | 适配设置  | `core/overlay.py`（`_adapt_factors`） | `adapt_tab.py`           | 换算系数 = **挡位 / 基准**（基准 2560×1440 → 2K 挡位=1.0、1K=0.75、4K=1.5）；另有 `_sx/_sy_override` 可覆盖 |
 | 放大镜   | `core/magnifier.py`             | `magnifier_tab.py`       | **副线程抓屏**：`_GrabWorker`(QThread) 用 `mss.grab(region)` 抓原生区域 → QImage 缩放 → signal 回主线程 paint。paintEvent 尺寸匹配时 1:1 blit，否则拉伸。1x 倍率自动停抓 + 隐藏。屏息：按下半径 +step 且倍率 +zoom_step，松开半径恢复、倍率 `max(1.0, 当前-zoom_step)`。当前 preset 存 `magnifier.current_preset`（S3 修复，重启保持选中） |
-| 建队宏   | `core/squad_macro.py`          | `squad_macro_tab.py`    | 按键序列注入（序列本身硬编码，见十一・2）                                                                                                                                                                                        |
+| 建队宏   | `core/squad_macro.py`          | `squad_macro_tab.py`    | 按键序列注入（序列本身硬编码，见十二节）                                                                                                                                                                                        |
 | 资源库   | `core/resource_manager.py`     | `resource_tab.py`        | 图片等资源 + 引用计数；`assets/` 下的内部资源不进资源库                                                                                                                                                                           |
+
+**角度仪的灵敏度换算**：换算发生在**读取时**，存的是原始测量点——所以已有校准数据会自动
+被纠正、不需要重校。但校准会**快照当时的灵敏度**：灵敏度必须在**校准之前**填好，
+否则那条曲线此后永远不自动换算（刻意的保守行为：宁可不动也不按 0 缩放）。
 
 **放大镜的 UI 约定**：顶部 48px 大示数是当前倍率；基本参数用 `QGridLayout` 6 列 3 行（外框半径 / 截屏帧率 / X 偏移；屏息半径步长 / 屏息倍率步长 / Y 偏移）；
 
@@ -267,7 +306,7 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 * **键名 → 虚拟键码只有一个来源**：`core/win32_utils.py::KEY_NAME_VK`（41 项）。
   按键注入（`squad_macro`）和按住检测（`angle_meter_tab`）都查它。
   2026-10-13 合并——此前这两个模块各维护一份表（31 + 5 + 23 项、重叠 18 项），
-  属于 AGENTS §1.1 点名的"同一功能多种实现"，**新增键名只改 KEY_NAME_VK**
+  属于 `docs/RULES.md` §1.1 点名的"同一功能多种实现"，**新增键名只改 KEY_NAME_VK**
 * 键名格式**带修饰键前缀**：`ctrl+mouse_wheel_up`。判断 "这是不是滚轮键" 必须先用
 
   `_parse_hotkey_name()` 拆掉修饰键再比主键 —— 直接 `in _WHEEL_KEYS` 会漏
@@ -351,7 +390,7 @@ S1 的修法是"`_get_selected_vehicle()` / `_get_selected_ammo()` 列表无选�
 main.py                     启动/退出编排、跨模块接线（信号 connect 都在这）
 core/
   colors.py                 颜色唯一来源（主题 + 状态色 + 叠加层色）
-  cleanup.py                清理路径逐项隔离助手（safe_call）
+  cleanup.py                清理契约 SSOT（TAB_CLEANUP_STEPS / collect_* / run_cleanup_steps）
   config_manager.py         ConfigManager 汇总入口（唯一 LF 换行的文件）
   config/                   按模块拆的配置 Mixin
   hotkey_manager.py         全局热键（键盘 + 鼠标）
@@ -366,11 +405,12 @@ gui/
   hotkey_widgets.py         热键绑定控件
   wheel_filter.py           无焦点控件不吞滚轮
   tabs/                     10 个页面
-  mascot/                   "惊天一条区"吉祥物（独立小窗口）
+  mascot/                   "惊天一条区"吉祥物（独立小窗口；音量常量 DEFAULT_MASCOT_VOLUME）
 resources/                  图片/图标/字体/启动横幅
 config/                     运行时配置（打包含此目录）
-tests/                      回归套件（策略见 AGENTS §4）
+tests/                      回归套件（策略见 docs/RULES.md §5）
 docs/                       项目文档（README、USER_GUIDE、AGENTS 在根目录）
+  RULES.md                  开发规范——规矩，判据的唯一来源
   HANDOVER.md               交接文档（本文件）
   CHANGE_LOG.md             变更时间线（含回退过的方向）
   GUI_INVENTORY.md          控件与出厂值底稿（tools/export_gui_facts.py 生成，可重跑）
@@ -385,112 +425,11 @@ tools/                      开发辅助：audit_docs / audit_manual / export_gu
 
 ## 八、改代码时的硬约定
 
-### 8.1 GUI 一律走工厂，别手搓
-
-```
-box, layout = make_group_box("标题")                           # 有边框组
-box, layout = make_group_box("标题", flat=True)                # 无边框组
-box, layout = make_group_box("标题", layout_cls=QFormLayout)   # 换布局类型
-```
-
-* **缩进的唯一权威是全局 QSS**（`main_window.py` 的 `QGroupBox` 规则）。工厂把布局
-
-  `contentsMargins` 固定为 0，从根本上杜绝 "QSS padding + layout margins" 两处叠加
-
-* 有边框组 = QSS 默认规则 `padding: 8px 8px 4px 8px`（实测内容缩进 9/21/9/5）
-
-* 无边框组 = `QGroupBox[flat="true"]`，`padding: 3px 5px 3px 5px`（实测 5/19/5/3）
-
-* 当前 29 个分组框：**有边框 12**（`padding: 8px 8px 4px 8px`）、**无边框 16**
-
-  （`[flat="true"]`，`padding: 3px 5px 3px 5px`），另有 1 个（"文件夹信息"）默认隐藏
-
-### 8.2 颜色：主色板在 `core/colors.py`，强调色在 cfg
-
-* 主题调色板：`THEME_DARK` / `THEME_LIGHT`（键：bg/ctrl/border/hover/text/subtext/dis_text）
-
-* **强调色来自 cfg，不是常量**（2026-10-08 改）：出厂默认在 `core/config/base.py`
-  的默认模板 `global_settings.accent_dark` / `accent_light`（中性值：深 `#EBEBEC` / 浅 `#1D1D1F`），
-  运行时用 `config.get_accent_dark()` / `get_accent_light()`。
-  **`ACCENT` / `ACCENT_HOVER` 常量已删除，不要再 import**
-* 强调色底上的文字走主题字典的 `on_accent_text`（深 `#1D1D1F` / 浅 `#EBEBEC`）
-* 主题字典的键：`bg / ctrl / btn / base / border / hover / text / subtext / dis_text / on_accent_text`
-  （`btn` 给按钮、`base` 给输入框，2026-10-08 新增；**QSS 里按钮必须显式写
-  `background-color`**，否则 Qt 会让它透明、不走 QPalette）
-
-* 状态色：角度仪 `ANGLE_*`、标定测距 `DISTANCE_*`（**`ANGLE_IDLE/ACTIVE/PAUSED/CALIBRATING` 现在只是 `DISTANCE_*` 的别名**，改状态色只改 DISTANCE 一处）
-
-* 叠加层 `OVERLAY_*`：**刻意不随主题变化**—— 它们压在游戏画面上，浅色主题也要深底白字。
-
-  QPainter 用 `OVERLAY_BOX_RGB` / `OVERLAY_BOX_BORDER_RGBA` 元组形式（QColor 不认 CSS 的 `rgba()` 字符串）
-
-* 悬浮窗文字统一 `OVERLAY_TEXT`；底框 `OVERLAY_BOX_RGB` + `OVERLAY_BOX_BG_ALPHA`（20%）。**窗口级 `setWindowOpacity` 已全部取消**，透明度改由底框 alpha 表达
-
-* **大示数（48px）** 走 objectName：`QLabel#info_title, QLabel#zoom_display`；
-
-  变暗态用属性选择器 `[dim="true"]`——**改完属性必须** `unpolish/polish`，否则 QSS 不重算
-
-* `gui/` 里的内联 `setStyleSheet` 已清零；叠加层必要的样式串集中在各模块顶部常量
-
-### 8.3 两种 "成对 / 成骨架" 的控件只有一个实现
-
-* `LinkedSpinSlider`——"输入框 + 滑块" 双向联动，自带防回路：
-
-```
-ctl = LinkedSpinSlider((1.0, 1000.0), slider_range=(1, 1000), decimals=1,
-                       suffix=" %", initial=100)                # 输入框在左（默认）
-ctl = LinkedSpinSlider((1, 1000), suffix="%", fixed_width=80, spin_first=False,
-                       leading=minus_btn, trailing=plus_btn)    # 滑块在左，两端挂按钮
-ctl.value_changed.connect(...)    # 只有用户改动才发；内部镜像同步绝不外发
-ctl.set_value_silent(v)           # 载入配置：两控件同步且零信号
-ctl.step_value(±5)                # +/- 按钮：走正常信号链，越界由 spin 范围收敛
-```
-
-使用方**不需要写 **`blockSignals`。`set_silent()` 用 `try/finally` 保证信号一定恢复 ——历史那种 `blockSignals(True); setValue(); blockSignals(False)` 一行流一旦中途抛异常，控件会**永久静默且不留痕迹**。
-
-* `FilterListPanel`——"搜索 + 标签筛选 + 双标签列表 + 新建 / 重命名 / 删除" 骨架：
-
-```
-panel = FilterListPanel(placeholder="搜索配置...", right_widget=self.link_vf,
-                        min_list_height=180, list_stretch=1, right_stretch=1)
-panel.set_tag_options(tags)      # 同步下拉并保持选中；选项无变化时不重建
-panel.filter_values()            # -> (搜索词小写, 当前标签或 None)
-panel.add_requested / rename_requested / delete_requested
-```
-
-**列表重建与选中恢复的语义不归它管**，各页自己写 —— 那里的语义本来就不同。
-
-### 8.4 列表 "重建后恢复选中" 的两种相反语义（最容易搞错）
-
-* **必须静默**（阻断信号）：防止回写状态机形成回路。
-
-  例：`vehicle_config_tab._select_row_by_data / _select_row_by_index`
-
-* **必须不静默，且必须在 unblock 之后恢复**：要靠 `currentItemChanged` 级联刷新
-
-  下级列表。例：`vehicle_config_tab._refresh_vehicle_list / _refresh_ammo_list`
-
-**所以不要试图把 `vehicle_config_tab` 里那 5 个 `_refresh_*_list` 统一**：
-
-它们分别是 "静默同步"" 级联重建 ""按索引恢复 + 外部覆盖"" 自建 QCheckable 项 " 四种语义，硬合并就是把两种相反的信号语义搅在一起 —— 那是制造 bug，不是清理。
-
-**恢复选中必须用 "实际插入的行号"**（`self.list.count() - 1`），不能用源数据的`enumerate` 下标：搜索 / 标签筛选会让行号与源下标错位，越界时 `setCurrentRow()`
-
-会**清空**选中（表现为 "列表有内容但没选中 / 参数区不刷新"）。
-
-### 8.5 主窗口尺寸：宽度 = 启动横幅的宽度
-
-* `gui/main_window.py` 的 `WINDOW_SIZE = (800, 700)`，`resize` 和 `setMinimumSize`
-
-  都用它：**启动尺寸 = 最小尺寸**，启动后没有 "能再缩小" 的余量
-
-* 用户口径：横幅是**腰封**。横幅图 `resources/assets/splash/full.png` 是 800×151，
-
-  另有 20 张扫描帧（00.png–19.png，尺寸同样是 800×151），窗口就必须 800 宽；两者都居中，所以边缘正好对齐（实测客户区都是 x=560..1360）
-
-* **改宽度前先看 `resources/assets/splash/` 里的图** —— 图宽是唯一权威，不要反过来
-
-* 不要再用 "按屏幕 clamp" 的逻辑决定窗口尺寸（那是为了绕开一个误判，见十二节）
+> **这一节的内容已迁至 `docs/RULES.md` §4**（GUI 约定）：工厂、颜色、成对控件、
+> 列表恢复选中、窗口尺寸。
+> 为什么搬：它们是**判据**（下次该怎么做），不是**现状**（现在长什么样）。
+> 标题保留只为不让旧引用失效。**新增的 GUI 规矩写进 RULES，不要写回这里**；
+> 只有当某条变成"这个项目的现状描述"（某页面特有的既定行为）时，才记在此处。
 
 ---
 
@@ -502,34 +441,11 @@ panel.add_requested / rename_requested / delete_requested
 | 控制台（stderr） | WARNING | 给用户看，不刷屏 |
 | `GS_DEBUG=1` 环境变量 | 控制台升 DEBUG | 只升控制台，文件已经是 DEBUG |
 
-**2026-10-16 修**：文件 sink 从 INFO 升到 DEBUG（永远），排错时不需要先设 `GS_DEBUG=1`。
-此前文件 sink 是 INFO（2026-10-13 从 WARNING 升到 INFO），DEBUG 级别的 `[性能]` 计时和
-`[MouseHook]`/`[Overlay]` 诊断只在设了环境变量时才落盘——现在永远落盘。
+**文件 sink 永远是 DEBUG**，排错时不需要先设 `GS_DEBUG=1`；该变量只升控制台。
 
-**启动性能实测（2026-10-13，源码版）**：
-
-| 阶段 | 耗时 |
-| --- | --- |
-| **`QApplication()` 构造** | **295 ms** |
-| 热键注册（在后台任务里，不阻塞界面） | 61 ms |
-| 字体加载 | 13 ms |
-| 主窗口显示 | 11 ms |
-| ConfigManager / 图标 / UI框架 / MainWindow | 8 / 5 / 3 / 1 ms |
-| **合计** | **322 ms** |
-
-**结论：启动路径没有可优化空间** —— 92% 是 Qt 自身初始化（平台插件 + 字体库 + 样式），
-换任何 Qt 程序都一样。**不要再去"优化启动"**。
-（`crash_log.txt` / `startup_log.txt` 是异常与 stdout 的副本，正常时为空是对的。）
-
-**高频路径审查（2026-10-13，正面结论）**
-
-把 `magnification_changed` / `ammo_type_changed` / `vehicle_changed` / `overlay_toggled` /
-`*_triggered` 的**全部接收槽**逐个读过：都是**增量更新**（改文字、换图、设可见性），
-没有 `clear()+重建`、没有读盘、没有全量 `populate()`。
-`overlay._on_state_changed` 还额外做了"载具切换期间跳过重复信号"的抑制。
-
-**这条铁律项目遵守得不错，新增槽函数时请保持：高频槽里只准做"改已有的"，不准做"重建"。**
-（要判断某个槽算不算高频：它挂在哪个信号上——倍率/弹种/overlay 显隐/热键 = 高频。）
+**启动耗时约 320 ms，其中 92% 是 `QApplication()` 自身**（平台插件 + 字体库 + 样式）——
+已实测，没有优化空间；高频路径的全部接收槽也逐个审过，都是增量更新。
+（分阶段数字与"为什么别再优化"的完整依据在 `docs/RULES.md` §8。）
 
 ## 九、怎么验证（测量手册）
 
@@ -569,7 +485,7 @@ tools/build.bat
 
 * `tools/build.bat` 只删 `dist\main.dist`，**保留 **`dist\main.build`（Nuitka 的 C 编译缓存）：删掉它会从 60 秒退化成每次全量重编
 
-* `.bat` **必须 CRLF 且全文纯 ASCII**（见 AGENTS §3 与 §十二；中文写进 `.bat` 会被解析器吞字符）
+* `.bat` **必须 CRLF 且全文纯 ASCII**（见 `docs/RULES.md` §3 与 §9；中文写进 `.bat` 会被解析器吞字符）
 
 * `tools/build.bat` **解释器自适应**（2026-10-24 批次 2，P2）：有 `uv` 走
 
@@ -584,6 +500,9 @@ tools/build.bat
   `pip wheel .` / `pip install .` 不再报 "Multiple top-level packages discovered"；
 
   构建依赖放 `[project.optional-dependencies] build`（nuitka + zstandard），不进默认安装
+
+* **依赖源显式声明**：`pyproject.toml` 的 `[[tool.uv.index]]` 指向 aliyun（`default = true`），
+  不再依赖环境变量或本机 pip 配置。克隆仓库的人 `uv sync` 直接能跑
 
 * `--include-data-dir=config=config` 会把当前 `config.json` 打进包，所以 config 目录的变化也会进发布包
 
@@ -603,24 +522,23 @@ tools/build.bat
 | `GunnerSight\backups\auto_before_build/` | 自动备份（每次打包前覆盖） |
 | `GunnerSight\backups\GunnerSight_src_<时间戳>\` | 用户备份（可增殖） |
 
-### 开源仓库（2026-10-18）
+### 开源仓库
 
 | 项 | 值 |
 | --- | --- |
 | 远端 | `github.com/403-FORBIDDEN-38/Gunner-Sight` |
-| HEAD | 以 `git log -1 --oneline` 为准（写文档时是 `d514ae7`） |
-| 不进仓库 | `AGENTS.md`（本地说明书）、`dist/`、`backups/`、`logs/`、`__pycache__/` |
+| HEAD | 以 `git log -1 --oneline` 为准（**不要在这里写死值**，写的那一刻就开始过期） |
+| 不进仓库 | `AGENTS.md`（人格层钩子，仅本地保留）、`dist/`、`backups/`、`logs/`、`__pycache__/` |
+| 进仓库 | `docs/RULES.md`——规矩要能被 diff、被 review、改坏能回滚，所以它必须入库 |
 
 **`my_beloved: "Xiaocheng"`** 出现在 `config/config.json` 与 `core/config/base.py` 的默认模板里。
 它是用户**特意保留的署名式字段**：不要删、不要改、不要当成"无用字段"清理。
 开源前做过凭据扫描（api_key / secret / token / password / bearer / sk- 等，0 匹配）。
 
-### 发布前验收矩阵（2026-10-24 立，来源：`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md`）
+### 发布前验收矩阵（来源：`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md`）
 
-每项都应在**非作者机器**上过。2026-10-24 批次 2 后 P1/P2/P4/P5/P6/P7 已修
-（另修复 P 报告漏项 2.8：pyqt5-qt5 约束，见 CHANGE_LOG 当日条目），本机已验证：
-① `uv sync` + mss 10.2.0 import、`pip wheel .` 出包且内容正确。**仍待非作者机器**：③④
-（Program Files 标准用户只读运行 + 设置持久化）、②（从零构建）。挂了就是回归，回来查。
+每项都应在**非作者机器**上过。本机已过 ①②⑤⑥⑦⑧（逐项证据见 CHANGE_LOG 2026-10-24）。
+**仍缺 ②③④ 三项，欠账登记在 §十一**——不在这里重复一遍。挂了就是回归，回来查。
 
 | # | 验收项 | 方法 |
 | --- | --- | --- |
@@ -635,283 +553,33 @@ tools/build.bat
 
 ---
 
-## 十一、当前偏差与待办（2026-10-25 复核）
+## 十一、当前待办
 
-### 1. 版本控制已可用（2026-10-18 更新）
+> 本节**只为真正的欠账存在**。条目完成就删掉，把结论搬进对应机制章节——
+> **不要在这里记"某批次已完成"**，那是 `docs/CHANGE_LOG.md` 的事。
+> 长期不修的已知问题在下一节，不在本节。
 
-* **git 2.56.0 已装**，本地仓库有完整历史，远端已配
-  `origin = github.com/403-FORBIDDEN-38/Gunner-Sight`（项目已开源）
+### 发布前验收：仍缺"非作者机器"三项
 
-* **文件损坏优先用 git 回滚**：`git checkout -- <file>` / `git restore <file>`。
-  AGENTS §3 那条「一行能修就修，修不了就回滚」现在**真的可用**，不要再退回手工重写
+`docs/reviews/PORTABILITY_REVIEW_2026-10-24.md` 的 8 项验收，本机已过 ①②⑤⑥⑦⑧
+（批次 2 后 P1/P2/P4/P5/P6/P7 已修，见 CHANGE_LOG）。**仍待非作者机器**——本机结构上验不了：
 
-* **提交纪律**：本地 `git commit` 可以；**push 之前先问用户**（他明确要求过"不必急着 push"）
-
-* **`AGENTS.md` 故意不进仓库**（`.gitignore` 排除，本地保留）：它是给 AI 看的说明书，不公开。
-  所以 `git status` 里看不到它的改动，别以为丢了
-
-* 兜底仍然是 `backups/`（见 §十）：git 只能回滚**已提交**的东西，
-  未提交的改动一旦写坏就只能靠备份
-
-### 2. 空房子已知偏差（用户决定：先不动，只登记）
-
-* `core/squad_macro.py`：整条建队流程（Ctrl+V / Alt+Tab / Enter / Up / CapsLock 的
-
-  按键序列与时序）硬编码在代码里，cfg 只有 enabled + 热键
-
-* `core/ammo_wheel_selector.py`：确认键硬编码为 `mouse_left`
-
-* 两处都属 "具体功能行为写在代码里"。改造涉及 cfg 结构 + UI + 交互，风险不小，暂缓
-* 2026-10-24 用户确认**维持暂缓**，理由：① 该硬编码即理论最优解；② 无改造意愿（原话："懒"）。这不是"以后再改"，是"就这样"
-
-### 3. 准星 "大小缩放" 的滑块范围（已统一，2026-10-13）
-
-输入框和滑块已统一为 1.0–1000.0（`overview_tab` 的 `size_ctl`）。
-
-此前滑块是 25–400，输入框填 800 后碰滑块会掉回 ≤400。已修复，"故意保留原行为"的判断作废。
-
-### 4. 死代码已清零（2026-10-13）
-
-`ruff --select F401,F841,F811` 现在为空（0 处）。清掉的是：早期登记的 3 处死局部变量
-（滚轮模块 `old`、配置基类 `ammo`、载具配置 `old_label`），
-以及配置基类里**重复写了两遍**的 `get_on_accent_text`（后一份静默覆盖前一份，典型的墓碑）。
-**新增代码请保持这个状态**：`py -m ruff check --select F401,F841,F811 core gui main.py` 应为空。
-
-### 5. 清理路径逐项隔离（已完成 2026-10-16）
-
-`AngleMeterTab._shutdown_engine()`、`MagnifierTab._destroy_engine()`、
-`SquadMacroTab._shutdown_macro()` 三处改用 `core/cleanup.py::safe_call` 逐项隔离；
-`_GrabWorker.stop()` 加 wait 超时 warning；`_FineTuner.stop()` 不改（单动作，隔离无意义）。
-
-**关键决策**：
-- `raw.close`（mss 句柄，OS 级）提到 `_shutdown_engine` 最前——越贵的资源越先释放，不依赖异常发生就产生收益
-- 6 个动作全部纳入隔离——Qt 对象在 C++ 侧被删后 Python 侧调方法抛 RuntimeError，关闭路径最容易出现
-- `safe_call` 是 5 行纯函数（try/except + logger.warning），不是类/上下文管理器
-- `_GrabWorker.stop` 的 wait 超时 warning **只是报告状态，不是恢复**——线程真没退出时 mss 句柄依然泄漏，只是日志里有一行。不加重试/强制终止（QThread 无安全 terminate）
-- 测试边界：mock 测的是"前一步失败后一步仍执行"（代码路径），不是"OS 资源真的释放了"（靠代码审查）
-
-### 6. 需要人工确认手感的两处（自动化测不了）
-
-* **滚轮转发**：统一过滤器后，"无焦点的下拉框 / 数字框不吞滚轮" 才真正生效，
-
-  且按设计**把滚轮转发给最近的滚动区**（页面滚动）。光标停在下拉框上滚动时，现在是 "页面滚动" 而不是 "什么都不动"。这属于恢复设计意图，但建议实际用一遍
-
-* **角度仪换算**：换算发生在**读取时**，存的是原始测量点，所以已有校准数据会自动
-
-  被纠正、不需要重校。但校准会**快照当时的灵敏度**—— 灵敏度必须在**校准之前**填好，否则那条曲线此后永远不自动换算（刻意的保守行为：宁可不动也不按 0 缩放）
-
-### 7. 清理契约 SSOT + 弹种滚轮进退退路径（已完成 2026-10-24，批次 3 浪 D）
-
-* **M19**：`core/cleanup.py` 扩建为清理契约 SSOT——`TAB_CLEANUP_STEPS` 表 +
-  `collect_tab_cleanup_steps()`（`get_tab` 纯查询，**不触发懒加载**）+
-  `collect_window_cleanup_steps()` + `run_cleanup_steps()`（safe_call 逐项隔离 +
-  on_step 耗时回调）。四份调用方收敛为一份：`MainWindow.closeEvent`（保留逐项耗时
-  日志）、`main.py` aboutToQuit 兜底（原只停 overlay+放大镜，扩为全契约）、
-  `tests/conftest.py` teardown、`tools/export_gui_facts.py`（删五个历史方法名探测）
-
-* **M18**：`ammo_wheel.stop()` 进退出路径——滚轮常驻鼠标钩子与超时定时器，
-  此前四份清理一处都没停它（关窗后钩子还挂着，滚轮事件继续注入）
-
-* 各清理动作**幂等**（正常退出 closeEvent + aboutToQuit 双跑安全）；契约测试在
-  `tests/test_wave_d_contract.py`（含有牙证明：HEAD 版 main_window 下必红）
-
-### 8. 批次 4：P0 回归修复 + 桌宠生命周期 + P1/P2/P3（已完成 2026-10-25）
-
-* **P0-1（回归）**：`on_ammo_wheel_ready` 的补偿连接曾用无参 `toggled.disconnect()`，
-  清空该信号**全部**槽——标定测距 tab 自己的电闸 `_on_enable_toggle` 被一并抹掉，
-  启用勾选框失效（不写配置/不起停引擎/不注册热键）。修法：闭包提为实例方法
-  `self._on_distance_toggle` + 定向断开。**边界已补进 §十二**：无参 disconnect
-  只准用在自己拥有、且打算全清的信号上。
-* **P0-2（S6）**：info_tab `__init__` 的 setChecked 同步触发创建，桌宠被 parent 到
-  tab 自身。修法：blockSignals + 创建交 showEvent / MainWindow 创建回调
-  `ensure_mascot()` + `window() is not self` 断言。
-  **注意**：`is_mascot_enabled()` 自 2026-09-07 起硬编码 False（不持久化），
-  报告触发链当前不可达——按**潜在陷阱**处置；恢复持久化前先看
-  `tests/test_batch4_regressions.py`。
-  **2026-10-25 用户拍板：不恢复持久化。** 理由：吉祥物属「彩蛋性质」的玩意，
-  每次启动默认关闭是设计意图，不是缺陷。故上条触发链维持不可达，本项修复
-  仅作陷阱防护保留（`set_mascot_enabled` 写的 `_mascot_enabled_runtime` 全仓
-  仍无人读，属已知冗余，勿当 bug 修）。
-* **桌宠生命周期**：`MascotWidget` / `ChatBubble` 增加 `shutdown()`（先停动画 /
-  定时器 / 音频再隐藏），`hideEvent` 加 RuntimeError 护栏；桌宠进 M19 清理契约
-  （`collect_window_cleanup_steps` →「桌宠」→ `InfoTab.shutdown_mascot()`）。
-* **P1**：uv 源显式声明（aliyun default=true，lock 只变版本行）；resources 读写
-  分离（`resources_write_dir` + `resolve_resource_path`；ResourceManager 新增
-  `write_dir` / `get_write_dir()`）；export 补 window 侧 collector；删
-  `_LibpngFilter`（拦不住 C 层 fprintf）；MouseHook join 超时留 warning。
-* **P2**：tuner deleteLater（S5 C++ 对象累积）；`AmmoWheelSelector.stop()` 反向
-  断开四条连接（幂等）；mss 上界 `<11`；FIX_PLAN 死码清单点名
-  （`VehicleFilterWidget` 是活控件，禁入）。
-* **P3**：版本同步守卫测试（`tests/test_batch4_p3_ledger.py`）；SMP 编号全集对账
-  见 FIX_PLAN 附表；未排期项归入批次 5；M24（`ROOT = Path(__file__)`）补记。
-
-### 9. 批次 5：轻量与墓碑清理（已完成 2026-10-25）
-
-* **死代码删除**（AST 定位 + 全仓引用反查为零）：`gui/widgets.py` 的
-  `RegionSelector` / `PointPicker` / `CrosshairPreviewWidget` / `make_int_spin`；
-  `vehicle_config_tab._update_mag_item_text`；`export_gui_facts.SKIP_TYPES`；
-  `ChatBubble.set_persistent` / `set_volume`；`SoundPlayer.set_volume`；
-  `distance_meter.is_modifier_pressed` + `_resolve_combo_vk`（及其读取的
-  `global_combo`）；`hotkey_manager.angle_meter_pause_triggered` +
-  `_on_angle_meter_pause`；`squad_macro_tab.showEvent` 懒加载死分支
-  （`_data_loaded` 在 `__init__` 必已为 True）。
-* **命名统一**：`distance_meter_tab` 的 `offset_x/offset_y` → `*_spin`；启用槽
-  三种命名收敛为 `_on_enable_toggle`（magnifier 的 `_on_enable`、squad 的
-  `_on_enable_changed`）。
-* **音量常量单一权威**：`gui/mascot/sound_player.py::DEFAULT_MASCOT_VOLUME`
-  （0.1125）；ChatBubble 原硬编码 10（=0.10）统一走它。
-* **P3 build.bat**：根因不是 BOM 本身——cmd 的批处理解析器在 UTF-8 下会**吞多字节
-  字符**（实测 `echo 产物路径:` 被拆成 `echo 产` + 未知命令 `物路径:`，报"不是内部或
-  外部命令"；仅去 BOM/加 `chcp 65001` 治不了）。最终把批处理文本改为**纯 ASCII +
-  CRLF**（中文说明留在本文档），`--jobs=8` → `%NUMBER_OF_PROCESSORS%`，产物路径行
-  加引号。真实 Nuitka 构建已验证：exit 0、无未知命令、产物生成。
-* **P8**：`requires-python = ">=3.10,<3.14"`。
-* **P9**：`main.py` 启动前平台守卫（非 Windows 给可读结论，不抛 ctypes 堆栈）。
-* **P12**：删除 `_MEIPASS`（PyInstaller）死路径——本项目用 Nuitka onedir。
-* **P15/P17**：README 已有 x64 声明、build.bat 已有解释器自适应（批次 2 落地），
-  本批次实测复核。
-* `ruff --select F401,F841,F811` 清零（9 处删码后的未用导入一并处理）。
-
----
-
-## 十一・五、审查任务书（2026-10-13 三轮审查产出）
-
-> 给执行方用：每条都有【处方】。**先看第二张表——那是不该动的**，别把精力花在那儿。
-
-### A 类：低风险，可以直接做
-
-| # | 位置 | 现象 | 处方 | 验证 |
-| --- | --- | --- | --- | --- |
-| A1 ✅ | `core/overlay_base.py` + `core/ammo_wheel_selector.py` | **滚轮三兄弟**（`MagOverlay`/`CompactOverlay`/`FullOverlay`）的 `__init__` 开头各有**逐字相同**的 4 行窗口属性（Tool+无边框+置顶+半透明+不抢焦点+鼠标穿透），共 12 行重复 | 在 `overlay_base.py` 加一个**工厂函数** `make_overlay_window(w)` 收这 4 行，三处调用它。**⚠️ 不要改成继承 `ClickThroughOverlay`**——那套是"可编辑+点击穿透"机制（带 `_edit_mode`/超时/`_verify_click_through`），与滚轮窗口用途不同，继承会把无关机关带进来。另外 `MagnifierOverlay` 只设 3 条（**不带** `WA_TransparentForMouseEvents`），**别一起统一** | 起程序按滚轮 → 弹窗仍正常显示、仍能收到滚轮事件 |
-| A2 ✅ | 9 个函数签名 | `RUF013` 隐式 Optional（`def f(x: int = None)`） | 补 `Optional[int]` 并从 `typing` 导入。纯标注，零运行时影响 | `ruff --select RUF013` 清零 |
-| A3 ✅ | `tests/conftest.py`、`core/firing_table.py` | 2 处无用 `# noqa` + 1 处文件末尾无换行 | 删 noqa；补末尾换行 | `ruff --select RUF100,W292` 清零 |
-
-### B 类：要动脑，**先补测试再改**
-
-| # | 位置 | 现象 | 处方 | 风险 |
-| --- | --- | --- | --- | --- |
-| B1 ✅ | `AngleMeterTab._shutdown_engine`、`MagnifierTab._destroy_engine`、`SquadMacroTab._shutdown_macro`、`_GrabWorker.stop` | **裸调清理动作**：按 AGENTS §2.1「中断即泄漏」，第 1 个 `.stop()` 抛异常 → 后面的 `self.raw.close()`（mss 抓屏句柄）永不执行 | 三处改用 `core/cleanup.py::safe_call` 逐项隔离；`_shutdown_engine` 重排顺序（raw.close 提前）；`_GrabWorker.stop` 加 wait 超时 warning；`_FineTuner.stop` 不改（单动作） | 已补 8 个测试（`tests/test_cleanup_isolation.py`），覆盖"前一步失败后一步仍执行"。OS 资源释放靠代码审查 |
-| B2（半做） | `core/mouse_hook.py`（`SetWindowsHookEx` 失败重试处） | 钩子设置失败会 **无限每秒重试 + 每秒写一行日志**（`time.sleep(1.0)` 后退避重试） | **仅改了日志级别**（第 1 次 warning / 后续 debug / 恢复成功 warning）。**重试逻辑保留原样**：无上限、固定 1 秒间隔——历史 17 个日志文件 0 次失败，加上限收益为零 | 涉及钩子可靠性策略，用户决定不加上限 |
-
-### C 类：需求/策略，需要用户拍板
-
-* 空房子两处硬编码（见本节的 §2）——2026-10-24 用户确认维持暂缓（理论最优解 + 无改造意愿），不再作为待办
-
-### 不该动的（零收益、非零风险）
-
-| 项 | 数量 | 为什么别动 |
+| # | 项 | 为什么本机验不了 |
 | --- | --- | --- |
-| `RUF001/002/003` 歧义 Unicode | **2400+** | 是中文注释里的全角标点（`：`、`（）`）。这是中文项目的必然产物，**改了反而错** |
-| `E402` 模块导入不在顶部 | 87 | **刻意为之**的懒加载（`main.py` 里 import 之间插 `processEvents()` 让横幅动画不卡）。改成顶部导入会让启动多卡几百毫秒 |
-| `E501` 行长 / `E701` `E702` 一行多语句 | 196 / 25 | 纯风格，零收益；改了一堆 diff 噪音 |
-| `RET505` `SIM102` `SIM105` `PERF102` `PERF203` | ~45 | 纯风格建议。改动要过 AST 重构，收益为零、风险非零 |
+| 2 | 从零构建 | 要干净 Windows 按 README 产出 dist（含联网下载编译器的场景） |
+| 3 | 只读位置运行 | 要 Program Files + 标准用户双击，看是否正常启动、日志是否降级 TEMP |
+| 4 | 设置持久化 | 要在上述环境改设置，重启后看是否保留 |
 
-> 这些条目与 agent 能力无关：不是"弱 agent 做不了"，而是"对任何人都零收益、非零风险"。
-| 超长函数（`_main` 225 行、`_setup_full_style` 172 行、各 `_build_ui`） | 9 个 | **本质如此**：一个是启动编排、一个是 QSS 字符串、其余是 UI 搭建。硬拆只会增加跳转层级 |
-| "启动慢" | — | **已实测**：322 ms 里 295 ms 是 `QApplication()` 自身（平台插件+字体库+样式）。换任何 Qt 程序都一样，**没有优化空间** |
-| "高频路径有全量刷新" | — | **已核实**：倍率/弹种/载具/overlay/热键的全部接收槽都是增量更新，没有 `clear()+重建`、没有读盘 |
+矩阵全表与验收方法在 §十。挂了就是回归，回来查。
 
 ---
 
-## 十一・六、用户手册打磨（已完成：DS v4.1 flash 执行，2026-10-24 用户确认收尾）
-
-> 本计划已执行完毕（DS v4.1 flash）。以下保留讨论结论与全部上下文，作为后续修订依据。
-
-### 执行前快照（2026-10-18 讨论时）
-
-- `USER_GUIDE.md`：真铁版，LF 换行。已推 GitHub（master）。2026-10-20 第二轮修正 7 处错误（暂离移交退出权、弹种/载具图片叠加层、倍率无名称输入、比例尺热键循环、删全局组合键前缀）。
-- airsoft 版（390 行简洁命令式）已删除，不保留。
-- 参考素材：`KAC_SR25_真铁手册_中文译制版.docx`（同目录还有英文原件 PDF SR25-UM-0011-REV-3、airsoft 版译件、配图目录）。
-
-### 差距分析（当前手册 vs KAC 真铁手册）
-
-| 维度 | KAC 真铁手册 | 当前 GunnerSight 手册 |
-| --- | --- | --- |
-| 安全语气 | "警告""绝不要""始终""必须"，后果明确 | "请""建议""可能"，偏软 |
-| 工作原理 | 专门一节，几句话讲清内部流转 | 没有，用户不知道软件怎么工作、边界在哪 |
-| 操作步骤 | 编号 SOP（步骤1/2/3），每步有可验证结果 | 叙述性散文（"点击...然后..."） |
-| 功能检查 | 每项操作后 a/b/c/d 验证，明确"应/不应" | 只有随意的"验证"小节 |
-| 排错 | 三列表格（故障/原因/排除），一一对应 | "若...请按以下顺序排查"的散文 |
-| 讨好语言 | 没有，只说"做什么"和"不做什么" | "适用于...场景""推荐大多数用户使用" |
-
-### 打磨方向（用户已确认）
-
-1. **安全章硬化**："请"→"必须"，"可能"→"将"，每条警告说清后果（不是"可能影响体验"，而是"将导致叠加层无法渲染"）
-2. **加"工作原理"节**：放在操作说明开头。内容：不读游戏内存、截屏+鼠标增量计算、透明置顶窗口、全局底层钩子、状态机统一管理模块。同时列已知边界（全屏独占模式叠加层被截断、桌面焦点下滚轮失效、校准需游戏显示俯仰角）
-3. **核心操作改编号 SOP**：首次运行、载具配置、校准、定角装填这些关键流程改成步骤1/2/3，每步带验证结果（"确认屏幕中心出现分划图片"）
-4. **排错改表格矩阵**：故障/原因/排除三列，一一对应
-5. **删讨好语言**：只留操作和结果
-6. **PMCS 表格化**：比赛前检查清单改成三列表（项目/检查内容/处理方法）
-
-### 用户偏好（硬约束）
-
-- **通读一遍过**：不回看不重看，概念解释紧跟操作步骤，无附录割裂
-- **去人化、去误差的纪律性**：不提供情绪价值，只提供确定性
-- **基于用户操作视角（GUI）**：从用户在界面上看到什么、点什么出发，不是从代码模块出发
-- **配图**：用户有 3 张截图（载具配置页浅色、准星面板、适配设置页）。如需更多截图问用户要。
-
-### 注意事项
-
-- 手册里的术语必须与 UI 一致（"定角装填"不是"归零"，config 键名 `auto_reset` 不改但 UI 文本用"定角装填"）
-- 版本号写 `V0.0140300182`（从 info_tab.py APP_VERSION 同步，禁止第二处硬编码）
-- 改完手册不需要升版本号（AGENTS §6：文档/测试不算源码更新）
-- 改完 docs/HANDOVER 必跑 `py tools/audit_docs.py`
-
-
-## 十二、坑速查（一行一条，都是实测过的）
-
-**改写 / 编码类**
-
-| 症状                                | 根因 / 解法                                                          |
-| --------------------------------- | ---------------------------------------------------------------- |
-| `.bat` 里含中文的 `echo` 报 "不是内部或外部命令" | **CRLF 未必是真凶**。先查换行符（LF-only 确实会被按 CR 拆行）；若已是 CRLF 仍报，那是解析器**吞多字节字符**（2026-10-25 实测：`echo 产物路径:` 被拆成 `echo 产` + `物路径:`；去 BOM / `chcp 65001` / 加引号全都治不了）。正解：整个 `.bat` 改**纯 ASCII**，中文说明搬进文档 |
-| `.bat` 报 "此时不应有 ." 并秒退 | `if (...)` 块内出现 **ASCII 括号**（如 `echo ...(~100MB)`），cmd 当成嵌套块。换成逗号或全角括号 |
-| 用 Python 脚本按内容替换 "0 命中"           | 文件是 CRLF，而匹配串用了 `\n`。按文件实际换行符构造                                 |
-| `json.load` / `ast.parse` 报非法字符   | 文件被 PowerShell `Set-Content` / `>` 写了 BOM。改用 Write 工具或 Python 脚本 |
-| 文件莫名带 BOM（`ast.parse` 报 U+FEFF） | PowerShell `Set-Content` 留下的。去 BOM 用字节级操作；读文件用 `encoding="utf-8-sig"` 更稳。2026-10-13 清掉 9 个（含 `HANDOVER.md` 和 2 份 mascot 文案，后者首字符是脏的） |
-| 备份体积莫名 200MB | 把 `dist/`（**135MB**）或 `.git` 一起备份了。整目录快照排除 `dist .git backups __pycache__ .pytest_cache .ruff_cache .workbuddy` → 约 **40MB** |
-| 脚本批量替换后文件半坏                       | 没做 "预期命中 N 处" 断言。**先断言再落盘**                                      |
-
-**界面类**
-
-| 症状                | 根因 / 解法                                       |
-| ----------------- | --------------------------------------------- |
-| 列表不撑高             | 整条 stretch 链要通：最外层 `addWidget(x, 1)`，内部每一级也要  |
-| 无边框分组框标题和内容叠在一起   | 必须 `margin-top: 16px`，不能 0                    |
-| tab 里什么都不显示       | `QScrollArea` 忘了 `setWidget(content)`         |
-| 改了控件属性但 QSS 没变    | 属性选择器要 `unpolish/polish` 才重新求值                |
-| 下拉框 / 数字框的箭头显示成方块 | 用了系统原生 style。必须 `app.setStyle("Fusion")`      |
-| 自定义字体没生效          | `load_custom_fonts()` 必须在**任何控件创建之前**调用     |
-| 缩进五花八门            | 别自己 `QGroupBox` + 内联样式，走 `make_group_box()` |
-
-**行为类**
-
-| 症状                    | 根因 / 解法                                                                                                                      |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 热键没反应                 | ① `_register_all_hotkeys()` 漏注册；② 对应 tab 没被预创建（见第六节）；③ 改完绑定没 `reload_hotkeys()`                                          |
-| 关了再开，功能是坏的            | "电闸关闭" 时没真正销毁，或 `__init__` 只在启用分支里初始化。见第三节                                                                               |
-| 程序退出时崩溃（退出码非 0，但测试全过） | 悬空的事件过滤器：`installEventFilter` **不持有所有权**，临时对象会被立刻回收，QApplication 上只剩悬空指针。必须用 `wheel_filter.install_no_wheel_filter(app)` |
-| 某个功能 "没保存"            | `set_xxx` 里漏了 `request_save()`（写入是防抖的，不调就不落盘）                                                                              |
-| 日志文件里什么也没有 | 文件 sink 曾是 WARNING 级，INFO 全被丢弃（2026-10-13 已修为 INFO）。见八・五 |
-| bbox 缓存对不上            | 删 `config/bbox_cache.json` 重启                                                                                               |
-| 重建引擎后热键触发两次 / 回调重复执行 | 信号重复连接。`_init_engine` 之类必须**先无条件 disconnect 再 connect**（幂等收口），否则每次重建都多挂一个槽。**边界：无参 disconnect() 只准用在自己 connect 过的槽上——别人拥有的信号（如 tab 自己的电闸）必须 `disconnect(自己的槽)` 定向断开，否则连别人的一起清空（批次 4 P0-1 实证）** |
-| 标签增删后某些页的下拉里没有新标签 | 漏接 `tags_changed`，见五・五 |
-
-**术语类**
-
-| 名词           | 指什么                                               |
-| ------------ | ------------------------------------------------- |
-| 电闸 / 开关 / 暂离 | 见第三节                                              |
-| 空房子 / 水泥凳子   | 配置驱动：具体功能行为必须在 cfg 里，不在代码里（AGENTS §1.2）           |
-| 腰封           | 启动横幅。窗口宽度必须等于它（800px），见 8.5                       |
-| 数显模块         | **已删除**。历史文档里出现的 "数显"= 现在的标定测距（`distance_meter`） |
-
----
-
-## 十三、已知问题（暂不修）
+## 十二、已知问题（暂不修）
 
 | 问题 | 表现 | 原因 |
 | --- | --- | --- |
 | 筛选结果为空时列表空 | 筛选后当前载具不在结果集里（如 PMC 空标签），列表 currentRow=-1，但详情区仍显示 state 的载具。**这是设计取舍，不是 bug**（2026-10-14 确认）。详见 §三・五 "S1 修法的边界"。 | 设计取舍 |
 | 无弹种的载具 | 倍率列表仍会 populate，各项显示空 crosshair 路径（"未绑定图片"）。 | 老问题，暂不修。 |
 | 焦点在桌面时滚轮切弹种失效 | 前台为桌面（Progman/WorkerW）时滚动滚轮，弹种预选不弹出；切回任意其他窗口立即恢复。2026-10-18 日志确认：底层钩子 WH_MOUSE_LL 在桌面前台时收不到 WM_MOUSEWHEEL 事件（`[MouseHook] WHEEL` 零行），非代码 Bug。 | 无解，Windows 底层行为。使用时确保前台窗口不是桌面。 |
+| 空房子：两处硬编码 | 建队按键序列与时序（`core/squad_macro.py`）、弹种滚轮确认键 `mouse_left`（`core/ammo_wheel_selector.py`）仍在代码里，cfg 只有 enabled + 热键。 | **2026-10-24 用户拍板"就这样"**：① 该硬编码即理论最优解；② 无改造意愿。不是"以后再改"，别再提。 |
+| 吉祥物启用态不持久化 | `config.is_mascot_enabled()` 硬编码返回 False，每次启动默认关闭；`set_mascot_enabled` 写的 `_mascot_enabled_runtime` 全仓无人读。 | **2026-10-25 用户拍板**：吉祥物是"彩蛋性质"的玩意，每次启动关闭是设计意图而不是缺陷。**别给它加持久化**；那个字段是已知冗余，勿当 bug 修。 |

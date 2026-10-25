@@ -1,9 +1,12 @@
-"""文档对账：把 HANDOVER / AGENTS 里的**事实性断言**拿去和代码核对。
+"""文档对账：把 HANDOVER / RULES 里的**事实性断言**拿去和代码核对。
 
 为什么需要它：这个项目的文档就是"现状的唯一权威"，而它**已经烂过一次**——
 2026-10-08 删掉 `ACCENT` 常量、搬走强调色、做完 SSOT 改造之后，HANDOVER 三个月
 没人碰，下一任 agent 会照着过时的文档写出错代码。文档漂移是本项目最贵的失败模式，
 比代码 bug 贵：bug 会报错，过时文档不会。
+
+三份文档的分工：RULES=判据（未来）、HANDOVER=现状、CHANGE_LOG=经过。
+本脚本只查"文档说的事实与代码是否一致"，不判断"某条内容该放在哪份文件里"（那要靠人）。
 
 用法：py tools/audit_docs.py        （不一致时退出码 1）
 """
@@ -14,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HAND = (ROOT / "docs" / "HANDOVER.md").read_text(encoding="utf-8")
+RULES = (ROOT / "docs" / "RULES.md").read_text(encoding="utf-8")
 AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
 results = []
@@ -71,10 +75,12 @@ for name in ("OVERLAY_TEXT", "OVERLAY_BOX_BG_ALPHA", "OVERLAY_BOX_RGB"):
 for name in ("适配设置", "相关"):
     check(f"导航名 '{name}' 与 main_window 一致", name in read("gui/main_window.py"))
 
-# 5. 文档里的项目内路径都存在
-missing = [m.group(1) for m in re.finditer(r"`((?:core|gui|tests|resources|config|docs|backups|tools)/[\w/\.]+)`", HAND)
-           if not (ROOT / m.group(1)).exists() and not m.group(1).endswith("/")]
-check("HANDOVER 引用的项目内路径都存在", not missing, f"缺失 {sorted(set(missing))[:5]}")
+# 5. 文档里的项目内路径都存在（HANDOVER 与 RULES 都查）
+PATH_RE = r"`((?:core|gui|tests|resources|config|docs|backups|tools)/[\w/\.]+)`"
+for label, text in [("HANDOVER", HAND), ("RULES", RULES)]:
+    missing = [m.group(1) for m in re.finditer(PATH_RE, text)
+               if not (ROOT / m.group(1)).exists() and not m.group(1).endswith("/")]
+    check(f"{label} 引用的项目内路径都存在", not missing, f"缺失 {sorted(set(missing))[:5]}")
 
 # 6. 备份约定：文档写的快照目录真的存在
 snaps = list((ROOT / "backups").glob("GunnerSight_src_*")) if (ROOT / "backups").is_dir() else []
@@ -94,14 +100,22 @@ def _strip_code_spans(text):
     return re.sub(r"`[^`]*`", "", text)
 
 
-bad = [p for p in ["AGENTS.md", "docs/HANDOVER.md", "docs/CHANGE_LOG.md"]
+bad = [p for p in ["AGENTS.md", "docs/RULES.md", "docs/HANDOVER.md", "docs/CHANGE_LOG.md"]
        if re.search(r"\\[_*]", _strip_code_spans((ROOT / p).read_text(encoding="utf-8")))]
 check("文档没有被 markdown 转义污染（`\\_` 之类）", not bad, f"脏文件: {bad}")
 
-# 9. 文档换行风格没被改坏（AGENTS/HANDOVER 是 CRLF）
-for name in ["AGENTS.md", "docs/HANDOVER.md"]:
+# 9. 文档换行风格没被改坏（AGENTS/HANDOVER 是 CRLF；RULES/CHANGE_LOG 是 LF）
+for name, style in [("AGENTS.md", "CRLF"), ("docs/HANDOVER.md", "CRLF"),
+                    ("docs/RULES.md", "LF"), ("docs/CHANGE_LOG.md", "LF")]:
     d = (ROOT / name).read_bytes()
-    check(f"{name} 保持 CRLF", d.count(b"\r\n") == d.count(b"\n") > 0)
+    n_crlf, n_lf = d.count(b"\r\n"), d.count(b"\n")
+    ok = (n_crlf == n_lf > 0) if style == "CRLF" else (n_crlf == 0 and n_lf > 0)
+    check(f"{name} 保持 {style}", ok, f"CRLF={n_crlf} LF={n_lf}")
+
+# 10. 人格层钩子仍指向规矩层与现状（AGENTS.md 只是入口，规矩本体在 RULES）
+for target in ["docs/RULES.md", "docs/HANDOVER.md"]:
+    check(f"AGENTS.md 指向 {target}", target in AGENTS,
+          "钩子断了：AGENTS.md 必须指向它，否则自动加载读到的是空指针")
 
 # ---------------- 输出 ----------------
 width = max(len(r[0]) for r in results)

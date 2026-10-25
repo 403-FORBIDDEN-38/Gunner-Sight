@@ -663,7 +663,7 @@ class MainWindow(QMainWindow):
                 widget.set_function_active(wheel.is_suspended)
                 # 电闸开启后同步当前暂离状态。连实例方法而非闭包——
                 # on_ammo_wheel_ready 的补偿路径必须能定向断开它（P0-1），
-                # 同一功能也只准这一个实现（AGENTS §1.1）
+                # 同一功能也只准这一个实现（docs/RULES.md §1.1）
                 widget.enable_check.toggled.connect(self._on_distance_toggle)
         elif index == self.TAB_ADAPT:  # 适配设置
             # M15：主题色重应用的公共信号入口（tab 不反向调私有 API）

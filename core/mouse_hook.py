@@ -220,7 +220,7 @@ class MouseHook(QObject):
                         logger.debug(f"[MouseHook] 钩子设置失败（重试中，第 {self._retry_count + 1} 次），错误码: {error_code}")
                     self._retry_count += 1
                     # 刻意退避后重试：钩子可能被安全软件临时拦截，等一会儿能成。
-                    # 这是"失败重试的退避"，不是"用等待掩盖时序问题"（AGENTS 2.1 禁的是后者）
+                    # 这是"失败重试的退避"，不是"用等待掩盖时序问题"（docs/RULES.md 2.1 禁的是后者）
                     time.sleep(1.0)
                     continue
                 # 恢复成功：此前有过重试
