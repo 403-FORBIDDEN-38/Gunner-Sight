@@ -157,6 +157,17 @@ class MascotWidget(QWidget):
             if not self._drag_moved:
                 self.clicked.emit()
 
+    def shutdown(self):
+        """显式停止动画（退出/清理路径调用，幂等）。"""
+        self._stop_animation()
+
+    def _stop_animation(self):
+        try:
+            self._anim.stop()
+        except RuntimeError:
+            # C++ 对象已删除：窗口销毁级联中 hideEvent 可能晚于子对象销毁
+            pass
+
     def hideEvent(self, event):
-        self._anim.stop()
+        self._stop_animation()
         super().hideEvent(event)

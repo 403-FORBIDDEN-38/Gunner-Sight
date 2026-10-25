@@ -661,14 +661,17 @@ class MainWindow(QMainWindow):
             wheel = getattr(self, 'ammo_wheel', None)
             if wheel is not None:
                 widget.set_function_active(wheel.is_suspended)
-                # 电闸开启后同步当前暂离状态
-                def _on_distance_toggle(checked, w=widget, wh=wheel):
-                    if checked:
-                        w.set_function_active(wh.is_suspended)
-                widget.enable_check.toggled.connect(_on_distance_toggle)
+                # 电闸开启后同步当前暂离状态。连实例方法而非闭包——
+                # on_ammo_wheel_ready 的补偿路径必须能定向断开它（P0-1），
+                # 同一功能也只准这一个实现（AGENTS §1.1）
+                widget.enable_check.toggled.connect(self._on_distance_toggle)
         elif index == self.TAB_ADAPT:  # 适配设置
             # M15：主题色重应用的公共信号入口（tab 不反向调私有 API）
             widget.theme_reapply_requested.connect(self._on_theme_reapply_requested)
+        elif index == self.TAB_INFO:  # 信息页
+            # P0-2：config 启用吉祥物时，tab 入窗后补创建。__init__ 期
+            # setChecked 已 blockSignals，创建只能发生在这里（window() 正确）
+            widget.ensure_mascot()
         elif index == self.TAB_RESOURCE:  # 资源库：切换到时刷新树
             widget.refresh()
 
@@ -679,6 +682,22 @@ class MainWindow(QMainWindow):
         （QSS + 滚轮 overlay 强调色）——判断逻辑收口在 MainWindow。"""
         if self._current_theme == which:
             self._apply_theme(self._current_theme)
+
+    def _on_distance_toggle(self, checked):
+        """M17：测距电闸开启时同步滚轮暂离状态。
+
+        暂离中用户不看滚轮，标定测距反而该工作——开启瞬间按当前暂离
+        状态激活。tab 自己的电闸（_on_enable_toggle）负责写配置与引擎
+        起停，与本槽同挂 enable_check.toggled，两者互不影响（P0-1：
+        曾用无参 disconnect 把 tab 的槽一并清空，勾选框就此失效）。
+        提成实例方法是为了让补偿路径能定向断开自己这一条。
+        """
+        if not checked:
+            return
+        tab = self.get_tab(self.TAB_DISTANCE_METER)
+        wheel = getattr(self, "ammo_wheel", None)
+        if tab is not None and wheel is not None:
+            tab.set_function_active(wheel.is_suspended)
 
     def on_ammo_wheel_ready(self):
         """M17：ammo_wheel 后台创建后的补偿入口（main.py 后台任务调用）。
@@ -693,16 +712,15 @@ class MainWindow(QMainWindow):
             return
         tab.set_function_active(wheel.is_suspended)
 
-        def _on_distance_toggle(checked, w=tab, wh=wheel):
-            if checked:
-                w.set_function_active(wh.is_suspended)
-
-        # 先无条件断开旧连接再连（幂等收口，HANDOVER §十二）
+        # P0-1：只定向断开「自己拥有的连接」。无参 disconnect() 会清空
+        # 该信号的全部槽——tab 自己的电闸 _on_enable_toggle 也被抹掉，
+        # 启用勾选框就此失效（不写配置、不起停引擎、不注册热键）。
+        # HANDOVER §十二「先断再连」仅适用于自己 connect 过的槽。
         try:
-            tab.enable_check.toggled.disconnect()
+            tab.enable_check.toggled.disconnect(self._on_distance_toggle)
         except TypeError:
-            pass  # 没有旧连接
-        tab.enable_check.toggled.connect(_on_distance_toggle)
+            pass  # 没有旧连接（tab 先于 wheel 创建时此处本就没有）
+        tab.enable_check.toggled.connect(self._on_distance_toggle)
 
     def _on_magnification_changed(self, _index):
         self._refresh_status_bar()

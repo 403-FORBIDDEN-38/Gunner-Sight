@@ -26,8 +26,15 @@ class InfoTab(QWidget):
         self._follow_timer = None
         self._build_ui()
         self._connect_ui_signals()
-        # 从配置加载吉祥物启用状态
-        self.mascot_enable_check.setChecked(self.config.is_mascot_enabled())
+        # 从配置加载吉祥物启用状态。blockSignals 阻止 __init__ 期同步触发
+        # 创建路径——此时 tab 尚未 insertWidget，self.window() 返回 tab
+        # 自身，桌宠会被 parent 成页面子控件，切 tab 即消失（P0-2）。
+        # 创建延后到 showEvent / MainWindow 创建回调（window() 已就绪）。
+        self.mascot_enable_check.blockSignals(True)
+        try:
+            self.mascot_enable_check.setChecked(self.config.is_mascot_enabled())
+        finally:
+            self.mascot_enable_check.blockSignals(False)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -101,9 +108,21 @@ class InfoTab(QWidget):
         elif not enabled and self._mascot is not None:
             self._shutdown_mascot()
 
+    def ensure_mascot(self):
+        """config 启用且尚未创建时，创建桌宠（MainWindow 创建回调调用）。
+
+        调用方保证 tab 已在窗口内——_connect_tab_signals 在 insertWidget
+        之后执行，此时 window() 返回主窗口，parent 才正确（P0-2）。
+        """
+        if self.mascot_enable_check.isChecked() and self._mascot is None:
+            self._create_mascot()
+
     def _create_mascot(self):
-        res_dir = str(self.resources.get_resources_dir())
         parent = self.window()
+        assert parent is not self, (
+            "桌宠创建时 tab 必须已在主窗口内（window() 非自身）——"
+            "parent 成 tab 自身会让桌宠随页面切换消失（P0-2）")
+        res_dir = str(self.resources.get_resources_dir())
 
         self._sound = SoundPlayer(res_dir, volume=0.1125)
         self._bubble = ChatBubble(res_dir, parent=parent)
@@ -123,15 +142,27 @@ class InfoTab(QWidget):
         self._follow_timer.timeout.connect(self._follow_mascot)
         self._bubble.visibility_changed.connect(self._on_bubble_visibility)
 
+    def shutdown_mascot(self):
+        """清理契约入口（M19）：停止桌宠及其全部子资源（幂等）。
+
+        桌宠/气泡的 parent 是主窗口而非本页——生命周期属窗口级，
+        退出时由 collect_window_cleanup_steps 调到这里（P0-2 顺带加固）。
+        """
+        self._shutdown_mascot()
+
     def _shutdown_mascot(self):
         if self._follow_timer:
             self._follow_timer.stop()
             self._follow_timer = None
         if self._bubble:
+            # 先停定时器/音频再隐藏：已隐藏的控件在窗口销毁级联里
+            # 不再触发 hideEvent，避免踩已删除的 C++ 子对象
+            self._bubble.shutdown()
             self._bubble.hide()
             self._bubble.deleteLater()
             self._bubble = None
         if self._mascot:
+            self._mascot.shutdown()
             self._mascot.hide()
             self._mascot.deleteLater()
             self._mascot = None

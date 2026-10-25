@@ -60,6 +60,14 @@ class _FakeConfig:
         self.saved += 1
 
 
+class _FakeMascotTab:
+    def __init__(self):
+        self.shutdown_calls = 0
+
+    def shutdown_mascot(self):
+        self.shutdown_calls += 1
+
+
 def _make_stub_window(tabs=None):
     """最小 window stub：只提供契约用到的属性（TAB_* 索引值任意，只看属性名）。"""
 
@@ -147,6 +155,19 @@ def test_collect_window_steps_skips_missing_attrs():
     w.overlay = None
     steps = collect_window_cleanup_steps(w)
     assert [label for label, _ in steps] == ["热键", "配置保存"]
+
+
+def test_collect_window_steps_includes_mascot():
+    """桌宠是窗口级资源：信息页已创建时契约含其清理入口（P0-2 顺带加固）。"""
+    tab = _FakeMascotTab()
+    w = _make_stub_window({8: tab})
+    w.TAB_INFO = 8
+    steps = collect_window_cleanup_steps(w)
+    assert [label for label, _ in steps] == [
+        "桌宠", "Overlay信号", "热键", "弹种滚轮", "配置保存",
+    ]
+    run_cleanup_steps(steps)
+    assert tab.shutdown_calls == 1
 
 
 def test_close_event_stops_ammo_wheel(window):

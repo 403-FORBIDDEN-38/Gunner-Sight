@@ -64,12 +64,23 @@ def collect_tab_cleanup_steps(window):
 
 
 def collect_window_cleanup_steps(window):
-    """收集 window 级清理动作（overlay/hotkey/弹种滚轮/配置保存）。
+    """收集 window 级清理动作（桌宠/overlay/hotkey/弹种滚轮/配置保存）。
 
     M18：ammo_wheel.stop() 进退出路径——滚轮模块常驻鼠标钩子与定时器，
     此前没有任何一处退出路径停它。
+
+    桌宠（MascotWidget/ChatBubble/SoundPlayer）parent 是主窗口而非信息页，
+    由信息页创建但生命周期属窗口级；退出时必须显式停动画/定时器/音频，
+    否则窗口销毁级联里 hideEvent 会踩到已删除的 C++ 子对象。
     """
     steps = []
+    info_idx = getattr(window, "TAB_INFO", None)
+    if info_idx is not None:
+        info_tab = window.get_tab(info_idx)
+        shutdown_mascot = (getattr(info_tab, "shutdown_mascot", None)
+                           if info_tab is not None else None)
+        if callable(shutdown_mascot):
+            steps.append(("桌宠", shutdown_mascot))
     overlay = getattr(window, "overlay", None)
     if overlay is not None:
         steps.append(("Overlay信号", overlay.shutdown))

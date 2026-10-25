@@ -366,11 +366,22 @@ class ChatBubble(QWidget):
         else:
             super().mousePressEvent(event)
 
+    def shutdown(self):
+        """显式停止定时器/GIF/音频（退出/清理路径调用，幂等）。"""
+        self._stop_playback()
+
+    def _stop_playback(self):
+        for obj in (self._auto_hide_timer, self._movie, self._audio_player):
+            if obj is None:
+                continue
+            try:
+                obj.stop()
+            except RuntimeError:
+                # C++ 对象已删除：窗口销毁级联中 hideEvent 可能晚于子对象销毁
+                pass
+
     def hideEvent(self, event):
-        self._auto_hide_timer.stop()
-        if self._movie:
-            self._movie.stop()
-        self._audio_player.stop()
+        self._stop_playback()
         self._last_content_file = None  # 隐藏后重置，下次可重复
         self.visibility_changed.emit(False)
         super().hideEvent(event)
