@@ -278,7 +278,7 @@ Windows 上非 0 可能是退出期崩溃而非断言失败——先看是不是
 
 **死表达式**：`py -m ruff check --select F401,F841,F811 core gui main.py tests` 应为空。
 **注意这条命令有两处盲区**：① 路径**不含 `tools/`**（工具脚本的未用导入不在此门禁内，改 `tools/` 要自己看）；
-② **ctypes 签名现在有检查，但只覆盖已登记的 API**——`tests/test_win32_entry.py` 断言两件事：
+② **ctypes 签名现在有检查，但只覆盖已登记的 API**——`tests/test_entry.py` 断言两件事：
 业务代码只能从 `core/win32_utils.py` 取 `user32`（禁止各自 `ctypes.windll.user32`），
 且 `REQUIRED_SIGNATURES` 列出的 API 都必须已设 `argtypes`/`restype`。
 **新增一个 Win32 API 调用时，必须同时把它加进那个列表**，否则测试给不了任何保护。

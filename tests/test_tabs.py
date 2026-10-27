@@ -1,15 +1,25 @@
-"""批次 3 浪 C1 契约测试（搜索防抖，5 页统一模式）。
+"""gui/tabs/*：各设置页共用的两种交互模式（搜索防抖、splitter 落盘时机）。
 
-M12：textChanged 每按键全量重建列表（资源页还叠加引用索引重建 + 磁盘列举
-+ 递归聚合）→ 停止输入 180ms 后才过滤一次。
+这两个契约都是「同一模式在多页各写一遍」的收敛。模式本身错了不会崩，只是
+手感变差或者写盘过频，用户也不会报——所以必须锁住。
 
-覆盖：vehicle_config_tab / resource_tab / angle_meter_tab / magnifier_tab /
-VehicleFilterWidget（overview quick_vf、squad_macro、angle_meter link 三处共用）。
+**搜索防抖（M12）**
+textChanged 每按键全量重建列表（资源页还叠加引用索引重建 + 磁盘列举 + 递归
+聚合）→ 改为停止输入 180ms 后才过滤一次。覆盖五处：vehicle_config_tab /
+resource_tab / angle_meter_tab / magnifier_tab / VehicleFilterWidget
+（overview quick_vf、squad_macro、angle_meter link 三处共用）。
+切标签下拉同样走防抖——离散操作，延迟 180ms 无感，模式统一。
+
+**splitter 只在拖动结束落盘（M17）**
+拖动中的 splitterMoved 不写 config，handle 的 MouseButtonRelease 才写一次。
+vehicle_config / resource_tab 两处独立修改，都要锁住。
 """
 from PyQt5.QtTest import QTest
 
 WAIT_MS = 400  # > 180ms 防抖窗口，确保 timeout 已触发
 
+
+# ---------------------------------------------------------------- 页面构造
 
 def _make_vehicle_tab(config, qapp):
     from core.resource_manager import ResourceManager
@@ -41,6 +51,8 @@ def _make_magnifier_tab(config, qapp):
 
     return MagnifierTab(config, HotkeyManager(config, StateMachine(config)))
 
+
+# ---------------------------------------------------------------- 搜索防抖
 
 def test_vehicle_config_search_debounced(config, qapp, monkeypatch):
     """输入过程中不过滤；停止输入后只过滤一次（最后一次输入生效）。"""
@@ -127,3 +139,44 @@ def test_vehicle_filter_widget_tag_change_debounced(qapp):
 
     QTest.qWait(WAIT_MS)
     assert len(fired) == 1
+
+
+# ---------------------------------------------------------------- splitter 落盘时机
+
+def _release_event():
+    from PyQt5.QtCore import QEvent, QPointF, Qt
+    from PyQt5.QtGui import QMouseEvent
+
+    return QMouseEvent(QEvent.MouseButtonRelease, QPointF(1, 1),
+                       Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+
+
+def test_vehicle_config_splitter_saves_only_on_release(config, qapp, monkeypatch):
+    """M17：拖动中 splitterMoved 不写 config；handle release 才写一次。"""
+    tab = _make_vehicle_tab(config, qapp)
+    saved = []
+    monkeypatch.setattr(tab.config, "set_splitter_sizes", lambda n, s: saved.append((n, s)))
+
+    tab._on_splitter_moved(10, 1)
+    tab._on_splitter_moved(20, 1)
+    assert saved == [], "拖动中不应落盘"
+
+    tab.eventFilter(tab.splitter.handle(1), _release_event())
+    assert len(saved) == 1 and saved[0][0] == "vehicle_config"
+
+    # release 后再无脏标记，重复 release 不重复写
+    tab.eventFilter(tab.splitter.handle(1), _release_event())
+    assert len(saved) == 1
+
+
+def test_resource_tab_splitter_saves_only_on_release(config, qapp, monkeypatch):
+    """M17：resource_tab 同契约（两处独立修改，都要锁住）。"""
+    tab = _make_resource_tab(config, qapp)
+    saved = []
+    monkeypatch.setattr(tab.config, "set_splitter_sizes", lambda n, s: saved.append((n, s)))
+
+    tab._on_splitter_moved(5, 1)
+    assert saved == []
+
+    tab.eventFilter(tab.splitter.handle(1), _release_event())
+    assert len(saved) == 1 and saved[0][0] == "resource_tab"

@@ -4,6 +4,39 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-27 测试按被测单元重组：27 → 13 个文件，断言一条不动
+
+**问题不在数量，在命名维度。** 一半文件叫 `test_batch4_p1` / `test_wave_c2_signals`，
+记的是「哪一浪、哪一批」——时间维度没有上限（浪会一直开），模块维度才有（core 21 个
+模块、tabs 13 个页面）。所以文件数跟着时间涨，不跟着代码收敛。
+
+连带一个更实际的损失：想「只跑相关的」时，文件名回答不了该跑哪个。改的是
+`gui/main_window.py` 的主题逻辑，而 `test_wave_c2_signals.py` 里装着跨页信号、主题
+重绘、ammo_wheel 补偿、no-tab noop 四件不相干的事——必须读文件才知道。
+
+**做法**：按被测源文件重新归并，断言一行不改、一条不删；各文件的模块级 docstring
+（记着「这条契约为什么存在」）随测试一起搬进新文件的顶端，按主题分段。
+
+```
+test_bbox_scanner(10) test_cleanup_contract(24) test_config(15) test_vehicle_config(16)
+test_main_window(16)  test_tabs(8)  test_magnifier(9)  test_angle_meter(7)
+test_ammo_wheel(2)    test_hotkey(4) test_resources(5)  test_entry(4)  test_widgets(6)
+```
+
+**怎么证明没搬丢**：归并前后各跑一次 `pytest --collect-only -q`，把测试函数名排序后
+逐行 diff。131 → 131 且**逐行完全一致**（含参数化展开的重复行）。这比「我检查过了」
+硬——它不依赖人的注意力。归并后全量 131 passed。
+
+**顺带修掉两处会在搬家时失效的引用**：
+- `test_win32_entry.py` 的白名单里写着自己的文件名（该文件用正则描述违规形态，
+  要排除自身），改名后必须同步，否则将来可能自匹配失败；
+- `docs/RULES.md` §9 指向 `tests/test_win32_entry.py` → `tests/test_entry.py`。
+  另有一处 docstring 指向 `test_wave_d_contract.py`，同批改为 `test_cleanup_contract.py`。
+
+**没有删任何测试。** 存量 131 条跑完 60 秒，删掉的收益不足一分钟，删错一条则永久
+失去一个警报。整合时也没发现逐字重复的函数——重复的是 helper（`_make_vehicle_tab`
+在防抖与 splitter 两批各写了一份），归并到同一文件后自然合成一份。
+
 ## 2026-10-27 行尾策略入库：从「靠纪律守」改为「靠机制保证」
 
 > 代码改动：新增 `.gitattributes`、`.git-blame-ignore-revs`；`tools/audit_docs.py` 第 9 项重写；44 个文件 CRLF→LF。

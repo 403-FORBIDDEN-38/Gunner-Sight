@@ -1,20 +1,33 @@
-r"""批次 2 契约测试：数据目录降级（P5）+ 配置损坏回退（P6）+ 日志目录降级（P4）。
+r"""core/config/base.py：数据目录降级、配置损坏回退、保存并发安全。
 
-背景（PORTABILITY_REVIEW_2026-10-24.md）：
-- P5：config 钉死 exe 同级，只读安装（Program Files 标准用户）下设置全部丢失；
-- P6：配置损坏 + 备份失败时，骨架会静默覆盖原文件，用户数据永久丢失；
-- P4：日志/startup_log 写盘无保护，只读位置双击"什么都没发生"。
+这个模块守的是**用户数据**——坏了不崩，只是设置全丢或者配置静默被覆盖。
+四类契约：
 
-修复行为契约：
-1. exe 同级可写 → 维持便携（默认路径不变）；
-2. 不可写 → 降级 %APPDATA%\GunnerSight\config，并把出厂 config.json 复制过去做种子；
-3. %APPDATA% 也不可写 → 降级 %TEMP%\GunnerSight\config；
-4. 配置损坏：原文件必须先留痕（backups 改名 / 同目录改名 / 恢复副本至少一样成功）
-   才允许写骨架；全部失败则原文件原地保留，绝不静默覆盖；
-5. 日志目录 mkdir 失败 → 降级 %TEMP%/GunnerSight/logs。
+**P5 数据目录降级**
+config 原先钉死 exe 同级，只读安装（Program Files 标准用户）下设置全部丢失。
+现在：exe 同级可写 → 维持便携（默认路径不变）；不可写 → 降级
+%APPDATA%\GunnerSight\config，并把出厂 config.json 复制过去做种子（77 载具库
+不丢）；%APPDATA% 也不可写 → 降级 %TEMP%\GunnerSight\config 保命。
+
+**P6 配置损坏回退**
+原先"损坏 + 备份失败"时骨架会静默覆盖原文件，用户数据永久丢失。现在：原文件
+必须先留痕（backups 改名 / 同目录改名 / 恢复副本至少一样成功）才允许写骨架；
+全部失败则原文件原地保留，绝不静默覆盖。
+
+**P4 日志目录降级**
+日志/startup_log 写盘无保护，只读位置双击"什么都没发生"——mkdir 失败要降级到
+%TEMP%/GunnerSight/logs，否则用户连排查入口都没有。
+
+**S2/M7 保存并发安全**
+① `_atomic_write` 曾在 `_save_lock` 之外——主线程立即保存与 Timer 防抖保存并发
+时，两条路径交错写同一个 `config.json.tmp` 再 os.replace，可把半截 JSON 换成
+正式配置（下次启动加载失败回退骨架 = 用户设置全丢）。
+② 旧 Timer 的回调把新 Timer 的引用清成 None，防抖失效、退出前悬挂 Timer。
 """
 import json
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -23,7 +36,77 @@ from core.config import base as cfg_base
 from core.config_manager import ConfigManager
 
 
-# ---------- P5：数据目录降级 ----------
+# ---------------------------------------------------------------- 保存并发安全
+
+def test_atomic_write_runs_inside_save_lock(config, monkeypatch):
+    """S2 契约：_atomic_write 必须在 _save_lock 内执行（修复前在锁外）。"""
+    observed = []
+    real_atomic = config._atomic_write
+
+    def spy(data):
+        observed.append(config._save_lock.locked())
+        return real_atomic(data)
+
+    monkeypatch.setattr(config, "_atomic_write", spy)
+
+    config.save_config()
+    config._do_deferred_save(object())  # 直接驱动一次防抖落盘
+
+    assert observed == [True, True]
+
+
+def test_concurrent_saves_never_corrupt_config(config, tmp_path):
+    """立即保存与防抖保存并发撞车：config.json 必须始终可解析、无 .tmp 残留。"""
+    stop = threading.Event()
+
+    def immediate_saver():
+        while not stop.is_set():
+            config.save_config()
+
+    def deferred_saver():
+        while not stop.is_set():
+            config.request_save()
+            time.sleep(0.6)  # >500ms 防抖窗，让 Timer 真的到点（更短会被反复取消）
+
+    threads = [threading.Thread(target=immediate_saver) for _ in range(2)]
+    threads.append(threading.Thread(target=deferred_saver))
+    for t in threads:
+        t.start()
+    time.sleep(1.2)
+    stop.set()
+    for t in threads:
+        t.join(timeout=5)
+
+    data = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert data["my_beloved"] == "Xiaocheng"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_stale_deferred_callback_keeps_newer_timer_reference(config):
+    """M7 契约：过期 Timer 的回调不得清掉新 Timer 的引用。"""
+    config.request_save()
+    first_timer, first_token = config._save_timer, config._save_token
+    config.request_save()  # 取消旧的、换新的
+    second_timer, second_token = config._save_timer, config._save_token
+    assert second_timer is not first_timer
+    assert second_token is not first_token
+
+    try:
+        # 过期的回调后跑完：不动新 Timer 的引用
+        config._do_deferred_save(first_token)
+        assert config._save_timer is second_timer
+        assert config._save_token is second_token
+
+        # 新 Timer 的回调：正常清引用
+        config._do_deferred_save(second_token)
+        assert config._save_timer is None
+        assert config._save_token is None
+    finally:
+        for t in (first_timer, second_timer):
+            t.cancel()
+
+
+# ---------------------------------------------------------------- P5：数据目录降级
 
 def test_is_writable_true_for_tmp_dir(tmp_path):
     assert cfg_base._is_writable(tmp_path) is True
@@ -113,7 +196,7 @@ def test_degrade_to_temp_when_appdata_also_unwritable(tmp_path, monkeypatch):
     assert cm.config_file.is_file()  # 骨架已落盘（能启动）
 
 
-# ---------- P6：配置损坏回退 ----------
+# ---------------------------------------------------------------- P6：配置损坏回退
 
 def _write_corrupt(config_dir: Path):
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -176,7 +259,7 @@ def test_corrupt_config_keeps_original_when_all_recovery_fails(tmp_path, monkeyp
     assert cm.recovery_notices and "无法备份" in cm.recovery_notices[0]
 
 
-# ---------- P4：日志目录降级 ----------
+# ---------------------------------------------------------------- P4：日志目录降级
 
 def test_log_dir_falls_back_to_temp_when_unwritable(tmp_path, monkeypatch):
     r"""契约 5：frozen 且 exe 同级 logs 不可建 → 降级 %TEMP%/GunnerSight/logs。"""
@@ -202,7 +285,7 @@ def test_log_dir_normal_path_unchanged(monkeypatch):
     assert log_dir.name == "logs"
 
 
-# ---------- P5：信息页可见性 ----------
+# ---------------------------------------------------------------- P5：信息页可见性
 
 def test_info_tab_shows_data_dir(qapp, config):
     """P5：信息页显示当前数据目录（只读降级后用户需要知道配置去向）。"""

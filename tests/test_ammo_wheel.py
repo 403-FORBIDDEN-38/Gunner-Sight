@@ -1,13 +1,14 @@
-"""回归：滚轮预选列表期间，弹种热键命令必须结束预选（回到常显）。
+"""core/ammo_wheel_selector.py：滚轮预选列表与弹种热键的交接。
 
+**热键必须能结束预选，哪怕选的是当前弹种**
 历史问题：热键选中的**就是当前弹种**时，`StateMachine.set_ammo_type` 因值未变化
 直接 return（细粒度信号约定，避免冗余刷新），滚轮模块收不到任何信号，预选列表
 一直挂到 2s 超时。表现："用热键选择已选中的弹种失败，必须选别的弹种 / 等超时 /
-左键确定才能回到当前列表"。修法与左键确定（`_on_mouse_down`）对齐：
-目标等于当前弹种时也要结束预选。
+左键确定才能回到当前列表"。修法与左键确定（`_on_mouse_down`）对齐：目标等于
+当前弹种时也要结束预选。
 
-这里复刻 `main.py` 的接线顺序（先 `state.set_ammo_type`，后 `selector.on_ammo_hotkey`），
-因为"弹种没变就不发信号"正是要靠这个顺序才能暴露出来。
+这里复刻 `main.py` 的接线顺序（先 `state.set_ammo_type`，后
+`selector.on_ammo_hotkey`），因为"弹种没变就不发信号"正是要靠这个顺序才能暴露。
 """
 import pytest
 from PyQt5.QtCore import QObject, pyqtSignal

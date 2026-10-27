@@ -1,13 +1,19 @@
-"""Win32 调用入口与签名契约（RULES §9：ctypes 签名是门禁盲区）。
+"""入口与账本：Win32 调用签名（RULES §9）+ 版本号同源（P3-1）。
 
-为什么需要这个文件：ruff 不查 ctypes，运行时不报错，类型也不报——
-**未声明 argtypes 的 Win32 调用在 64 位上会静默截断句柄，而程序照常工作**，
-直到某个用户的窗口句柄恰好落在高地址。这是"现在能用纯属碰巧"那一类缺陷，
-只能靠可执行检查兜住，靠人眼 review 兜不住。
+这个文件里的东西没有任何运行时症状——错了也照常工作，直到某台机器上恰好
+踩中。所以只能靠可执行检查兜住，靠人眼 review 兜不住。
 
-两条契约：
-1. `core/win32_utils.py` 是唯一入口，其余模块只准 `from core.win32_utils import user32`；
+**Win32 签名是门禁盲区**
+ruff 不查 ctypes，运行时不报错，类型也不报——**未声明 argtypes 的 Win32 调用
+在 64 位上会静默截断句柄，而程序照常工作**，直到某个用户的窗口句柄恰好落在
+高地址。这是"现在能用纯属碰巧"那一类缺陷。两条契约：
+1. `core/win32_utils.py` 是唯一入口，其余模块只准
+   `from core.win32_utils import user32`；
 2. 凡是被业务代码调用的 API，必须在 win32_utils 里显式声明 argtypes/restype。
+
+**版本号只有一个权威**
+APP_VERSION 是唯一真源，pyproject 从它同步。此前靠人工 + 注释约定，
+tests/ 下 grep APP_VERSION 零命中，无机械校验——改一处忘另一处不会有任何症状。
 """
 import re
 from pathlib import Path
@@ -19,12 +25,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # - tools/ui_access_test.py：独立的界面探针工具，不 import core（故意与主程序解耦）
 # - main.py：启动失败路径的 MessageBox，跑在"core 可能已经坏了"的时候，
 #   多依赖一个项目模块就多一种连报错都弹不出来的可能
+# - 本文件用正则描述违规形态，留一条以免将来改动后自匹配
 ALLOWED_DIRECT = {
     "core/win32_utils.py",
     "tools/ui_access_test.py",
     "main.py",
-    # 本文件用正则描述违规形态，必然自匹配
-    "tests/test_win32_entry.py",
+    "tests/test_entry.py",
 }
 
 # 业务代码实际调用到的、必须已声明签名的 API
@@ -51,6 +57,8 @@ def _scan_py_files():
             continue
         yield rel, p
 
+
+# ---------------------------------------------------------------- Win32
 
 def test_no_direct_windll_user32_outside_entry_point():
     """除白名单外，不允许各自 ctypes.windll.user32 / WinDLL('user32')。"""
@@ -95,3 +103,16 @@ def test_return_types_are_explicit():
 
     assert win32_utils.user32.SetWindowDisplayAffinity.restype is wintypes.BOOL
     assert win32_utils.user32.GetSystemMetrics.restype is ctypes.c_int
+
+
+# ---------------------------------------------------------------- 版本号账本
+
+def test_app_version_pyproject_sync():
+    """pyproject version 必须等于 APP_VERSION 去掉前缀 V。"""
+    from gui.tabs.info_tab import APP_VERSION
+
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert m, "pyproject.toml 缺 [project] version 行"
+    assert m.group(1) == APP_VERSION.lstrip("V"), (
+        f"版本号不同源：pyproject={m.group(1)} APP_VERSION={APP_VERSION}")

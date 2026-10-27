@@ -1,12 +1,16 @@
-"""批次 4 浪 2：P1 五项契约测试。
+"""core/resource_manager.py + config 的资源路径：读写分离（P1-2）。
 
-P1-2（本文件主体）：资源目录读写分离。
-- config.resources_write_dir：exe 同级不可写时降级到 config 侧 resources；
-- config.resolve_resource_path：读多路径（出厂目录优先，写目录兜底）；
-- ResourceManager：list 取并集、get 两处都找、导入/删除落写路径。
+只读安装（Program Files 标准用户）下 exe 同级 resources 不可写，导入的准星图
+无处可落。修法是把「读」与「写」分成两个路径：
 
-P1-1 / P1-4 的验证属命令级（uv lock --check 无环境变量通过；_LibpngFilter
-删除后无引用），不做同义反复测试。P1-3 的接线契约在 test_wave_d_contract.py。
+- `config.resources_dir`：读主路径（exe 同级出厂资源）
+- `config.resources_write_dir`：写路径（不可写时降级到 config 侧 resources）
+- `config.resolve_resource_path`：读多路径——出厂目录优先，写目录兜底，
+  两处都无时回主路径（交下游判空）
+- `ResourceManager`：list 取并集、get 两处都找、导入/删除落写路径
+
+P1-1 / P1-4 的验证属命令级（`uv lock --check` 无环境变量通过；`_LibpngFilter`
+删除后无引用），不做同义反复测试。P1-3 的接线契约在 test_cleanup_contract.py。
 """
 from pathlib import Path
 
