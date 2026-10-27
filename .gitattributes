@@ -1,0 +1,12 @@
+# 行尾策略（唯一真源，别再靠记忆和纪律守）
+#
+# 除批处理外全库 LF：
+#   - git 存储层只能有一种，LF 是唯一跨平台的
+#   - Python 官方要求 \n（PEP 8）；git 官方默认推荐也是存 LF
+#   - 编辑器/工具写回 CRLF 时 git 在 add 阶段自动归一化，不通到仓库
+#
+# 批处理是硬约束（cmd.exe 自己按字节解析，且用户可能直接下 ZIP 构建），
+# 用 -text 完全关闭转换：仓库、工作区、ZIP 里一律 CRLF。
+* text=auto eol=lf
+*.bat -text
+*.cmd -text
