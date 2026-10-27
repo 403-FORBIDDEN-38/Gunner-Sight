@@ -81,7 +81,7 @@ class MagnifierTab(QWidget):
         # 行1：屏息半径步长(左) | 屏息倍率步长(中) | Y偏移(右)
         p.addWidget(QLabel("屏息半径步长:"), 1, 0)
         self.breath_step_spin = QSpinBox()
-        self.breath_step_spin.setRange(1, 500)
+        self.breath_step_spin.setRange(0, 500)
         self.breath_step_spin.setSuffix(" px")
         p.addWidget(self.breath_step_spin, 1, 1)
 
@@ -383,12 +383,6 @@ class MagnifierTab(QWidget):
 
     # ---------- param callbacks ----------
 
-    def _on_zoom(self, val):
-        self.config.set_magnifier_zoom(val)
-        self.zoom_display.setText(f"{val:.2f}x")
-        if self.overlay:
-            self.overlay.set_zoom(val)
-
     def _on_radius(self, val):
         self.config.set_magnifier_radius(int(val))
         if self.overlay:
@@ -450,17 +444,16 @@ class MagnifierTab(QWidget):
 
     def zoom_in(self):
         if self.overlay:
-            z = self.config.get_magnifier_zoom() + 0.5
-            self.config.set_magnifier_zoom(z)
-            self.zoom_display.setText(f"{z:.2f}x")
-            self.overlay.set_zoom(z)
+            # 步长作用在旋钮上：屏息期间也照常调，松开屏息只撤加成（见 overlay.adjust_zoom）
+            base = self.overlay.adjust_zoom(0.5)
+            self.config.set_magnifier_zoom(base)
+            self.zoom_display.setText(f"{self.overlay.zoom():.2f}x")
 
     def zoom_out(self):
         if self.overlay:
-            z = max(1.0, self.config.get_magnifier_zoom() - 0.5)
-            self.config.set_magnifier_zoom(z)
-            self.zoom_display.setText(f"{z:.2f}x")
-            self.overlay.set_zoom(z)
+            base = self.overlay.adjust_zoom(-0.5)
+            self.config.set_magnifier_zoom(base)
+            self.zoom_display.setText(f"{self.overlay.zoom():.2f}x")
 
     def breath_hold(self):
         if self.overlay:

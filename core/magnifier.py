@@ -5,6 +5,14 @@
 - 开关（toggle热键）：功能+窗口同时开关
 - 暂离（suspend）：只控制窗口可视性，不影响开关状态
 
+倍率与半径各有两个数，不是一个：
+- 旋钮 `_zoom` / `_radius`：持久化到 config，决定**松开屏息后**落在哪
+- 屏息加成 `_breath_zoom` / `_breath_radius`：只在按住期间存在，松开即清零
+
+屏幕上看到的是两者之和（`_effective_*`）。加成不是"第二份倍率"，它是
+"这次按住加了 +N、松开要减回 -N"的在途记账——所以按住屏息期间调旋钮，
+松开时只撤掉加成，调过的值留着。
+
 截屏+缩放跑在副线程，主线程只负责paint。
 """
 import threading
@@ -15,6 +23,9 @@ from PyQt5.QtCore import Qt, QRect, QThread, pyqtSignal, pyqtSlot
 from core.logger import logger
 from core.win32_utils import WDA_EXCLUDEFROMCAPTURE, user32
 from PyQt5.QtGui import QPainter, QColor, QPen, QRegion, QImage, QPixmap
+
+ZOOM_MIN = 1.0
+RADIUS_MIN = 10
 
 
 class _GrabWorker(QThread):
@@ -103,16 +114,17 @@ class _GrabWorker(QThread):
 class MagnifierOverlay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._radius = 200
-        self._zoom = 2.0
+        self._radius = 200          # 旋钮：松开屏息后的半径
+        self._zoom = 2.0            # 旋钮：松开屏息后的倍率
+        self._breath_radius = 0     # 屏息加成（在途，松开即清零）
+        self._breath_zoom = 0.0
+        self._hold_active = False
         self._active = False
         self._suspended = False
         self._scaled = None
         self._pixmap = None
         self._fps = 60
         self._worker = None
-        self._hold_original_radius = None
-        self._hold_original_zoom = None
         self._ox = 0
         self._oy = 0
 
@@ -126,45 +138,79 @@ class MagnifierOverlay(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self._resize_circle()
 
+    # ===== 派生值：屏幕上实际生效的大小与倍率 =====
+    def _effective_radius(self) -> int:
+        return max(RADIUS_MIN, self._radius + self._breath_radius)
+
+    def _effective_zoom(self) -> float:
+        return max(ZOOM_MIN, self._zoom + self._breath_zoom)
+
     def _resize_circle(self):
-        size = self._radius * 2
+        size = self._effective_radius() * 2
         self.resize(size, size)
         self.setMask(QRegion(QRect(0, 0, size, size), QRegion.Ellipse))
 
     def set_radius(self, r: int):
-        self._radius = max(10, int(r))
+        """设旋钮半径（松开屏息后的大小）。屏息加成不受影响。"""
+        self._radius = max(RADIUS_MIN, int(r))
         self._resize_circle()
         self._reposition()
         self._reconfigure_worker()
-        if self._active and not self._suspended and self._zoom > 1.0:
+        if self._active and not self._suspended and self._effective_zoom() > ZOOM_MIN:
             self.show()
 
     def set_zoom(self, z: float):
-        self._zoom = max(1.0, float(z))
+        """设旋钮倍率。屏息加成不受影响：按住期间看到的是 旋钮+加成。"""
+        self._zoom = max(ZOOM_MIN, float(z))
         self._apply_visibility()
         self._reconfigure_worker()
 
-    def zoom(self) -> float:
+    def adjust_zoom(self, delta: float) -> float:
+        """按步长调旋钮；旋钮顶到下限时，差额转记到屏息加成上。
+
+        返回新的旋钮值（调用方据此持久化）。若到限就什么都不做，热键会变成
+        "按了没反应"，违反手感；把差额记在屏息账上至少画面会动，而松开屏息
+        仍然落回旋钮——不会把临时效果写成持久值。
+        """
+        old = self._zoom
+        self._zoom = max(ZOOM_MIN, old + delta)
+        spill = delta - (self._zoom - old)      # 旋钮没吃下的那部分
+        if self._hold_active and spill:
+            self._breath_zoom = max(0.0, self._breath_zoom + spill)
+        self._apply_visibility()
+        self._reconfigure_worker()
         return self._zoom
+
+    def zoom(self) -> float:
+        """屏幕上当前的倍率（旋钮 + 屏息加成）。"""
+        return self._effective_zoom()
+
+    def radius(self) -> int:
+        """屏幕上当前的半径（旋钮 + 屏息加成）。"""
+        return self._effective_radius()
 
     def set_fps(self, fps: int):
         self._fps = max(15, min(144, fps))
         self._reconfigure_worker()
 
     def toggle_breath_hold(self, step: int = 20, zoom_step: float = 0.0):
-        """屏息缩放：按一下半径+step且倍率+zoom_step，再按减回来"""
-        if self._hold_original_radius is None:
-            self._hold_original_radius = self._radius
-            self._hold_original_zoom = self._zoom
-            self.set_radius(self._radius + step)
-            if zoom_step > 0:
-                self.set_zoom(self._zoom + zoom_step)
+        """屏息：按住时加一份临时半径/倍率，松开时把**同一份**减回去。
+
+        加的是偏移不是快照——按住期间改旋钮（set_zoom/set_radius/adjust_zoom），
+        松开只撤加成，改过的值留着。热键 toggle 模式下同一函数连按两次即一开一合。
+        """
+        if not self._hold_active:
+            self._hold_active = True
+            self._breath_radius = max(0, int(step))
+            self._breath_zoom = max(0.0, float(zoom_step))
         else:
-            self.set_radius(self._hold_original_radius)
-            if zoom_step > 0:
-                new_z = max(1.0, self._zoom - zoom_step)
-                self.set_zoom(new_z)
-            self._hold_original_radius = None
+            self._hold_active = False
+            self._breath_radius = 0
+            self._breath_zoom = 0.0
+        self._resize_circle()
+        self._reposition()
+        self._reconfigure_worker()
+        self._apply_visibility()
 
     # ===== 开关（功能+窗口）=====
     def set_active(self, active: bool):
@@ -181,7 +227,8 @@ class MagnifierOverlay(QWidget):
 
     def _apply_visibility(self):
         # 1x倍率不需要放大，直接停截隐藏；暂离也停截
-        should_show = self._active and not self._suspended and self._zoom > 1.0
+        zoom = self._effective_zoom()
+        should_show = self._active and not self._suspended and zoom > ZOOM_MIN
         if should_show:
             self._reposition()
             self.show()
@@ -191,7 +238,7 @@ class MagnifierOverlay(QWidget):
         else:
             self.hide()
         # 1x或暂离时停止抓屏
-        need_worker = self._active and not self._suspended and self._zoom > 1.0
+        need_worker = self._active and not self._suspended and zoom > ZOOM_MIN
         if need_worker and not (self._worker and self._worker.isRunning()):
             self._start_worker()
         elif not need_worker and self._worker:
@@ -211,7 +258,7 @@ class MagnifierOverlay(QWidget):
         sw = user32.GetSystemMetrics(0)
         sh = user32.GetSystemMetrics(1)
         cx, cy = sw // 2, sh // 2
-        src_size = max(2, int(self._radius * 2 / self._zoom))
+        src_size = max(2, int(self._effective_radius() * 2 / self._effective_zoom()))
         left = cx - src_size // 2
         top = cy - src_size // 2
         return (left, top, left + src_size, top + src_size), src_size
