@@ -43,17 +43,18 @@ banner_w = Image.open(ROOT / "resources/assets/splash/full.png").size[0]
 win_w = int(re.search(r"WINDOW_SIZE = \((\d+),", read("gui/main_window.py")).group(1))
 check(f"窗口宽度 {win_w} == 横幅宽度 {banner_w}", win_w == banner_w)
 
-# 3. 文档提到"已删除/已搬走"的常量时，代码里确实没有
+# 3. 强调色只有一个来源（cfg），colors.py 里不许再出现常量
+#    这里曾经是 `not defined or "已删除" in HAND`——而 HANDOVER 别处本来就有"已删除"
+#    三个字（讲 release.bat 和旧 tag），于是那两项从写下那天起就恒绿。检查项"一直通过"
+#    时必须去读它的实现，不能拿通过当证据。
 colors = read("core/colors.py")
-for name, should_exist in [("THEME_DARK", True), ("THEME_LIGHT", True),
-                           ("OVERLAY_BOX_RGB", True), ("ACCENT", False),
-                           ("ACCENT_HOVER", False)]:
-    defined = bool(re.search(rf"^{name}\b", colors, re.M))
-    if should_exist:
-        check(f"colors.py 定义了 {name}", defined, "文档拿它当唯一来源")
-    else:
-        check(f"colors.py 里 {name} 已删除（文档若提它必须是在提醒'别再用'）",
-              not defined or "已删除" in HAND, f"{name} 又回来了？")
+for name in ("THEME_DARK", "THEME_LIGHT", "OVERLAY_BOX_RGB"):
+    check(f"colors.py 定义了 {name}",
+          bool(re.search(rf"^{name}\b", colors, re.M)), "文档拿它当唯一来源")
+for name in ("ACCENT", "ACCENT_HOVER"):
+    check(f"colors.py 里没有 {name} 常量（强调色只从 cfg 取）",
+          not re.search(rf"^{name}\b", colors, re.M),
+          f"{name} 又变成常量了——强调色必须走 config.get_accent_*()")
 
 # 4. 文档承诺的 SSOT 组件都在
 for path, sym in [("gui/widgets.py", "class LinkedSpinSlider"),

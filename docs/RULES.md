@@ -4,7 +4,7 @@
 > 本文件只写**判据**：该怎么做、做错会怎样。**不写现状，不写故事，不写待办。**
 > 现状 → `docs/HANDOVER.md`（唯一权威，读完再动手） · 经过 → `docs/CHANGE_LOG.md`
 > 测量方法（怎么量、量哪儿）也在 HANDOVER 第九节——那是"这个项目怎么验证"，属现状。
-> 最后复核：2026-10-25
+> 最后复核：2026-10-28
 
 ---
 
@@ -153,8 +153,7 @@ box, layout = make_group_box("标题", layout_cls=QFormLayout)   # 换布局类�
 * 主题调色板：`THEME_DARK` / `THEME_LIGHT`（键：bg/ctrl/border/hover/text/subtext/dis_text）
 * **强调色来自 cfg，不是常量**：出厂默认在 `core/config/base.py` 的默认模板
   `global_settings.accent_dark` / `accent_light`，运行时用
-  `config.get_accent_dark()` / `get_accent_light()`。
-  **`ACCENT` / `ACCENT_HOVER` 常量已删除，不要再 import**
+  `config.get_accent_dark()` / `get_accent_light()`
 * 强调色底上的文字走主题字典的 `on_accent_text`
 * 主题字典的键：`bg / ctrl / btn / base / border / hover / text / subtext / dis_text / on_accent_text`
   （`btn` 给按钮、`base` 给输入框；**QSS 里按钮必须显式写 `background-color`**，
@@ -223,7 +222,6 @@ panel.add_requested / rename_requested / delete_requested
   另有 20 张扫描帧（尺寸相同），窗口就必须 800 宽；两者都居中，所以边缘正好对齐
 * **改宽度前先看 `resources/assets/splash/` 里的图** —— 图宽是唯一权威，
   不要反过来按代码改图
-* 不要再用 "按屏幕 clamp" 的逻辑决定窗口尺寸（那是为了绕开一个误判）
 
 ### 4.6 滚轮：无焦点控件不吞滚轮，且转发给最近的滚动区
 
@@ -266,8 +264,7 @@ Windows 上非 0 可能是退出期崩溃而非断言失败——先看是不是
 **静态测不了 OS 资源释放**：`mock` 能证明"前一步失败后一步仍执行"（代码路径），
 证明不了"句柄真的还回去了"。别把前者当成后者——后者靠代码审查 + 运行时观察（句柄数、日志）。
 
-**测试数量没有上限**。项目历史峰值 100+ passed，"≤30 条"那类红线已退役——
-按契约需要写，别为凑数写，也别为省事不写。
+**按契约需要写，别为凑数写，也别为省事不写。**
 
 ---
 
