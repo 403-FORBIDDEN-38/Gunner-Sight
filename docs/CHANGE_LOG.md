@@ -4,6 +4,46 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-27 弹种重命名：绑定在画面上全丢（刷新顺序）+ 右键菜单补重命名
+
+> 代码改动：`gui/tabs/vehicle_config_tab.py`、`core/state_machine.py`、`USER_GUIDE.md` 3-3；新增 7 条测试。
+
+**现象**：弹种改名后，右下倍率列表三行全变成「双击绑定图片」，弹种列表也没有选中项——看起来绑定全丢、配置废了。切到别页再回来就恢复正常。
+
+**数据从来没丢**：crosshairs 是弹种字典内部的一份（`ammo_types[弹种]["crosshairs"][倍率label]`），改名只改外层 key，绑定跟
+着走（有测试守着）。所以这是纯显示层的事故，不是数据损坏。
+
+**真正的原因是一瞬间的刷新顺序**：
+
+```
+state.rename_ammo_type → 改 key → set_ammo_type(新名) → ammo_type_changed
+  → on_external_ammo_changed → _refresh_mag_list
+    → _get_selected_ammo() 读到的还是列表上的旧名 → 按旧名查 crosshair → 全空
+  → 回到 _on_rename_ammo 的 _refresh_ammo_list()：拿旧名当恢复目标 → 找不到 → currentRow=-1
+```
+
+一句话：**数据已经换了名字，视图还挂着旧名字**，两者在同一个事件里交错。
+
+**改法**：改名成功后按新数据重建列表、按 state 重新选中，再显式刷倍率列表与详情
+（`_refresh_ammo_list(force_select=state.current_ammo_type)` → `_refresh_mag_list(select_idx=…)`
+→ `_update_mag_detail()`）。载具重命名那条路径本来就是这么做的（先重建列表再
+`_select_row_by_data`），弹种这条少了这一步，属漏抄。
+
+**一条判据**：改数据 → 重建视图 → 按 state 选中 → 再刷下游。禁止在「视图仍显示旧名」的时刻
+去查新名字对应的数据。刷新顺序是这类 bug 的唯一产地，与绑定无关的地方也适用。
+
+**顺带修的两处**：
+
+* `StateMachine.rename_ammo_type` 现在返回 bool，且**改成功才** `set_ammo_type`。旧实现无条件
+  切到新名：撞名时会把当前弹种静默切到「另一个已存在的同名弹种」，用户完全看不出发生了什么。
+  撞名现在提示「已存在」并保持原样。
+* 弹种右键菜单补上「重命名」（此前只有清除弹种UI绑定 / 删除弹种，改名只能靠按钮；而手册
+  3-1 早就写着「右键列表项打开菜单，用于添加、重命名、删除、清除绑定」——菜单欠着这一项）。
+
+**测试**：`tests/test_ammo_rename.py` 7 条（数据层保绑定、界面层不退化、撞名提示、取消静默、
+右键菜单可达且真能改名）。有牙验证：把 `_on_rename_ammo` 换回旧实现，立刻 3 条红（绑定退化、
+撞名无提示、菜单改名后丢绑定）。
+
 ## 2026-10-27 修放大镜：屏息加成与倍率步长互相覆盖
 
 > 代码改动：`core/magnifier.py`、`gui/tabs/magnifier_tab.py`；新增 9 条测试。

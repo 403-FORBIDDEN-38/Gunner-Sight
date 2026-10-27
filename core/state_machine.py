@@ -196,15 +196,22 @@ class StateMachine(QObject):
         if was_current:
             self.set_ammo_type(None)
 
-    def rename_ammo_type(self, vehicle_name: str, old_name: str, new_name: str):
-        """重命名弹种。如果重命名的是当前弹种，自动切到新名。"""
+    def rename_ammo_type(self, vehicle_name: str, old_name: str, new_name: str) -> bool:
+        """重命名弹种。如果重命名的是当前弹种，自动切到新名。
+
+        返回是否真的改了（重名/不存在一律 False）。调用方据返回值决定提示：
+        另外必须先确认改成功才能 set_ammo_type——旧实现无条件切到 new_name，
+        撞名时会把当前弹种静默切换到「另一个已存在的同名弹种」。
+        """
         was_current = (
             self.current_vehicle == vehicle_name
             and self.current_ammo_type == old_name
         )
-        self.config.rename_ammo_type(vehicle_name, old_name, new_name)
+        if not self.config.rename_ammo_type(vehicle_name, old_name, new_name):
+            return False
         if was_current:
             self.set_ammo_type(new_name)
+        return True
 
     def remove_magnification(self, vehicle_name: str, index: int):
         """删除倍率。如果删的是当前载具的倍率且越界，自动截断到合法范围。"""

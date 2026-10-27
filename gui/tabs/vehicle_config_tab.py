@@ -696,10 +696,22 @@ class VehicleConfigTab(QWidget):
             return
         old = item.data(Qt.UserRole)
         new, ok = QInputDialog.getText(self, "重命名弹种", "新名称:", text=old)
-        if ok and new.strip() and new != old:
-            self.state.rename_ammo_type(vehicle, old, new.strip())
-            self._refresh_ammo_list()
-            self.data_changed.emit()  # 弹种重命名同步热键键名
+        # M10 语义：取消 / 空名 / 未改名都是用户主动放弃，静默 return
+        if not ok or not new.strip() or new.strip() == old:
+            return
+        new = new.strip()
+        if not self.state.rename_ammo_type(vehicle, old, new):
+            QMessageBox.warning(self, "提示", f"弹种 '{new}' 已存在！")
+            return
+        # 刷新顺序是判据：rename_ammo_type 内部先改数据、再 set_ammo_type，
+        # 那一瞬间弹种列表还挂着旧名——信号里 _refresh_mag_list 按旧名查
+        # crosshair 只能查到空，画面表现为「重命名后倍率绑定全丢」（数据其实
+        # 完好，切页即恢复）。所以这里按新数据重建列表、按 state 重新选中，
+        # 再显式刷一次倍率列表（改名落在非当前弹种时不会有 state 信号）。
+        self._refresh_ammo_list(force_select=self.state.current_ammo_type)
+        self._refresh_mag_list(select_idx=self.state.current_magnification_index)
+        self._update_mag_detail()
+        self.data_changed.emit()  # 弹种重命名同步热键键名
 
     def _on_remove_ammo(self):
         vehicle = self._get_selected_vehicle()
@@ -973,12 +985,15 @@ class VehicleConfigTab(QWidget):
         action_clear = menu.addAction("清除弹种UI绑定")
         action_clear.setEnabled(bool(self.config.get_ammo_ui(vehicle, ammo)))
         menu.addSeparator()
+        action_rename = menu.addAction("重命名")
         action_delete = menu.addAction("删除弹种")
         chosen = menu.exec_(self.ammo_list.viewport().mapToGlobal(pos))
         if chosen == action_clear:
             self.config.set_ammo_ui(vehicle, ammo, "")
             self._refresh_ammo_list(keep_selection=True)
             self.state.refresh_overlay()
+        elif chosen == action_rename:
+            self._on_rename_ammo()
         elif chosen == action_delete:
             self._on_remove_ammo()
 
