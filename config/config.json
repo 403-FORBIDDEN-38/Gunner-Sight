@@ -8376,14 +8376,14 @@
             }
         },
         "fps": 120,
-        "breath_step": 30,
+        "breath_step": 0,
         "presets": {
             "TEST": {
                 "radius": 200,
-                "step": 20
+                "step": 0
             }
         },
-        "breath_zoom": 1.0,
+        "breath_zoom": 3.0,
         "current_preset": "TEST"
     }
 }
