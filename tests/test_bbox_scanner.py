@@ -22,7 +22,6 @@ import os
 import threading
 import time
 
-import pytest
 
 from core.bbox_crop import BboxCache, BboxScanner
 
@@ -164,9 +163,7 @@ def test_scan_done_pixmap_only_for_current_crosshair(config, qapp, tmp_path):
 
     from core.bbox_crop import CropResult
     from core.overlay import OverlayWindow
-    from core.state_machine import StateMachine
 
-    state = StateMachine(config)
     win = OverlayWindow()
     try:
         ui_path = str(tmp_path / "vehicle_ui.png")

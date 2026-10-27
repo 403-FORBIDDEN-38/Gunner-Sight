@@ -30,7 +30,6 @@ import threading
 import time
 from pathlib import Path
 
-import pytest
 
 from core.config import base as cfg_base
 from core.config_manager import ConfigManager

@@ -14,7 +14,6 @@ closeEvent）时，全局低级鼠标钩子必须释放——否则引用计数�
 """
 from unittest.mock import MagicMock
 
-import pytest
 
 
 def _fake_mouse_hook(monkeypatch):

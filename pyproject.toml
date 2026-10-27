@@ -63,7 +63,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E", "F"]
+# tests 只放过 E（测试里长行无所谓）；F（未使用导入/变量、重复定义）必须查——
+# 曾经连 F 一起放过，导致 RULES §9 那条死代码门禁在 tests/ 上是空转的。
+"tests/*" = ["E"]
 "core/win32_utils.py" = ["F403", "F405"]  # ctypes wildcard imports
 
 [tool.ruff.format]
