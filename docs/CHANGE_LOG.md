@@ -4,6 +4,32 @@
 "有价值的 CHANGE_LOG"：
 什么算有价值——只保留两类——(a) 已回退的方案及其失败原因；(b) 影响架构/接口/数据格式的改动。 其余（改个字符串、调个颜色、重写一个函数）不总结。
 
+## 2026-10-27 行尾策略入库：从「靠纪律守」改为「靠机制保证」
+
+> 代码改动：新增 `.gitattributes`、`.git-blame-ignore-revs`；`tools/audit_docs.py` 第 9 项重写；44 个文件 CRLF→LF。
+
+**不是修 bug，是撤掉一条本来就不该存在的纪律。**
+
+CRLF/LF 在本仓从来没有约定过（无 `.gitattributes`、`core.autocrlf=false`），分裂形态是化石而非规则：
+`.py` 39 CRLF / 43 LF；`docs/` 里只有 HANDOVER 是 CRLF，而同目录的 RULES、CHANGE_LOG 是 LF；零个混合文件。
+也就是说"哪个文件是什么行尾"取决于它被谁在什么时候创建，跟它是什么类型的文件完全无关。
+
+代价一直在付：改 CRLF 文件前核对字节、改完再复核一遍，审计里还要抽查 4 个文件的行尾风格。
+**这是用纪律守一件机制能直接解决的事。**
+
+现在：`* text=auto eol=lf`（全库 LF；编辑器写回 CRLF 会在 add 阶段被归一化，不通到仓库）
+\+ `*.bat -text`（批处理字节完全不过转换，仓库 / 工作区 / ZIP 一律 CRLF）。
+
+两条判据：
+
+- **批处理用 `-text` 而不是 `eol=crlf`**。后者是"存 LF、checkout 时转 CRLF"，于是从 ZIP 下载解压、
+  或网页直接查看时就是 LF，构建会坏。唯一有硬约束的文件，用最保守的方式锁死字节。
+- **审计第 9 项从"抽查 4 个文件的行尾风格"改成"断言策略本身 + 全量遍历"**。前者要维护一份手工清单
+  且永远只能抽查；后者跟着 `.gitattributes` 走，不需要维护。
+
+历史未被改写：renormalize 只影响新提交，checkout 回旧 commit 看到的仍是当年字节。
+`blame` 由 `.git-blame-ignore-revs` 跳过本次提交，行归属不受影响。
+
 ## 2026-10-27 弹种重命名：绑定在画面上全丢（刷新顺序）+ 右键菜单补重命名
 
 > 代码改动：`gui/tabs/vehicle_config_tab.py`、`core/state_machine.py`、`USER_GUIDE.md` 3-3；新增 7 条测试。

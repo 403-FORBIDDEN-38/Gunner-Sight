@@ -1,0 +1,7 @@
+# git blame 跳过的提交（纯格式改动，无内容变化）
+#
+# 用法：git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub 网页上的 blame 也会自动识别这个文件。
+#
+# 80daa01 行尾统一为 LF：全库 CRLF→LF，diff -w 为空可验
+80daa01d7e1515b74e9c21e60006299379e6270f

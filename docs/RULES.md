@@ -114,7 +114,7 @@
 | `.py` 改完 | `py -m py_compile <file>` |
 | `.json` 改完 | `json.load` 验一遍 |
 | `.bat` / `.cmd` | **必须 CRLF，且全文纯 ASCII**。这是两个独立的坑：① LF-only 时 `cmd.exe` 按 CR 分行，行会被拆开；② **即便已是 CRLF**，含中文的 `echo` 仍会被解析器**吞掉多字节字符**（实测：`echo 产物路径:` 被拆成 `echo 产` + 未知命令 `物路径:`，报"不是内部或外部命令"；去 BOM / `chcp 65001` / 路径加引号**全都治不了**）。另：`if (...)` 块内**不要出现 ASCII 括号**（会被当嵌套块，报"此时不应有 ."）。正解：中文说明搬到文档，`.bat` 只留 ASCII。写法 `open(p,"w",encoding="utf-8",newline="\r\n")`——注意 `newline=""` 是**不翻译**，会写出 LF。`.bat` 里的 `REM` 注释同样参与解析。改完**必须实测执行** |
-| 已有的 `.py` | 先确认换行符（CRLF/LF 混存，实测约六四开，没有"唯一 LF 例外"）。按内容精确匹配时，必须按**文件实际换行符**构造待匹配串，否则 0 命中 |
+| 已有的 `.py` | 全库 **LF**（`.gitattributes` 保证），按内容精确匹配直接用 `\n`。若碰到 CRLF，说明有工具绕过了 git（写了未跟踪文件或忽略了属性）——先查它，别顺着它改匹配串 |
 | 文件损坏 | 一行能修就修，**不重写整个文件**。重写必须做方法级对比（方法列表 / 签名 / 关键逻辑） |
 | 批量替换 | **先断言"预期命中 N 处"再落盘**。命中数不符 → 整体中止，不写 |
 
@@ -309,15 +309,15 @@ GitHub `/releases` 有没有 Draft。**先查再删**：2026-10-25 就是因为�
 
 **文档对账**：改完 `docs/HANDOVER.md` / `docs/RULES.md` 必跑 `py tools/audit_docs.py`。
 它把文档里的事实性断言（版本号、窗口宽度 vs 横幅宽度、颜色来源、承诺的 SSOT 组件、
-引用的路径、备份约定、F841 处数、换行风格）逐条拿去和代码核对。
+引用的路径、备份约定、F841 处数、行尾策略）逐条拿去和代码核对。
 **这个项目的文档是"现状的唯一权威"，而它烂过一次。**
 **文档漂移比代码 bug 贵：bug 会报错，过时文档不会。**
 
-**换行符**：`AGENTS.md`（钩子）、`docs/HANDOVER.md`、`tools/audit_docs.py` 是 **CRLF**；
-`docs/RULES.md`、`docs/CHANGE_LOG.md`、`README.md`、`USER_GUIDE.md` 是 **LF**。
-用 Python 改它们时注意：`read_text()` 默认把 CRLF 归一成 `\n`，
-再 `write_text(newline="")` 就写回 LF——**两个"默认值"叠起来正好吃掉换行风格**。
-要保 CRLF 就写 `newline="\r\n"`。改完用字节计数复核（`data.count(b"\r\n")`）。
+**换行符**：全库 **LF**，唯一例外是 `.bat` / `.cmd`（CRLF）。
+两件事都由 `.gitattributes` 保证，不再靠手工守：
+`* text=auto eol=lf` 让任何编辑器写回的 CRLF 在 `git add` 阶段被归一化；
+`*.bat -text` 让批处理的字节完全不经转换（仓库 / 工作区 / ZIP 皆是 CRLF）。
+碰到残留 CRLF，先查是哪个工具绕过了 git——不要手工修字节。
 
 **提交前自查**（AI 高频翻车点）：
 
@@ -371,12 +371,12 @@ GitHub `/releases` 有没有 Draft。**先查再删**：2026-10-25 就是因为�
 |---|---|
 | `.bat` 里含中文的 `echo` 报 "不是内部或外部命令" | **CRLF 未必是真凶**。先查换行符（LF-only 确实会被按 CR 拆行）；若已是 CRLF 仍报，那是解析器**吞多字节字符**（实测：`echo 产物路径:` 被拆成 `echo 产` + `物路径:`；去 BOM / `chcp 65001` / 加引号全都治不了）。正解：整个 `.bat` 改**纯 ASCII**，中文说明搬进文档 |
 | `.bat` 报 "此时不应有 ." 并秒退 | `if (...)` 块内出现 **ASCII 括号**（如 `echo ...(~100MB)`），cmd 当成嵌套块。换成逗号或全角括号 |
-| 用 Python 脚本按内容替换 "0 命中" | 文件是 CRLF，而匹配串用了 `\n`。按文件实际换行符构造 |
+| 用 Python 脚本按内容替换 "0 命中" | 全库 LF 之后，这不再是换行符问题。先查匹配串本身（缩进、空格、引号形式），再查目标文件是否真被 git 跟踪 |
 | `json.load` / `ast.parse` 报非法字符 | 文件被 PowerShell `Set-Content` / `>` 写了 BOM。改用 Write 工具或 Python 脚本 |
 | 文件莫名带 BOM（`ast.parse` 报 U+FEFF） | PowerShell `Set-Content` 留下的。去 BOM 用字节级操作；读文件用 `encoding="utf-8-sig"` 更稳 |
 | 备份体积莫名 200MB | 多半是 `.venv/`（156MB，占 78%）被拷进去了，其次才是 `dist/`、`.git/`。整目录快照排除 `dist .git .venv backups __pycache__ .pytest_cache .ruff_cache .workbuddy`。**排除名单写在目录出现之前就会漏**——新增重量级目录时顺手补名单 |
 | 脚本批量替换后文件半坏 | 没做 "预期命中 N 处" 断言。**先断言再落盘** |
-| 编辑 CRLF 文件后整文件 diff 变成 +900/-900 | 工具把换行符归一了。改完字节复核 `data.count(b"\r\n")`；`.md`/`.py` 坏了不会运行失败，但会淹没真实改动的可读性 |
+| 编辑一个文件后整文件 diff 变成 +900/-900 | 本不该再发生（`.gitattributes` 会在 add 阶段归一化）。出现就查该文件是否被 `.gitignore` 排除、或由工具直接写入了未跟踪位置——**别去手工修字节** |
 
 ### 界面类
 

@@ -354,7 +354,7 @@ main.py                     启动/退出编排、跨模块接线（信号 conne
 core/
   colors.py                 颜色唯一来源（主题 + 状态色 + 叠加层色）
   cleanup.py                清理契约 SSOT（TAB_CLEANUP_STEPS / collect_* / run_cleanup_steps）
-  config_manager.py         ConfigManager 汇总入口（唯一 LF 换行的文件）
+  config_manager.py         ConfigManager 汇总入口
   config/                   按模块拆的配置 Mixin
   hotkey_manager.py         全局热键（键盘 + 鼠标）
   overlay.py                准星叠加层

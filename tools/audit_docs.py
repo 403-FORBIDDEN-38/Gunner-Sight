@@ -104,13 +104,37 @@ bad = [p for p in ["AGENTS.md", "docs/RULES.md", "docs/HANDOVER.md", "docs/CHANG
        if re.search(r"\\[_*]", _strip_code_spans((ROOT / p).read_text(encoding="utf-8")))]
 check("文档没有被 markdown 转义污染（`\\_` 之类）", not bad, f"脏文件: {bad}")
 
-# 9. 文档换行风格没被改坏（AGENTS/HANDOVER 是 CRLF；RULES/CHANGE_LOG 是 LF）
-for name, style in [("AGENTS.md", "CRLF"), ("docs/HANDOVER.md", "CRLF"),
-                    ("docs/RULES.md", "LF"), ("docs/CHANGE_LOG.md", "LF")]:
-    d = (ROOT / name).read_bytes()
-    n_crlf, n_lf = d.count(b"\r\n"), d.count(b"\n")
-    ok = (n_crlf == n_lf > 0) if style == "CRLF" else (n_crlf == 0 and n_lf > 0)
-    check(f"{name} 保持 {style}", ok, f"CRLF={n_crlf} LF={n_lf}")
+# 9. 行尾策略：.gitattributes 在场 + 全库实际符合它
+#    以前这里抽查 4 个文件的行尾风格——那是在手工守一件本该由机制保证的事。
+#    现在断言的是策略本身：批处理 CRLF（cmd.exe 按字节解析），其余全 LF。
+GA = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+check(".gitattributes 声明全库 LF", "* text=auto eol=lf" in GA,
+      "策略丢了，编辑器会重新制造行尾分裂")
+check(".gitattributes 用 -text 锁死批处理", "*.bat -text" in GA,
+      "改成 eol=crlf 会让 ZIP 下载的 build.bat 变 LF")
+
+tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True,
+                         cwd=ROOT).stdout.split(b"\0")
+wrong = []
+for fb in tracked:
+    if not fb:
+        continue
+    rel = fb.decode("utf-8")
+    p = ROOT / rel
+    if not p.is_file():
+        continue
+    d = p.read_bytes()
+    if b"\x00" in d[:8000]:      # 二进制不参与
+        continue
+    n_crlf = d.count(b"\r\n")
+    n_lf = d.count(b"\n") - n_crlf
+    if rel.lower().endswith((".bat", ".cmd")):
+        if n_crlf == 0 or n_lf:
+            wrong.append(f"{rel}(应全 CRLF)")
+    elif n_crlf:
+        wrong.append(f"{rel}(残留 CRLF)")
+check("工作区行尾符合策略", not wrong,
+      f"{len(wrong)} 个不符: {wrong[:3]}")
 
 # 10. 人格层钩子仍指向规矩层与现状（AGENTS.md 只是入口，规矩本体在 RULES）
 for target in ["docs/RULES.md", "docs/HANDOVER.md"]:
